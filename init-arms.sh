@@ -7,10 +7,10 @@ PROJECT_ROOT=$(pwd)
 
 echo "🚀 Plugging ARMS Engine into: $PROJECT_ROOT"
 
-# 1. Create local session folder
+# 1. Create local session folders
 mkdir -p .gemini/agent-outputs .gemini/reports .gemini/agents
 
-# 2. Migrate Agents
+# 2. Sync Agents
 echo "🤖 Syncing Agents..."
 for f in "$ARMS_ROOT/agents"/*.md; do
     if [ -f "$f" ]; then
@@ -25,22 +25,44 @@ for f in "$ARMS_ROOT/agents"/*.md; do
     fi
 done
 
-# 3. Build Skills List
+# 3. Discover Skills
 echo "🔍 Discovering Skills..."
-SKILLS_CONTENT=""
+SKILLS_LIST=""
 for d in "$ARMS_ROOT/skills"/*/; do
-    skill_name=$(basename "$d")
-    if [ "$skill_name" == "arms-orchestrator" ]; then
-        SKILLS_CONTENT="${SKILLS_CONTENT}- ${skill_name} [Active]\n"
-    else
-        SKILLS_CONTENT="${SKILLS_CONTENT}- ${skill_name}\n"
+    if [ -d "$d" ]; then
+        skill_name=$(basename "$d")
+        if [ "$skill_name" == "arms-orchestrator" ]; then
+            SKILLS_LIST="${SKILLS_LIST}- ${skill_name} [Active]\n"
+        else
+            SKILLS_LIST="${SKILLS_LIST}- ${skill_name}\n"
+        fi
     fi
 done
 
-# 4. Write the Environment path so agents find it immediately
-if [ ! -f .gemini/SESSION.md ]; then
-    echo "📄 Creating SESSION.md..."
-    cat <<EOF > .gemini/SESSION.md
+# 4. Update SESSION.md
+echo "📄 Updating session log..."
+# Preserve existing tasks and blockers if SESSION.md exists
+if [ -f ".gemini/SESSION.md" ]; then
+    echo "ℹ️ SESSION.md exists. Preserving tasks and blockers..."
+    TASKS_CONTENT=$(sed -n '/## Active Tasks/,$p' .gemini/SESSION.md)
+else
+    echo "📄 Creating new SESSION.md..."
+    TASKS_CONTENT=$(cat <<EOF
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Status |
+|---|------|----------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+EOF
+)
+fi
+
+# Write the new SESSION.md
+cat <<EOF > .gemini/SESSION.md
 # ARMS Session Log
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -50,28 +72,17 @@ Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 - Execution Mode: Parallel
 
 ## Active Skills
-$(echo -e "$SKILLS_CONTENT")
-## Active Tasks
-| # | Task | Assigned Agent | Active Skill | Status |
-|---|------|----------------|--------------|--------|
+$(printf "%b" "$SKILLS_LIST")
 
-## Blockers
-None
+$TASKS_CONTENT
 EOF
-else
-    echo "ℹ️ SESSION.md already exists. Updating environment paths..."
-    # Update ARMS Root and Project Root lines if they differ
-    sed -i '' "s|^- ARMS Root:.*|- ARMS Root: $ARMS_ROOT|" .gemini/SESSION.md
-    sed -i '' "s|^- Project Root:.*|- Project Root: $PROJECT_ROOT|" .gemini/SESSION.md
-fi
 
-
-# 4. Write a base GEMINI.md to .gemini/ if not present
+# 5. Write a base GEMINI.md to .gemini/ if not present
 if [ ! -f ".gemini/GEMINI.md" ]; then
     cp "$ARMS_ROOT/GEMINI.md" ".gemini/GEMINI.md"
 fi
 
-# 5. Force-link the skills to the CLI
+# 6. Force-link the skills to the CLI
 echo "🔗 Linking Skills..."
 for d in "$ARMS_ROOT/skills"/*/; do 
   if [ -d "$d" ]; then
@@ -79,6 +90,6 @@ for d in "$ARMS_ROOT/skills"/*/; do
   fi
 done
 
-# 6. Success message
+# 7. Success message
 echo "✅ ARMS is now connected. Path set to $ARMS_ROOT"
 echo "👉 Refreshing skills context. You can now use sub-agents and ARMS skills."

@@ -21,11 +21,9 @@ Before doing anything else, resolve the ARMS engine location. Do not assume a pa
 ### Step 1: Locate `Arms-Engine`
 
 Check in this order:
-```
-1. ../Arms-Engine/     ← sibling to project (original layout)
-2. ./Arms-Engine/      ← inside project root (common alternative)
-3. ~/Arms-Engine/      ← user home directory
-```
+1. `~/.gemini/Arms-Engine/`   ← Global Safe Zone (Preferred)
+2. `../Arms-Engine/`         ← Sibling to project
+3. `./Arms-Engine/`          ← Inside project root
 
 Use whichever exists first. Set `$ARMS_ROOT` to that path for all subsequent references this session.
 
@@ -40,7 +38,7 @@ Do not error silently. Surface this immediately:
 [State Updates]: None
 
 [Action / Code]:
-⚠️ ARMS engine not found. Checked: ../Arms-Engine/ · ./Arms-Engine/ · ~/Arms-Engine/
+⚠️ ARMS engine not found. Checked: ../Arms-Engine/ · ./Arms-Engine/ · ~/.gemini/Arms-Engine/
 
 To continue, choose a setup location:
   A) Inside this project:  mkdir -p Arms-Engine/skills Arms-Engine/workflow
@@ -82,8 +80,11 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
 6. Scaffold SESSION.md with required sections (see template below)
 7. Scaffold MEMORY.md with required sections (see template below)
 8. Detect execution mode → write to SESSION.md under ## Execution Mode
-9. Run skill discovery → write to SESSION.md under ## Active Skills
-10. Register skills: `for d in $ARMS_ROOT/skills/*/; do yes | gemini skills link "$d"; done`
+9. Run skill discovery: 
+   - Scan `$ARMS_ROOT/skills/` (Global Engine).
+   - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file. Ignore all other directories (e.g., `node_modules`, `supabase`).
+   - **Persistence:** Update `SESSION.md` under `## Active Skills` by registering discovered skills. Never delete the roster during a task update.
+10. Register skills: `for d in $ARMS_ROOT/skills/*/; do [ -f "$d/SKILL.md" ] && yes | gemini skills link "$d"; done`
 ```
 
 ### SESSION.md Bootstrap Template
@@ -126,7 +127,8 @@ is a continuous adaptation of the project, never delete the existing if the exis
 ## Known Bugs & Fixes
 ```
 
-**Rule:** If `./.gemini/` already exists with populated files, read them — never overwrite existing session state. Only scaffold missing files or sections.
+**CRITICAL RULE:** If `./.gemini/` already exists with populated files, read them — **NEVER overwrite existing SESSION.md or MEMORY.md files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+
 
 ---
 
@@ -145,8 +147,6 @@ is a continuous adaptation of the project, never delete the existing if the exis
 [Next Step / Blocker]: <Approval request or delegation to next agent. End with HALT>
 ```
 
-This format is non-negotiable. Omitting any field or responding in plain prose instead of this template is a violation.
-
 ---
 
 ## Agent Roster
@@ -161,7 +161,7 @@ arms-frontend-agent: UI, routing, layouts. Mobile-first enforcer (sidebar at xl/
 arms-devops-agent:   CI/CD, Git, environment configs, boilerplate generation.
 arms-seo-agent:      SEO, schema markup, Core Web Vitals.
 arms-media-agent:    Asset creation, AI image generation, logo design.
-arms-data-agent:     DB schema, migrations, Supabase RLS policies.
+arms-data-agent:     DB schema, migrations, query optimization.
 arms-qa-agent:       Unit + E2E tests, pre-flight validation.
 arms-security-agent: OWASP, auth validation, token security, dependency audits.
 ```
@@ -400,6 +400,7 @@ Round 2 — Aggregation (arms-main-agent synthesizes Round 1 outputs):
 
 ### Shared Rules (Both Modes)
 
+- **Persistence Mandate:** Environmental metadata (`## Environment` and `## Active Skills` in `SESSION.md`) and the entire content of `MEMORY.md` MUST be preserved during every update. **Never overwrite or discard existing project memory.** `MEMORY.md` is a continuous learning file; agents must append to it or update specific sections, but NEVER replace the entire file with a template.
 - Every agent call receives: its role definition + relevant SKILL.md content + current SESSION.md + MEMORY.md
 - Every agent response must use the strict response template — malformed responses are re-queued, not silently accepted
 - `arms-main-agent` owns aggregation — subagents never write directly to SESSION.md; they return structured output and the orchestrator writes

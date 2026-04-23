@@ -13,7 +13,7 @@
 
 ### Step 0: Resolve ARMS Engine Path
 
-Before loading anything, locate the ARMS engine. Check in this order:
+Before loading anything, locate the ARMS engine. Check in this exact order:
 1. `~/.gemini/Arms-Engine/`   ← Global Safe Zone (Preferred)
 2. `../Arms-Engine/`         ← Sibling to project
 3. `./Arms-Engine/`          ← Inside project
@@ -29,7 +29,7 @@ Store the first valid path as `$ARMS_ROOT`.
 [State Updates]: None
 
 [Action / Code]:
-⚠️ ARMS engine not found. Checked: ../Arms-Engine/ · ./Arms-Engine/ · ~/Arms-Engine/
+⚠️ ARMS engine not found. Checked: ../Arms-Engine/ · ./Arms-Engine/ · ~/.gemini/Arms-Engine/
 
 To continue, set up the Arms-Engine directory:
   A) Inside this project:  mkdir -p Arms-Engine/skills Arms-Engine/workflow
@@ -61,9 +61,13 @@ This file establishes all core orchestration logic. Follow its instructions for 
 
 Scan:
 - `$ARMS_ROOT/agents.yaml` — agent roster and capabilities
-- `$ARMS_ROOT/skills/` — available domain skills and delegation map
+- `$ARMS_ROOT/skills/` — available global domain skills
 
-Register all discovered agents and skills. Log them to `./.gemini/SESSION.md` under `## Active Skills`.
+**Registration Rules:**
+1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
+2. **Priority:** Global engine skills ALWAYS take precedence.
+3. **Logging:** Register all discovered agents and skills to `./.gemini/SESSION.md` under `## Active Skills`.
+4. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 
 ### Step 4: Execute Initialization Flow
 
@@ -125,7 +129,14 @@ No feature task can be marked **Done** without verification from `arms-qa-agent`
 To maintain performance in large projects, use the command **"init compress"**:
 - This invokes the `compress` (Caveman) skill to shrink `SESSION.md` and `MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
 
-### 6. State Synchronization
+### 6. Memory Integrity Protocol
+The `MEMORY.md` file is a **Continuous Learning Repository**.
+- **Never overwrite** existing memory history.
+- **Never replace** the file with a template.
+- Agents must only append new insights, lessons, or preferences.
+- Overwriting project memory is a **Critical Protocol Violation**.
+
+### 7. State Synchronization
 After every agent turn or state change, you MUST update `./.gemini/SESSION.md` to reflect the current progress.
 
 ---
