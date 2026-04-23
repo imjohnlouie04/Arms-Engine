@@ -25,8 +25,22 @@ for f in "$ARMS_ROOT/agents"/*.md; do
     fi
 done
 
-# 3. Write the Environment path so agents find it immediately
-cat <<EOF > .gemini/SESSION.md
+# 3. Build Skills List
+echo "🔍 Discovering Skills..."
+SKILLS_CONTENT=""
+for d in "$ARMS_ROOT/skills"/*/; do
+    skill_name=$(basename "$d")
+    if [ "$skill_name" == "arms-orchestrator" ]; then
+        SKILLS_CONTENT="${SKILLS_CONTENT}- ${skill_name} [Active]\n"
+    else
+        SKILLS_CONTENT="${SKILLS_CONTENT}- ${skill_name}\n"
+    fi
+done
+
+# 4. Write the Environment path so agents find it immediately
+if [ ! -f .gemini/SESSION.md ]; then
+    echo "📄 Creating SESSION.md..."
+    cat <<EOF > .gemini/SESSION.md
 # ARMS Session Log
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -36,9 +50,7 @@ Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 - Execution Mode: Parallel
 
 ## Active Skills
-- arms-orchestrator (Active)
-- ... (Linking skills from Global Engine)
-
+$(echo -e "$SKILLS_CONTENT")
 ## Active Tasks
 | # | Task | Assigned Agent | Active Skill | Status |
 |---|------|----------------|--------------|--------|
@@ -46,6 +58,13 @@ Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 ## Blockers
 None
 EOF
+else
+    echo "ℹ️ SESSION.md already exists. Updating environment paths..."
+    # Update ARMS Root and Project Root lines if they differ
+    sed -i '' "s|^- ARMS Root:.*|- ARMS Root: $ARMS_ROOT|" .gemini/SESSION.md
+    sed -i '' "s|^- Project Root:.*|- Project Root: $PROJECT_ROOT|" .gemini/SESSION.md
+fi
+
 
 # 4. Write a base GEMINI.md to .gemini/ if not present
 if [ ! -f ".gemini/GEMINI.md" ]; then
