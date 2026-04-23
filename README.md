@@ -18,6 +18,9 @@ ARMS operates on a **Hub and Spoke** model, separating global intelligence from 
 - **`arms-backend-agent`**: API, Auth, and Business Logic specialist.
 - **`arms-frontend-agent`**: UI/UX and Responsive Design enforcer.
 - **`arms-devops-agent`**: CI/CD, Git, and Deployment expert.
+- **`arms-seo-agent`**: SEO, Meta Tags, and Core Web Vitals enforcer.
+- **`arms-media-agent`**: Asset creation and visual branding specialist.
+- **`arms-data-agent`**: Database schema, migrations, and query optimizer.
 - **`arms-security-agent`**: Security auditor and OWASP enforcer.
 - **`arms-qa-agent`**: Testing and Quality Gatekeeper.
 
