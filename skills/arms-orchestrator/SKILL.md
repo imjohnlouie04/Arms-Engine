@@ -82,7 +82,8 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
 8. Detect execution mode → write to SESSION.md under ## Execution Mode
 9. Run skill discovery: 
    - Scan `$ARMS_ROOT/skills/` (Global Engine).
-   - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file. Ignore all other directories (e.g., `node_modules`, `supabase`).
+   - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file. Ignore all other directories.
+   - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+). NEVER prune or omit skills during a task update. Omission is considered environmental corruption.
    - **Persistence:** Update `SESSION.md` under `## Active Skills` by registering discovered skills. Never delete the roster during a task update.
 10. Register skills: `for d in $ARMS_ROOT/skills/*/; do [ -f "$d/SKILL.md" ] && yes | gemini skills link "$d"; done`
 ```
@@ -204,6 +205,7 @@ Pending → In Progress → Pre-Flight → Done
 
 ### Rules
 
+- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `SESSION.md` and appended to `./.gemini/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -274,7 +276,8 @@ This command does NOT read a protocol file. `arms-main-agent` executes it inline
 
 ```
 arms-main-agent
-  └─▶ Generate Task Table (using standardized schema)
+  └─▶ Read existing SESSION.md tasks
+  └─▶ Append new tasks to Task Table (using standardized schema)
   └─▶ Request approval → HALT
   └─▶ Delegate to subagent (+ skill context if applicable)
 
@@ -528,10 +531,9 @@ SESSION.md must be pruned when any of the following triggers occur:
 
 | Trigger | Action |
 |---|---|
-| **Feature ship** — a user-facing feature is committed and verified | Move all related tasks from Active → Completed Tasks |
-| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `SESSION_ARCHIVE.md`, reset to empty |
-| **Session exceeds 50 tasks** — Active + Completed combined | Archive all `Done` tasks to `SESSION_ARCHIVE.md` |
-| **User requests cleanup** — explicit `clean session` or `archive tasks` | Archive all `Done` and `Failed` tasks |
+| **Task Completion** — status becomes `Done` or `Cancelled` | Immediately append the task to `./.gemini/SESSION_ARCHIVE.md` and remove it from `SESSION.md` |
+| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `./.gemini/SESSION_ARCHIVE.md`, reset to empty |
+| **User requests cleanup** — explicit `clean session` or `archive tasks` | Archive any remaining `Failed` tasks |
 
 ### Archival Format
 
@@ -545,6 +547,13 @@ Append to `./.gemini/SESSION_ARCHIVE.md`:
 |---|------|-------|--------|-----------|
 <tasks moved from SESSION.md>
 ```
+
+### Archival Integrity Protocol (Record of Truth)
+
+The `./.gemini/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for completed work.
+- **Never delete this file.**
+- If an agent or the AI is unsure if a task has already been completed, it MUST search this file.
+- If the archive file becomes too large, use the `compress` skill to shrink it into a high-density format, but **NEVER delete** the history.
 
 ---
 

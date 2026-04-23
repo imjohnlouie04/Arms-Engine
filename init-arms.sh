@@ -25,10 +25,11 @@ for f in "$ARMS_ROOT/agents"/*.md; do
     fi
 done
 
-# 3. Discover Skills
+# 3. Discover Skills (COMPLETE ROSTER MANDATE)
 echo "🔍 Discovering Skills..."
 SKILLS_LIST=""
-for d in "$ARMS_ROOT/skills"/*/; do
+# Sort skills alphabetically to ensure consistent diffs
+for d in $(ls -d "$ARMS_ROOT/skills"/*/ | sort); do
     if [ -d "$d" ]; then
         skill_name=$(basename "$d")
         if [ "$skill_name" == "arms-orchestrator" ]; then
@@ -44,6 +45,7 @@ echo "📄 Updating session log..."
 # Preserve existing tasks and blockers if SESSION.md exists
 if [ -f ".gemini/SESSION.md" ]; then
     echo "ℹ️ SESSION.md exists. Preserving tasks and blockers..."
+    # We use sed to extract from ## Active Tasks to the end of the file
     TASKS_CONTENT=$(sed -n '/## Active Tasks/,$p' .gemini/SESSION.md)
 else
     echo "📄 Creating new SESSION.md..."
@@ -61,7 +63,7 @@ EOF
 )
 fi
 
-# Write the new SESSION.md
+# Write the new SESSION.md (Hardened environmental metadata)
 cat <<EOF > .gemini/SESSION.md
 # ARMS Session Log
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")

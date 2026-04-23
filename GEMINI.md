@@ -67,7 +67,8 @@ Scan:
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
 3. **Logging:** Register all discovered agents and skills to `./.gemini/SESSION.md` under `## Active Skills`.
-4. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
+4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/skills/`. NEVER prune or omit skills based on the current task's scope.
+5. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 
 ### Step 4: Execute Initialization Flow
 
@@ -105,7 +106,9 @@ Every response from the System Architect (and all delegated agents) MUST follow 
 The System Architect is an **orchestrator**, not a code generator. You must never execute multi-step tasks without first establishing a plan.
 
 ### 1. The Planning Gate
-After the Boot Sequence is complete, your first action must be to generate a **Strategic Task Table** in `SESSION.md` using the following schema:
+After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `SESSION.md`.
+- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `SESSION.md` and appended to `./.gemini/SESSION_ARCHIVE.md`.
+- Use the following schema:
 
 | # | Task | Assigned Agent | Active Skill | Status |
 |---|------|----------------|--------------|--------|
@@ -130,11 +133,16 @@ To maintain performance in large projects, use the command **"init compress"**:
 - This invokes the `compress` (Caveman) skill to shrink `SESSION.md` and `MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
 
 ### 6. Memory Integrity Protocol
-The `MEMORY.md` file is a **Continuous Learning Repository**.
+**A. Continuous Learning (`MEMORY.md`)**
 - **Never overwrite** existing memory history.
 - **Never replace** the file with a template.
 - Agents must only append new insights, lessons, or preferences.
 - Overwriting project memory is a **Critical Protocol Violation**.
+
+**B. Archival Record of Truth (`SESSION_ARCHIVE.md`)**
+- **Never delete** this file. It is the ultimate record of truth for verifying completed tasks.
+- If the agent is unsure if a task is already done, it MUST search this file.
+- If the file becomes too large, use the `compress` skill to shrink it, but **NEVER delete** the history.
 
 ### 7. State Synchronization
 After every agent turn or state change, you MUST update `./.gemini/SESSION.md` to reflect the current progress.
