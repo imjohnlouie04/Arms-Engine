@@ -8,13 +8,13 @@ ARMS is a professional-grade multi-agent orchestration framework designed to gov
 
 ## 🏗️ The Architecture
 
-ARMS operates on a "Hub and Spoke" model:
+ARMS operates on a **Hub and Spoke** model, separating global intelligence from project-specific execution:
 
-1.  **Global Engine ($ARMS_ROOT):** The centralized repository of agents, skills, and workflow protocols. This is the source of truth for all orchestration logic.
-2.  **Project Instance (./.gemini/):** Localized session state, memory, and task logs that link back to the Global Engine.
+1.  **Global Engine (`$ARMS_ROOT`):** The centralized repository of agents, skills, and workflow protocols. Located at `~/.gemini/Arms-Engine/` by default.
+2.  **Project Instance (`./.gemini/`):** Localized session state, memory, and task logs that link back to the Global Engine. This directory is created automatically during initialization.
 
 ### Core Agents
-- **`arms-main-agent`**: The Orchestrator. Manages handoffs, task tables, and memory.
+- **`arms-main-agent`**: The System Architect. Manages handoffs, task tables, and memory.
 - **`arms-backend-agent`**: API, Auth, and Business Logic specialist.
 - **`arms-frontend-agent`**: UI/UX and Responsive Design enforcer.
 - **`arms-devops-agent`**: CI/CD, Git, and Deployment expert.
@@ -28,51 +28,52 @@ ARMS operates on a "Hub and Spoke" model:
 To use ARMS as a global engine across all your projects:
 
 ### 1. Clone the Engine
-We recommend placing the engine in a "Global Safe Zone":
+Place the engine in the recommended "Global Safe Zone":
 ```bash
 mkdir -p ~/.gemini
 git clone https://github.com/imjohnlouie04/Arms-Engine.git ~/.gemini/Arms-Engine
 ```
 
-### 2. Configure Global Rules
-Add the contents of `GEMINI.md` from the engine root to your AI assistant's global instructions. This ensures the assistant knows how to locate and boot the engine.
+### 2. Configure Assistant Instructions
+Add the contents of `$ARMS_ROOT/GEMINI.md` to your AI assistant's **Global Instructions** or **System Prompt**. This acts as the bootloader, teaching the assistant how to resolve paths and execute the initialization sequence.
 
 ---
 
-## 🛠️ Usage
+## 🛠️ Usage & Commands
 
-### Bootstrapping a New Project
-In any project directory, simply type:
-```text
-init
-```
-Or for full automation:
-```text
-init yolo
-```
+### Activation Commands
+| Command | Mode | Description |
+|:--- |:--- |:--- |
+| `init` / `start` | **Standard** | Boots the engine and generates a Strategic Task Table. Halts for approval. |
+| `init yolo` / `start yolo` | **Automated** | Skips the planning gate. Executes the entire task sequence without halting. |
+| `init compress` | **Optimization** | Compresses session and memory files into token-efficient formats. |
 
 ### How it Works
-1.  **Path Resolution:** The assistant locates the global engine at `~/.gemini/Arms-Engine/`.
-2.  **Linking:** The `init-arms.sh` script is executed to scaffold the local `./.gemini/` structure.
-3.  **Registration:** All domain skills are linked to the project context.
-4.  **Orchestration:** The `arms-orchestrator` skill takes over, generating a Strategic Task Table for your requirements.
+1.  **Boot Sequence:** The assistant locates the engine at `~/.gemini/Arms-Engine/`.
+2.  **Scaffolding:** `init-arms.sh` runs to link global skills and create `./.gemini/`.
+3.  **Registration:** The `## Active Skills` roster is built in `SESSION.md`.
+4.  **Planning Gate:** A **Strategic Task Table** is generated for the current requirements.
+5.  **Execution:** Specialized agents are dispatched to complete individual tasks.
 
 ---
 
-## 📂 Structure
+## 📂 Project State (`./.gemini/`)
 
-- `/skills`: Domain-specific `SKILL.md` definitions for specialized sub-agents.
-- `/workflow`: Standardized protocols for `REVIEW`, `FIX`, and `DEPLOY`.
-- `agents.yaml`: Master roster defining roles, scopes, and skill bindings.
-- `init-arms.sh`: The universal linker script.
+ARMS maintains state exclusively within the project's root to ensure portability and context preservation:
+
+- **`SESSION.md`**: The live project board. Contains the active Task Table and registered skills.
+- **`MEMORY.md`**: The persistent knowledge base. Stores project-specific patterns, developer preferences, and technical debt.
+- **`SESSION_ARCHIVE.md`**: The historical record of all completed tasks. Used for context recovery and verification.
 
 ---
 
-## 🛡️ Principles
-- **Orchestrate, don't just generate.**
-- **Explicit approval gates** at every major architectural decision.
-- **Persistent memory** that adapts to developer preferences.
-- **Strict standards enforcement** (TypeScript, SEO, Security, Responsive Design).
+## 🛡️ Protocols & Principles
+
+- **The Planning Gate:** No work begins without an approved Task Table.
+- **The Quality Gate:** Features are not marked `Done` until `arms-qa-agent` verifies them via tests/linting.
+- **State Synchronization:** Every agent turn must be reflected in `SESSION.md`.
+- **Memory Integrity:** We never overwrite project history; we append and refine.
+- **Orchestrate, Don't Just Generate:** Focus on architecture and long-term maintainability over quick hacks.
 
 ---
 
