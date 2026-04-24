@@ -96,6 +96,10 @@ Generated: <ISO 8601 timestamp>
 - ARMS Root: <$ARMS_ROOT resolved path>
 - Project Root: <working directory>
 - Execution Mode: <Parallel | Simulated>
+- YOLO Mode: <Enabled | Disabled>
+
+## Active Agents
+<populated by agent discovery>
 
 ## Active Skills
 <populated by skill discovery scan>
@@ -105,10 +109,10 @@ Generated: <ISO 8601 timestamp>
 |---|------|----------------|--------------|--------------|--------|
 
 ## Completed Tasks
-<archived from Active Tasks on completion>
+- None
 
 ## Blockers
-<any unresolved blockers>
+None
 ```
 
 ### MEMORY.md Bootstrap Template
@@ -131,15 +135,32 @@ Generated: <ISO 8601 timestamp>
 # Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
 
+---
+
 ## Identity
 - **Project Name:** [Name]
 - **Mission:** [Purpose]
+- **Vision:** [Long-term goal]
 - **Personality:** [Voice/Tone]
+- **Voice & Tone:** [Approach]
+
+## Positioning
+- **Primary Audience:** [Target]
+- **Core Values:** [Values]
+- **Differentiation:** [Unique Factor]
 
 ## Visual Identity
 - **Color Palette:** [HEX/OKLCH]
 - **Typography:** [Google Fonts]
 - **Logo Status:** [Generated/Pending]
+- **Visual Direction:** [Glassmorphism/Dark Mode/etc]
+
+## Use Case Implications
+- **Project Type:** [SaaS/Community/etc]
+- **Design Priority:** [UX Factor]
+
+## Notes
+- [Misc preferences]
 ```
 
 **CRITICAL RULE:** If `./.gemini/` already exists with populated files, read them â€” **NEVER overwrite existing SESSION.md or MEMORY.md files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
@@ -598,7 +619,7 @@ The `./.gemini/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for 
 ## `./.gemini/` Configuration Files
 
 ### `GEMINI.md`
-Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `brand-context.md` for all design decisions.
+Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `BRAND.md` for all design decisions.
 
 ### `RULES.md`
 Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
@@ -639,7 +660,7 @@ All reference files live in `references/`. Load only when the task requires it â
 
 | File | Read When |
 |---|---|
-| `brand-and-scope.md` | Brand context generation, MVP scoping, supplemental business prompts |
+| `BRAND.md` | Brand context generation, MVP scoping, supplemental business prompts |
 | `agent-orchestration-patterns.md` | Designing custom workflows, debugging handoffs, adding agents, choosing sequential vs. parallel |
 | `supabase-local-workflow.md` | Schema changes, migrations, RLS policies, type generation, `db reset` / `db push` / `db diff` |
 | `deployment-protocol.md` | `run deploy`, env var management, Vercel / Docker / VPS steps, release notes |

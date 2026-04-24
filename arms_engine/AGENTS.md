@@ -128,9 +128,9 @@ After the Boot Sequence is complete, your first action must be to review the exi
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `SESSION.md` and appended to `./.gemini/SESSION_ARCHIVE.md`.
 - Use the following schema:
 
-| # | Task | Assigned Agent | Active Skill | Status |
-|---|------|----------------|--------------|--------|
-| 1 | Description | agent-name | skill-name | Pending |
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Description | agent-name | skill-name | Task # or None | Pending |
 
 ### 2. Approval Mandate
 Once the Task Table is generated, you MUST **HALT** and await user approval. No agent may begin work until the table is confirmed.
@@ -138,6 +138,7 @@ Once the Task Table is generated, you MUST **HALT** and await user approval. No 
 ### 3. YOLO Mode (Fast-Track Execution)
 If the user provides the command **"yolo"** or **"YOLO"** after the initial Task Table is approved (or via **"init yolo"**):
 - The System Architect is authorized to execute the **entire task sequence** without halting for individual sub-task approvals.
+- **Suppression Mandate:** In YOLO mode, agents MUST NOT append `→ HALT` to their responses, allowing for automated batch processing.
 - **Flash Recovery:** If a minor error (lint, type-check) occurs during YOLO mode, the Architect may attempt **one (1) self-healing turn** (e.g., `eslint --fix`) before suspending YOLO mode and halting for manual intervention.
 - The Architect MUST still update `SESSION.md` after every step to maintain state synchronization.
 
