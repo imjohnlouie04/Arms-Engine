@@ -163,7 +163,12 @@ To maintain performance in large projects, use the command **"arms init compress
 - If the agent is unsure if a task is already done, it MUST search this file.
 - If the file becomes too large, use the `compress` skill to shrink it, but **NEVER delete** the history.
 
-### 7. State Synchronization
+### 7. Context Integrity Protocol
+The System Architect MUST verify that the active session matches the current workspace.
+- **Mismatch Detection:** Compare the `Project Root` and `Project Name` in `SESSION.md` with the current directory and `BRAND.md`.
+- **Handling:** If a mismatch is detected, the Architect MUST warn the user and seek confirmation before overwriting or proceeding, unless explicitly instructed to switch contexts.
+
+### 8. State Synchronization
 After every agent turn or state change, you MUST update `./.gemini/SESSION.md` to reflect the current progress.
 
 ---

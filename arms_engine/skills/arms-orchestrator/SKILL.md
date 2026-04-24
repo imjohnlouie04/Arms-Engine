@@ -95,6 +95,7 @@ Generated: <ISO 8601 timestamp>
 ## Environment
 - ARMS Root: <$ARMS_ROOT resolved path>
 - Project Root: <working directory>
+- Project Name: <extracted from BRAND.md or Unknown>
 - Execution Mode: <Parallel | Simulated>
 - YOLO Mode: <Enabled | Disabled>
 

@@ -333,10 +333,40 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
     session_path = os.path.join(project_root, ".gemini/SESSION.md")
     
     existing_content = ""
+    existing_root = None
+    existing_name = None
     if os.path.exists(session_path):
         with open(session_path, 'r') as f:
             existing_content = f.read()
-    
+            # Detect existing project context
+            root_match = re.search(r'- Project Root: (.*)', existing_content)
+            if root_match:
+                existing_root = root_match.group(1).strip()
+            
+            name_match = re.search(r'- Project Name: (.*)', existing_content)
+            if name_match:
+                existing_name = name_match.group(1).strip()
+
+    # Get current project name from BRAND.md if available
+    current_name = "Unknown"
+    brand_path = os.path.join(project_root, ".gemini/BRAND.md")
+    if os.path.exists(brand_path):
+        with open(brand_path, 'r') as f:
+            brand_content = f.read()
+            name_match = re.search(r'- \*\*Project Name:\*\* (.*)', brand_content)
+            if name_match:
+                current_name = name_match.group(1).strip().strip('[]')
+
+    # Validate Context
+    if existing_root and os.path.abspath(existing_root) != os.path.abspath(project_root):
+        print(f"⚠️  Context Mismatch: Session file at {session_path} points to {existing_root}")
+        print(f"   Current root: {project_root}")
+        if not yolo:
+            confirm = input("Overwrite session with current context? (y/n): ")
+            if confirm.lower() != 'y':
+                print("Aborting to preserve session state.")
+                return
+
     # Extract tasks section to preserve it
     tasks_match = re.search(r'(## Active Tasks.*)', existing_content, re.DOTALL)
     if tasks_match:
@@ -388,8 +418,6 @@ None"""
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     # Environment detection
-    # In a real environment, we'd check for CLI availability.
-    # For now, we default to Parallel as it's the target mode.
     exec_mode = "Parallel" 
     yolo_status = "Enabled" if yolo else "Disabled"
     
@@ -399,6 +427,7 @@ Generated: {now}
 ## Environment
 - ARMS Root: {arms_root}
 - Project Root: {project_root}
+- Project Name: {current_name}
 - Execution Mode: {exec_mode}
 - YOLO Mode: {yolo_status}
 
