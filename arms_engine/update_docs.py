@@ -3,8 +3,8 @@ import re
 import argparse
 
 try:
-    from _version import version as __version__
-except ImportError:
+    from ._version import version as __version__
+except (ImportError, ValueError):
     __version__ = "1.0.0-dev"
 
 def get_arms_root():

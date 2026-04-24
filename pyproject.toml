@@ -17,11 +17,14 @@ dependencies = [
 ]
 
 [project.scripts]
-arms = "init_arms:main"
-arms-docs = "update_docs:main"
+arms = "arms_engine.init_arms:main"
+arms-docs = "arms_engine.update_docs:main"
 
 [tool.setuptools]
-py-modules = ["init_arms", "update_docs"]
+packages = ["arms_engine"]
+
+[tool.setuptools.package-data]
+arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "GEMINI.md"]
 
 [tool.setuptools_scm]
-write_to = "_version.py"
+write_to = "arms_engine/_version.py"

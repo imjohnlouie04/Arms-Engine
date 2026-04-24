@@ -6,11 +6,12 @@ import argparse
 import re
 
 try:
-    from _version import version as __version__
-except ImportError:
+    from ._version import version as __version__
+except (ImportError, ValueError):
     __version__ = "1.0.0-dev" # Fallback for local development
 
 def get_arms_root():
+    # When installed as a package, this is the arms_engine directory
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_project_root():
