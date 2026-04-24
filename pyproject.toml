@@ -24,7 +24,7 @@ arms-docs = "arms_engine.update_docs:main"
 packages = ["arms_engine"]
 
 [tool.setuptools.package-data]
-arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "GEMINI.md"]
+arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "GEMINI.md", "AGENTS.md"]
 
 [tool.setuptools_scm]
 write_to = "arms_engine/_version.py"

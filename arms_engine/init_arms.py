@@ -74,6 +74,31 @@ def sync_skills(arms_root, project_root):
                     shutil.rmtree(dest_path)
                 shutil.copytree(src_path, dest_path)
 
+def sync_agents_copilot(arms_root, project_root):
+    """Sync agent .md files to .github/agents/ for Copilot CLI /agent discovery."""
+    print("🤖 Syncing Agents for Copilot CLI...")
+    agents_dir = os.path.join(arms_root, "agents")
+    target_dir = os.path.join(project_root, ".github/agents")
+    os.makedirs(target_dir, exist_ok=True)
+
+    if os.path.exists(agents_dir):
+        for filename in os.listdir(agents_dir):
+            if filename.endswith(".md"):
+                src = os.path.join(agents_dir, filename)
+                dest = os.path.join(target_dir, filename)
+                with open(src, 'r') as f:
+                    content = f.read()
+                with open(dest, 'w') as f:
+                    f.write(content)
+
+def sync_copilot_instructions(arms_root, project_root):
+    """Deploy AGENTS.md to the project root for Copilot CLI instruction loading."""
+    print("📄 Syncing AGENTS.md (Copilot Instructions)...")
+    src = os.path.join(arms_root, "AGENTS.md")
+    dest = os.path.join(project_root, "AGENTS.md")
+    if os.path.exists(src):
+        shutil.copy2(src, dest)
+
 def sync_workflow(arms_root, project_root):
     print("📋 Syncing Workflow Protocols...")
     wf_src = os.path.join(arms_root, "workflow")
@@ -297,7 +322,8 @@ def main():
     
     setup_folders(project_root)
     sync_agents(arms_root, project_root)
-    
+    sync_agents_copilot(arms_root, project_root)
+
     sync_skills(arms_root, project_root)
     sync_workflow(arms_root, project_root)
     initialize_brand_context(project_root)
@@ -312,6 +338,9 @@ def main():
     if os.path.exists(gemini_src):
         shutil.copy2(gemini_src, gemini_dest)
         print("📄 Core Directives (GEMINI.md) synced.")
+
+    # Sync AGENTS.md for Copilot CLI
+    sync_copilot_instructions(arms_root, project_root)
 
     print("\n✅ ARMS Engine sequence complete. → HALT")
 
