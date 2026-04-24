@@ -15,7 +15,13 @@ def get_arms_root():
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_project_root():
-    return os.getcwd()
+    """Climb up from CWD to find the nearest project root (marked by .git, .arms, or .gemini)."""
+    curr = os.getcwd()
+    while curr != os.path.dirname(curr):
+        if any(os.path.exists(os.path.join(curr, m)) for m in [".git", ".arms", ".gemini", "package.json"]):
+            return curr
+        curr = os.path.dirname(curr)
+    return os.getcwd() # Fallback to CWD if no marker found
 
 def setup_folders(project_root):
     # .gemini/ — Gemini AI assistant config (GEMINI.md, MEMORY.md, synced assets)
@@ -463,6 +469,14 @@ def main():
     is_yolo = "yolo" in full_command.lower()
     
     project_root = get_project_root()
+    
+    # Safety Check: Prevent initializing in home directory
+    home_dir = os.path.expanduser("~")
+    if os.path.abspath(project_root) == home_dir:
+        print("❌ ERROR: Cannot initialize ARMS in the home directory.")
+        print("   Please navigate to a specific project folder first.")
+        sys.exit(1)
+
     arms_root = args.root or get_arms_root()
     
     print(f"🚀 Initializing ARMS Engine...")
