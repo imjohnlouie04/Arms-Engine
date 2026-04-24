@@ -497,7 +497,7 @@ def main():
 
     if "compress" in full_command.lower():
         print("🗜️  Optimization mode triggered. (Caveman skill stub activated)")
-        # In the future, this would invoke the actual compress/caveman logic
+        # In the future, this would invoke the actual caveman-compressor logic
         # For now, we just acknowledge the command to avoid the discrepancy.
 
     if is_yolo:

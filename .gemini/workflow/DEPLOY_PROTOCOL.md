@@ -36,5 +36,5 @@ The final step triggers the remote build process (e.g., pushing to the `main` br
 
 ## Phase 5: Post-Deployment Cleanup
 Once the user approves and the deployment is successful:
-1.  **Prune Session:** Archive the completed deployment tasks from `./.gemini/SESSION.md` into `./.gemini/SESSION_ARCHIVE.md`.
+1.  **Prune Session:** Archive the completed deployment tasks from `./.arms/SESSION.md` into `./.arms/SESSION_ARCHIVE.md`.
 2.  **Update Status:** Mark the deployment as complete and present the live URLs.

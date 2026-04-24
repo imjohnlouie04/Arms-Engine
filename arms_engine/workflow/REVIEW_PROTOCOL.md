@@ -32,7 +32,7 @@ The security agent will perform a vulnerability and configuration audit.
 
 ## Phase 4: Output & Handoff
 1.  **Generate Report:** The agents must synthesize their findings and write them to `./.gemini/reports/review-<YYYY-MM-DD>.md` in the local project directory.
-2.  **Session Update:** Log the completion of the review phase in `./.gemini/SESSION.md`.
+2.  **Session Update:** Log the completion of the review phase in `./.arms/SESSION.md`.
 3.  **Approval Gate:** Present the summarized findings to the user and request permission to proceed.
 
 > **Execution Mandate:** End the review phase with the following prompt: 

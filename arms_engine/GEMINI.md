@@ -77,10 +77,11 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 ### Step 5: Enforce Workspace Isolation
 
 - All global logic is read from `$ARMS_ROOT/arms_engine/`
-- All project-specific config, memory, and session state are written exclusively to `./.gemini/`
+- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, ARCHIVE)
+- Gemini AI config is written to `./.gemini/` (MEMORY.md, GEMINI.md, RULES.md)
 - Agent definitions for Copilot CLI are synced to `./.github/agents/`
 - Never write project state to `$ARMS_ROOT/`
-- Never read session state from anywhere other than `./.gemini/`
+- Never read session state from anywhere other than `./.arms/`
 
 ---
 
@@ -124,7 +125,7 @@ To invoke a specialized ARMS agent in Copilot CLI, use the `/agent` slash comman
 The System Architect is an **orchestrator**, not a code generator. You must never execute multi-step tasks without first establishing a plan.
 
 ### 1. The Planning Gate
-After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `SESSION.md`.
+After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `.arms/SESSION.md`.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`.
 - Use the following schema:
 
@@ -144,9 +145,9 @@ If the user provides the command **"yolo"** or **"YOLO"** after the initial Task
   - Branch switch or destructive action approvals.
   - Recommended fix applications (lint, type errors, build failures).
 - **Suppression Mandate:** Agents MUST NOT append `→ HALT` to their responses during YOLO execution.
-- **Audit Trail:** Every auto-accepted action MUST be logged to `SESSION.md` with a `[YOLO Auto-Accepted]` prefix to maintain full auditability.
+- **Audit Trail:** Every auto-accepted action MUST be logged to `.arms/SESSION.md` with a `[YOLO Auto-Accepted]` prefix to maintain full auditability.
 - **Flash Recovery:** If a minor error (lint, type-check) occurs, the Architect may attempt **one (1) self-healing turn** (e.g., `eslint --fix`) before suspending YOLO mode and halting for manual intervention.
-- The Architect MUST still update `SESSION.md` after every step to maintain state synchronization.
+- The Architect MUST still update `.arms/SESSION.md` after every step to maintain state synchronization.
 
 ### 4. Auto-Critique (The Quality Gate)
 No feature task can be marked **Done** without verification from `arms-qa-agent`.
@@ -167,7 +168,7 @@ To maintain performance in large projects, use the command **"arms init compress
 **B. Archival Record of Truth (`.arms/SESSION_ARCHIVE.md`)**
 - **Never delete** this file. It is the ultimate record of truth for verifying completed tasks.
 - If the agent is unsure if a task is already done, it MUST search this file.
-- If the file becomes too large, use the `compress` skill to shrink it, but **NEVER delete** the history.
+- If the file becomes too large, use the `caveman-compressor` skill to shrink it, but **NEVER delete** the history.
 
 ### 7. Context Integrity Protocol
 The System Architect MUST verify that the active session matches the current workspace.

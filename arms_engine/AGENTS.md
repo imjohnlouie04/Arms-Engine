@@ -66,7 +66,7 @@ Scan:
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
-3. **Logging:** Register all discovered agents and skills to `./.gemini/SESSION.md` under `## Active Skills`.
+3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md` under `## Active Skills`.
 4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
 5. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 
@@ -77,10 +77,11 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 ### Step 5: Enforce Workspace Isolation
 
 - All global logic is read from `$ARMS_ROOT/arms_engine/`
-- All project-specific config, memory, and session state are written exclusively to `./.gemini/`
+- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, ARCHIVE)
+- Gemini AI config is written to `./.gemini/` (MEMORY.md, GEMINI.md, RULES.md)
 - Agent definitions for Copilot CLI are synced to `./.github/agents/`
 - Never write project state to `$ARMS_ROOT/`
-- Never read session state from anywhere other than `./.gemini/`
+- Never read session state from anywhere other than `./.arms/`
 
 ---
 
@@ -92,7 +93,7 @@ Every response from the System Architect (and all delegated agents) MUST follow 
 [Speaking Agent]: <agent-name>
 [Active Skill]:   <skill-folder-name | "None">
 
-[State Updates]: <Files updated in ./.gemini/ (e.g., SESSION.md, MEMORY.md) | "None">
+[State Updates]: <Files updated in .arms/ or .gemini/ (e.g., .arms/SESSION.md, .gemini/MEMORY.md) | "None">
 
 [Action / Code]:
 <Task execution, code generation, or task table>
@@ -124,7 +125,7 @@ To invoke a specialized ARMS agent in Copilot CLI, use the `/agent` slash comman
 The System Architect is an **orchestrator**, not a code generator. You must never execute multi-step tasks without first establishing a plan.
 
 ### 1. The Planning Gate
-After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `SESSION.md`.
+After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `.arms/SESSION.md`.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`.
 - Use the following schema:
 
@@ -155,7 +156,7 @@ No feature task can be marked **Done** without verification from `arms-qa-agent`
 
 ### 5. Context Compression (Token Efficiency)
 To maintain performance in large projects, use the command **"arms init compress"**:
-- This invokes the `compress` (Caveman) skill to shrink `SESSION.md` and `MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
+- This invokes the `caveman-compressor` skill to shrink `.arms/SESSION.md` and `.gemini/MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
 
 ### 6. Memory Integrity Protocol
 **A. Continuous Learning (`.gemini/MEMORY.md`)**
@@ -167,7 +168,7 @@ To maintain performance in large projects, use the command **"arms init compress
 **B. Archival Record of Truth (`.arms/SESSION_ARCHIVE.md`)**
 - **Never delete** this file. It is the ultimate record of truth for verifying completed tasks.
 - If the agent is unsure if a task is already done, it MUST search this file.
-- If the file becomes too large, use the `compress` skill to shrink it, but **NEVER delete** the history.
+- If the file becomes too large, use the `caveman-compressor` skill to shrink it, but **NEVER delete** the history.
 
 ### 7. Context Integrity Protocol
 The System Architect MUST verify that the active session matches the current workspace.

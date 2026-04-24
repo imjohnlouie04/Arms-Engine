@@ -10,7 +10,7 @@ This protocol dictates the execution phase following a code review. It enforces 
 1. **Read the Report:** The orchestrator must read the latest `./.gemini/reports/review-<YYYY-MM-DD>.md` file.
 2. **Decompose & Delegate:** Break down the required fixes into a Task Table. 
    * *Columns:* Task | Assigned Agent | Dependencies | Status
-3. **Session Sync:** Write the active Task Table to the local `./.gemini/SESSION.md`.
+3. **Session Sync:** Write the active Task Table to the local `./.arms/SESSION.md`.
 4. **Approval Gate:** Present the resolution plan.
    > *"Task plan generated and logged. Shall I begin executing these fixes?"* -> **HALT**
 
