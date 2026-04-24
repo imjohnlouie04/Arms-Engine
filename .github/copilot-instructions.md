@@ -308,11 +308,18 @@ Use Copilot CLI's `/agent` command to invoke specialized agents (available in `.
 
 ## Accessing Skills in Copilot CLI
 
-Skills are also available in the Copilot CLI through file references or inline activation. After `arms init`, all SKILL.md files are synced to `.github/skills/`:
+Skills are fully discoverable in the Copilot CLI. After `arms init`, all skill files are synced to `.github/skills/` with proper metadata for CLI discovery.
+
+### Skills Registry & Index
+
+Three files support skill discovery:
+- **`.github/skills/`** – Directory containing all `{skill-name}.md` files with `tools: ["*"]` metadata
+- **`.github/skills.yaml`** – Auto-generated YAML registry of all available skills with metadata
+- **`.github/skills-index.md`** – Markdown index with quick reference and usage examples
 
 ### Available Skills (Post-Init)
 
-Located in `.github/skills/`:
+Reference any skill in `.github/skills/`:
 
 - **`arms-orchestrator.md`** – Full-stack project orchestration, multi-agent workflows, approval gates
 - **`backend-system-architect.md`** – Backend architecture, API design, database schemas
@@ -326,11 +333,19 @@ Located in `.github/skills/`:
 
 ### How to Use Skills
 
-Skills can be referenced inline in Copilot CLI conversations:
+**Method 1: Copilot CLI `/skills` slash command (if available):**
+```
+/skills
+[Select from list of available skills]
+```
 
+**Method 2: File reference in conversation:**
 ```
 @skills/frontend-design.md
 Build me a hero section with a bold brutalist aesthetic
 ```
 
-Or adopt a skill within an agent context for specialized task execution. Skills are designed to be composed together—a single agent may adopt multiple skills for a complex task.
+**Method 3: Inline skill adoption in agent context:**
+When delegating to an agent, include the skill path in the task definition (see Task Table Schema in Section 3.3).
+
+Skills are composable — a single agent may adopt multiple skills for complex work.
