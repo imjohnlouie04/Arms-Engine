@@ -148,10 +148,27 @@ def discover_agents_and_skills(arms_root):
 
 def initialize_brand_context(project_root):
     brand_path = os.path.join(project_root, ".gemini/BRAND.md")
+    legacy_paths = [
+        os.path.join(project_root, "brand-context.md"),
+        os.path.join(project_root, ".gemini/brand-context.md")
+    ]
+    
+    # 1. Check for existing BRAND.md
     if os.path.exists(brand_path):
+        with open(brand_path, 'r') as f:
+            if "[Name]" in f.read():
+                print("⚠️  BRAND.md is currently a template. Please fill it out to provide agents with design context!")
         return
 
-    print("🎨 Initializing Brand Context...")
+    # 2. Migration check
+    for legacy in legacy_paths:
+        if os.path.exists(legacy):
+            print(f"📦 Migrating legacy brand context from {os.path.basename(legacy)}...")
+            shutil.move(legacy, brand_path)
+            return
+
+    # 3. Create new template
+    print("🎨 Initializing new BRAND.md...")
     template = """# Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
 
@@ -184,6 +201,7 @@ def initialize_brand_context(project_root):
 """
     with open(brand_path, 'w') as f:
         f.write(template)
+    print("📢 BRAND.md created. ACTION REQUIRED: Please fill out the identity and vision to enable high-fidelity orchestration.")
 
 def update_session(project_root, arms_root, skills_list, agents_list):
     print("📄 Updating session log...")
