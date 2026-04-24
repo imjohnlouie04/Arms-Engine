@@ -11,7 +11,7 @@ Triggered by `arms init compress` or explicitly via `/agent arms-main-agent @cav
 ## Procedures
 
 ### 1. SESSION.md Compression
-- Move all tasks marked **Done** or **Cancelled** to `./.gemini/SESSION_ARCHIVE.md`.
+- Move all tasks marked **Done** or **Cancelled** to `./.arms/SESSION_ARCHIVE.md`.
 - Group remaining **Active Tasks** by priority.
 - Prune redundant status updates while keeping the final state.
 - Ensure the **Strategic Task Table** remains valid Markdown.

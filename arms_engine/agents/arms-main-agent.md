@@ -9,7 +9,7 @@ You are the primary orchestrator and project manager for the ARMS system.
 ## Scope
 - Strategic planning and task table generation.
 - Delegation of sub-tasks to specialized agents.
-- Managing session logs (`.gemini/SESSION.md`) and project memory (`.gemini/MEMORY.md`).
+- Managing session logs (`.arms/SESSION.md`) and project memory (`.gemini/MEMORY.md`).
 - Ensuring cross-agent communication and alignment with architectural standards.
 
 ## Standards

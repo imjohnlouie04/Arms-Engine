@@ -17,11 +17,19 @@ The centralized "brain" of the system, typically installed in the **Global Safe 
 - **`workflow/`**: Standardized protocols for CI/CD, code review, and issue resolution.
 - **`agents.yaml`**: The canonical registry mapping agents to their roles and skills.
 
-### 2. Local Project Instance (`./.gemini/`)
-When initialized, ARMS performs a **Full Installation** into the project root, creating a self-contained execution environment:
+### 2. Local Project Instance
+When initialized, ARMS performs a **Split Installation** to isolate project state from AI context:
+
+#### 📂 `.arms/` — Project Engine State
 - **`SESSION.md`**: The live orchestration board and task registry.
+- **`SESSION_ARCHIVE.md`**: Permanent history of completed tasks.
+- **`BRAND.md`**: Project identity and brand metadata (Logo, Colors, Tone).
+
+#### 📂 `.gemini/` — AI Assistant Context
 - **`MEMORY.md`**: Project-specific persistent knowledge and technical debt tracker.
-- **`agents/` & `skills/`**: Local mirrors of the engine's assets for low-latency context access.
+- **`GEMINI.md`**: Core system directives for the AI assistant.
+- **`RULES.md`**: Project-specific coding standards and guardrails.
+- **`agents/` & `skills/`**: Local mirrors of the engine's assets.
 - **`workflow/`**: Local copies of standard operating protocols.
 
 ---
