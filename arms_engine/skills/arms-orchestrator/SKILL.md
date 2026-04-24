@@ -55,13 +55,14 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 | Original | Resolved |
 |---|---|
-| `../Arms-Engine/skills/` | `$ARMS_ROOT/skills/` |
-| `../Arms-Engine/workflow/` | `$ARMS_ROOT/workflow/` |
-| `../Arms-Engine/agents.yaml` | `$ARMS_ROOT/agents.yaml` |
+| `../Arms-Engine/arms_engine/skills/` | `$ARMS_ROOT/arms_engine/skills/` |
+| `../Arms-Engine/arms_engine/workflow/` | `$ARMS_ROOT/arms_engine/workflow/` |
+| `../Arms-Engine/arms_engine/agents.yaml` | `$ARMS_ROOT/arms_engine/agents.yaml` |
 
 **Workspace layout:**
-- ARMS engine: `$ARMS_ROOT/` (agents, skills, workflow protocols)
-- Local project state: `./.gemini/` (SESSION.md, MEMORY.md, GEMINI.md, RULES.md)
+- ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
+- Local project state: `./.gemini/` (SESSION.md, MEMORY.md, BRAND.md, GEMINI.md, RULES.md)
+- Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
 
 ---
 
@@ -73,19 +74,16 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
 
 ```
 1. Create ./.gemini/ directory if missing
-2. Create ./.gemini/agent-outputs/ directory if missing
-3. Create ./.gemini/reports/ directory if missing
-4. Detect legacy agents: If $ARMS_ROOT/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
-5. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-6. Scaffold SESSION.md with required sections (see template below)
-7. Scaffold MEMORY.md with required sections (see template below)
-8. Detect execution mode → write to SESSION.md under ## Execution Mode
-9. Run skill discovery: 
-   - Scan `$ARMS_ROOT/skills/` (Global Engine).
-   - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file. Ignore all other directories.
-   - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+). NEVER prune or omit skills during a task update. Omission is considered environmental corruption.
-   - **Persistence:** Update `SESSION.md` under `## Active Skills` by registering discovered skills. Never delete the roster during a task update.
-10. Register skills: `for d in $ARMS_ROOT/skills/*/; do [ -f "$d/SKILL.md" ] && yes | gemini skills link "$d"; done`
+2. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
+3. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
+4. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
+5. Scaffold SESSION.md, MEMORY.md, and BRAND.md with required sections
+6. Detect execution mode → write to SESSION.md under ## Execution Mode
+7. Run skill discovery: 
+   - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
+   - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
+   - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`. Never delete the roster during a task update.
 ```
 
 ### SESSION.md Bootstrap Template
@@ -118,14 +116,30 @@ Generated: <ISO 8601 timestamp>
 ```markdown
 # ARMS Project Memory
 
-is a continuous adaptation of the project, never delete the existing if the existing is already have
+> Managed by ARMS Engine. This is a continuous learning file. APPEND only; never overwrite.
 
 ## Project Context & MVP
 ## Primary Use Case & Implications
-## Brand Context Summary
 ## Phase 2 Backlog
 ## Developer Preferences
 ## Known Bugs & Fixes
+```
+
+### BRAND.md Bootstrap Template
+
+```markdown
+# Brand Context
+> Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
+
+## Identity
+- **Project Name:** [Name]
+- **Mission:** [Purpose]
+- **Personality:** [Voice/Tone]
+
+## Visual Identity
+- **Color Palette:** [HEX/OKLCH]
+- **Typography:** [Google Fonts]
+- **Logo Status:** [Generated/Pending]
 ```
 
 **CRITICAL RULE:** If `./.gemini/` already exists with populated files, read them — **NEVER overwrite existing SESSION.md or MEMORY.md files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
@@ -282,7 +296,7 @@ arms-main-agent
   └─▶ Delegate to subagent (+ skill context if applicable)
 
     subagent
-      └─▶ Read SKILL.md from $ARMS_ROOT/skills/ if task falls within skill domain
+      └─▶ Read SKILL.md from $ARMS_ROOT/arms_engine/skills/ if task falls within skill domain
       └─▶ Execute with strict response template
       └─▶ Report back to arms-main-agent (output + status recommendation)
 

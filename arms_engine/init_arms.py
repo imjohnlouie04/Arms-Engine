@@ -158,26 +158,26 @@ def initialize_brand_context(project_root):
 ---
 
 ## Identity
-- **Project Name:** [Enter Name]
-- **Mission:** [Core purpose of the project]
+- **Project Name:** [Name]
+- **Mission:** [Purpose]
 - **Vision:** [Long-term goal]
-- **Personality:** [e.g., Warm, Modern, Professional, Minimalist]
-- **Voice & Tone:** [e.g., Approachable, Technical, Authoritative]
+- **Personality:** [Voice/Tone]
+- **Voice & Tone:** [Approach]
 
 ## Positioning
-- **Primary Audience:** [Who is this for?]
-- **Core Values:** [What do you stand for?]
-- **Differentiation:** [How is this project unique?]
+- **Primary Audience:** [Target]
+- **Core Values:** [Values]
+- **Differentiation:** [Unique Factor]
 
 ## Visual Identity
-- **Color Palette:** [e.g., Primary, Secondary, Accent colors in HEX/OKLCH]
-- **Typography:** [Preferred Google Fonts for Titles and Body]
-- **Logo Status:** [Pending/Generated]
-- **Visual Direction:** [e.g., Glassmorphism, Dark Mode, High-Density]
+- **Color Palette:** [HEX/OKLCH]
+- **Typography:** [Google Fonts]
+- **Logo Status:** [Generated/Pending]
+- **Visual Direction:** [Glassmorphism/Dark Mode/etc]
 
 ## Use Case Implications
-- **Project Type:** [e.g., SaaS, Portfolio, Community, E-commerce]
-- **Design Priority:** [What is the most important UX factor?]
+- **Project Type:** [SaaS/Community/etc]
+- **Design Priority:** [UX Factor]
 
 ## Notes
 - [Misc preferences]
