@@ -9,6 +9,10 @@ Use these commands to interact with the **Global ARMS Orchestrator**.
 | `init yolo` | **Full Automation Mode.** Generates a Task Table and immediately begins execution without halting. |
 | `init compress` | Initializes and then uses the **Caveman Skill** to shrink session and memory files for token efficiency. |
 
+Brand bootstrap behavior during `init`:
+- Existing project with no brand file: ARMS inspects the repo and drafts `.arms/BRAND.md`.
+- New / empty project: ARMS writes a question-driven `.arms/BRAND.md` for the user to complete.
+
 ## Execution Commands (Post-Init)
 | Command | Action |
 |---|---|

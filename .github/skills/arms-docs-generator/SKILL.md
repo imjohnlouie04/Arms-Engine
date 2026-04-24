@@ -1,3 +1,8 @@
+---
+name: arms-docs-generator
+description: "Technical Documentation & Architecture Visualization Specialist"
+---
+
 # Skill: arms-docs-generator
 **Role**: Technical Documentation & Architecture Visualization Specialist.
 

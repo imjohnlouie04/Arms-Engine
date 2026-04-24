@@ -1,5 +1,4 @@
 ---
-tools: ["*"]
 name: qa-automation-testing
 description: >
   Write robust, maintainable unit and E2E tests using Jest, Cypress, and Playwright.

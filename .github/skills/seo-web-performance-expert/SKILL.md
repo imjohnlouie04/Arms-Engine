@@ -1,5 +1,4 @@
 ---
-tools: ["*"]
 name: seo-web-performance-expert
 description: >
   Expert guidance for SEO optimization, semantic HTML structure, meta tags, and Core Web Vitals (LCP, INP, CLS). Use this skill when working on search engine optimization, improving page performance metrics, structuring HTML for better crawlability and accessibility, optimizing title tags and meta descriptions, fixing layout shifts or loading issues, improving Lighthouse scores, or implementing technical SEO improvements. Also relevant for web accessibility, structured data implementation, heading hierarchy, Open Graph tags, and any work involving Google Search Console, PageSpeed Insights, or Core Web Vitals optimization. Helps with both technical SEO fundamentals and modern performance requirements for 2026.

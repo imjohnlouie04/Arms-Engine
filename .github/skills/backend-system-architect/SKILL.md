@@ -1,5 +1,4 @@
 ---
-tools: ["*"]
 name: backend-system-architect
 description: >
   Design and architect scalable, reliable backend systems. Use this for system

@@ -3,12 +3,13 @@ import sys
 import shutil
 import datetime
 import argparse
+import json
 import re
 
 try:
     from ._version import version as __version__
 except (ImportError, ValueError):
-    __version__ = "1.3.3-dev" # Fallback for local development
+    __version__ = "1.3.4-dev" # Fallback for local development
 
 def get_arms_root():
     # When installed as a package, this is the arms_engine directory
@@ -183,8 +184,36 @@ def sync_agents_copilot(arms_root, project_root):
                 with open(dest, 'w') as f:
                     f.write(content)
 
+def infer_skill_description(content, skill_name):
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            continue
+        if line.startswith("**ID"):
+            continue
+        if line.startswith("**Role"):
+            return re.sub(r"^\*\*Role:?\*\*:?\s*", "", line).strip().strip(".")
+        return line[:240]
+    return f"Specialized guidance for {skill_name.replace('-', ' ')}."
+
+def ensure_skill_frontmatter(content, skill_name):
+    stripped = content.lstrip()
+    if stripped.startswith("---"):
+        return content
+
+    description = infer_skill_description(content, skill_name)
+    frontmatter = (
+        "---\n"
+        f"name: {skill_name}\n"
+        f"description: {json.dumps(description)}\n"
+        "---\n\n"
+    )
+    return frontmatter + stripped
+
 def sync_skills_copilot(arms_root, project_root):
-    """Sync skill SKILL.md files to .github/skills/ for Copilot CLI discovery."""
+    """Sync skill directories to .github/skills/<skill-name>/SKILL.md for Copilot discovery."""
     print("🔌 Syncing Skills for Copilot CLI...")
     skills_src = os.path.join(arms_root, "skills")
     target_dir = os.path.join(project_root, ".github/skills")
@@ -196,19 +225,27 @@ def sync_skills_copilot(arms_root, project_root):
             skill_md_path = os.path.join(skill_path, "SKILL.md")
             
             if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
-                dest = os.path.join(target_dir, f"{skill_name}.md")
-                with open(skill_md_path, 'r') as f:
+                legacy_dest = os.path.join(target_dir, f"{skill_name}.md")
+                if os.path.isfile(legacy_dest):
+                    os.remove(legacy_dest)
+
+                dest_dir = os.path.join(target_dir, skill_name)
+                if os.path.exists(dest_dir):
+                    shutil.rmtree(dest_dir)
+                shutil.copytree(
+                    skill_path,
+                    dest_dir,
+                    ignore=shutil.ignore_patterns(".DS_Store", "__pycache__"),
+                )
+
+                dest_skill_md_path = os.path.join(dest_dir, "SKILL.md")
+                with open(dest_skill_md_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                
-                # Ensure tools: ["*"] is present for Copilot CLI discovery
-                if "tools:" not in content:
-                    # Insert tools: ["*"] after the first ---
-                    parts = content.split("---", 2)
-                    if len(parts) >= 3:
-                        content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
-                
-                with open(dest, 'w') as f:
-                    f.write(content)
+
+                normalized_content = ensure_skill_frontmatter(content, skill_name)
+
+                with open(dest_skill_md_path, 'w', encoding='utf-8') as f:
+                    f.write(normalized_content)
 
 def create_skills_registry(arms_root, project_root):
     """Create a skills registry file for Copilot CLI discovery."""
@@ -263,15 +300,15 @@ def create_skills_registry(arms_root, project_root):
         f.write("> **Quick reference:** All available skills for Copilot CLI\n\n")
         f.write("## Available Skills\n\n")
         for skill_name, skill_info in skills_data.items():
-            f.write(f"### `{skill_name}.md`\n")
+            f.write(f"### `{skill_name}/SKILL.md`\n")
             f.write(f"**{skill_info['name']}**\n\n")
             f.write(f"{skill_info['description']}\n\n")
-            f.write(f"**File:** `.github/skills/{skill_name}.md`\n\n")
+            f.write(f"**File:** `.github/skills/{skill_name}/SKILL.md`\n\n")
         
         f.write("## Usage\n\n")
         f.write("Reference a skill in Copilot CLI:\n\n")
         f.write("```\n")
-        f.write("@skills/arms-orchestrator.md\n")
+        f.write("@skills/arms-orchestrator/SKILL.md\n")
         f.write("Describe your task here\n")
         f.write("```\n")
 
@@ -355,51 +392,471 @@ def discover_agents_and_skills(arms_root):
             
     return "\n".join(agents_info)
 
-def initialize_brand_context(project_root):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+PLACEHOLDER_BRAND_TOKENS = (
+    "[Name]",
+    "[Purpose]",
+    "[Long-term goal]",
+    "[Voice/Tone]",
+    "[Approach]",
+    "[Target]",
+    "[Values]",
+    "[Unique Factor]",
+    "[HEX/OKLCH]",
+    "[Google Fonts]",
+    "[Generated/Pending]",
+    "[Glassmorphism/Dark Mode/etc]",
+    "[SaaS/Community/etc]",
+    "[UX Factor]",
+    "[Misc preferences]",
+)
 
-    # 1. Check for existing BRAND.md
-    if os.path.exists(brand_path):
-        with open(brand_path, 'r') as f:
-            if "[Name]" in f.read():
-                print("⚠️  BRAND.md is currently a template. Please fill it out to provide agents with design context!")
-        return
+PROJECT_MARKER_FILES = (
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lockb",
+    "pyproject.toml",
+    "requirements.txt",
+    "Pipfile",
+    "poetry.lock",
+    "go.mod",
+    "Cargo.toml",
+    "composer.json",
+    "Gemfile",
+    "pom.xml",
+    "build.gradle",
+    "README.md",
+    "README.mdx",
+    "index.html",
+)
 
-    # 2. Create new template
-    print("🎨 Initializing new BRAND.md...")
-    template = """# Brand Context
-> Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
+PROJECT_MARKER_DIRS = (
+    "src",
+    "app",
+    "pages",
+    "components",
+    "lib",
+    "server",
+    "backend",
+    "frontend",
+    "api",
+    "public",
+    "docs",
+)
+
+IGNORED_PROJECT_ENTRIES = {
+    ".git",
+    ".github",
+    ".gemini",
+    ".arms",
+    ".vscode",
+    ".idea",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "__pycache__",
+    ".DS_Store",
+}
+
+def read_text_file(path, max_chars=40000):
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read(max_chars)
+
+def brand_file_requires_bootstrap(content):
+    if not content.strip():
+        return True
+    return any(token in content for token in PLACEHOLDER_BRAND_TOKENS)
+
+def extract_first_meaningful_paragraph(text):
+    lines = text.splitlines()
+    paragraph = []
+    in_code_block = False
+
+    for raw_line in lines:
+        line = raw_line.strip()
+
+        if line.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
+        if not line:
+            if paragraph:
+                break
+            continue
+
+        if (
+            line.startswith("#")
+            or line.startswith("|")
+            or line.startswith("- ")
+            or line.startswith("* ")
+            or line.startswith("> ")
+        ):
+            if paragraph:
+                break
+            continue
+
+        paragraph.append(line)
+
+    return " ".join(paragraph).strip()
+
+def detect_existing_project(project_root):
+    for marker in PROJECT_MARKER_FILES:
+        if os.path.exists(os.path.join(project_root, marker)):
+            return True
+
+    for marker_dir in PROJECT_MARKER_DIRS:
+        path = os.path.join(project_root, marker_dir)
+        if os.path.isdir(path):
+            with os.scandir(path) as entries:
+                if next(entries, None) is not None:
+                    return True
+
+    meaningful_entries = [
+        name
+        for name in os.listdir(project_root)
+        if name not in IGNORED_PROJECT_ENTRIES and not name.startswith(".")
+    ]
+    return bool(meaningful_entries)
+
+def detect_logo_status(project_root):
+    candidate_dirs = (
+        project_root,
+        os.path.join(project_root, "public"),
+        os.path.join(project_root, "assets"),
+        os.path.join(project_root, "static"),
+        os.path.join(project_root, "src", "assets"),
+    )
+
+    for directory in candidate_dirs:
+        if not os.path.isdir(directory):
+            continue
+        for root, _, files in os.walk(directory):
+            for filename in files:
+                lower = filename.lower()
+                if lower.endswith((".svg", ".png", ".jpg", ".jpeg", ".webp", ".ico")) and (
+                    "logo" in lower or "brand" in lower or "favicon" in lower
+                ):
+                    return "Existing asset detected"
+    return "Pending / no explicit logo asset found"
+
+def parse_pyproject_metadata(content):
+    name_match = re.search(r'(?m)^name\s*=\s*["\']([^"\']+)["\']', content)
+    description_match = re.search(r'(?m)^description\s*=\s*["\']([^"\']+)["\']', content)
+    scripts_match = re.search(r'(?m)^\[project\.scripts\]', content)
+    return {
+        "name": name_match.group(1).strip() if name_match else "",
+        "description": description_match.group(1).strip() if description_match else "",
+        "has_scripts": bool(scripts_match),
+    }
+
+def classify_project_type(description_blob, frameworks, has_project_scripts):
+    blob = description_blob.lower()
+    framework_set = {framework.lower() for framework in frameworks}
+
+    if has_project_scripts or any(
+        keyword in blob for keyword in ("cli", "engine", "tool", "tooling", "framework", "sdk", "library", "orchestration")
+    ):
+        return "Developer Tooling"
+    if "next.js" in framework_set or "react" in framework_set or "vue" in framework_set or "svelte" in framework_set or "astro" in framework_set:
+        if any(keyword in blob for keyword in ("marketing", "landing page", "brand site", "content", "blog", "seo")):
+            return "Content / Marketing Site"
+        return "Web Application"
+    if any(framework in framework_set for framework in ("fastapi", "flask", "django", "express", "nest")):
+        return "Backend Service"
+    return "Software Project"
+
+def infer_personality(project_type):
+    if project_type == "Developer Tooling":
+        return "Technical, precise, efficient"
+    if project_type == "Content / Marketing Site":
+        return "Clear, confident, polished"
+    if project_type == "Backend Service":
+        return "Reliable, secure, deliberate"
+    if project_type == "Web Application":
+        return "Clear, modern, trustworthy"
+    return "Focused, practical, adaptable"
+
+def infer_voice_tone(project_type):
+    if project_type == "Developer Tooling":
+        return "Direct, technical, low-fluff communication for builders."
+    if project_type == "Content / Marketing Site":
+        return "Concise, persuasive, and benefits-first without sounding generic."
+    if project_type == "Backend Service":
+        return "Professional, calm, and confidence-building with clear technical detail."
+    if project_type == "Web Application":
+        return "Friendly and clear, with emphasis on usability and trust."
+    return "Plainspoken and pragmatic."
+
+def infer_primary_audience(project_type):
+    if project_type == "Developer Tooling":
+        return "Developers, technical operators, and engineering teams"
+    if project_type == "Content / Marketing Site":
+        return "Prospective customers, buyers, and evaluators"
+    if project_type == "Backend Service":
+        return "Internal engineering teams and API consumers"
+    if project_type == "Web Application":
+        return "End users interacting with the application on web or mobile"
+    return "Project stakeholders and end users"
+
+def infer_core_values(project_type):
+    if project_type == "Developer Tooling":
+        return "Automation, consistency, maintainability"
+    if project_type == "Content / Marketing Site":
+        return "Clarity, credibility, conversion"
+    if project_type == "Backend Service":
+        return "Reliability, security, scalability"
+    if project_type == "Web Application":
+        return "Usability, clarity, performance"
+    return "Pragmatism, quality, adaptability"
+
+def infer_design_priority(project_type):
+    if project_type == "Developer Tooling":
+        return "Clarity for technical workflows"
+    if project_type == "Content / Marketing Site":
+        return "Conversion-focused communication"
+    if project_type == "Backend Service":
+        return "Operational clarity and trust"
+    if project_type == "Web Application":
+        return "App-like usability"
+    return "Clear information hierarchy"
+
+def infer_brand_context_from_project(project_root):
+    evidence = []
+    frameworks = []
+    package_name = ""
+    description = ""
+    keywords = []
+    has_project_scripts = False
+
+    package_json_path = os.path.join(project_root, "package.json")
+    if os.path.exists(package_json_path):
+        evidence.append("package.json")
+        try:
+            with open(package_json_path, "r", encoding="utf-8") as f:
+                package_data = json.load(f)
+            package_name = str(package_data.get("name", "")).strip()
+            description = str(package_data.get("description", "")).strip()
+            keywords = [str(keyword).strip() for keyword in package_data.get("keywords", []) if str(keyword).strip()]
+            deps = set((package_data.get("dependencies") or {}).keys()) | set((package_data.get("devDependencies") or {}).keys())
+            if "next" in deps:
+                frameworks.append("Next.js")
+            if "react" in deps:
+                frameworks.append("React")
+            if "vue" in deps:
+                frameworks.append("Vue")
+            if "@angular/core" in deps:
+                frameworks.append("Angular")
+            if "svelte" in deps or "@sveltejs/kit" in deps:
+                frameworks.append("Svelte")
+            if "astro" in deps:
+                frameworks.append("Astro")
+            if "express" in deps:
+                frameworks.append("Express")
+            if "@nestjs/core" in deps:
+                frameworks.append("Nest")
+        except (json.JSONDecodeError, OSError):
+            evidence.append("package.json (unparsed)")
+
+    pyproject_path = os.path.join(project_root, "pyproject.toml")
+    pyproject_content = read_text_file(pyproject_path)
+    if pyproject_content:
+        evidence.append("pyproject.toml")
+        pyproject_metadata = parse_pyproject_metadata(pyproject_content)
+        package_name = package_name or pyproject_metadata["name"]
+        description = description or pyproject_metadata["description"]
+        has_project_scripts = has_project_scripts or pyproject_metadata["has_scripts"]
+        lowered = pyproject_content.lower()
+        if "fastapi" in lowered:
+            frameworks.append("FastAPI")
+        if "flask" in lowered:
+            frameworks.append("Flask")
+        if "django" in lowered:
+            frameworks.append("Django")
+        if "typer" in lowered or "click" in lowered:
+            frameworks.append("Python CLI")
+
+    cargo_toml_path = os.path.join(project_root, "Cargo.toml")
+    cargo_content = read_text_file(cargo_toml_path)
+    if cargo_content:
+        evidence.append("Cargo.toml")
+        cargo_name_match = re.search(r'(?m)^name\s*=\s*"([^"]+)"', cargo_content)
+        cargo_description_match = re.search(r'(?m)^description\s*=\s*"([^"]+)"', cargo_content)
+        if cargo_name_match and not package_name:
+            package_name = cargo_name_match.group(1).strip()
+        if cargo_description_match and not description:
+            description = cargo_description_match.group(1).strip()
+        frameworks.append("Rust")
+
+    go_mod_path = os.path.join(project_root, "go.mod")
+    go_mod_content = read_text_file(go_mod_path)
+    if go_mod_content:
+        evidence.append("go.mod")
+        module_match = re.search(r'(?m)^module\s+(.+)$', go_mod_content)
+        if module_match and not package_name:
+            package_name = module_match.group(1).strip().split("/")[-1]
+        frameworks.append("Go")
+
+    readme_path = os.path.join(project_root, "README.md")
+    readme_content = read_text_file(readme_path)
+    readme_summary = ""
+    if readme_content:
+        evidence.append("README.md")
+        readme_summary = extract_first_meaningful_paragraph(readme_content)
+
+    if os.path.isdir(os.path.join(project_root, "src")):
+        evidence.append("src/")
+    if os.path.isdir(os.path.join(project_root, "app")):
+        evidence.append("app/")
+    if os.path.isdir(os.path.join(project_root, "pages")):
+        evidence.append("pages/")
+
+    frameworks = list(dict.fromkeys(frameworks))
+    directory_name = os.path.basename(os.path.abspath(project_root))
+    project_name = package_name or directory_name
+    description_blob = " ".join(filter(None, [description, readme_summary, " ".join(keywords)]))
+    project_type = classify_project_type(description_blob, frameworks, has_project_scripts)
+
+    if description:
+        mission = description.rstrip(".") + "."
+    elif readme_summary:
+        mission = readme_summary.rstrip(".") + "."
+    else:
+        mission = f"{project_name} is an existing {project_type.lower()} repository."
+
+    if readme_summary and readme_summary.lower() != mission.lower():
+        differentiation = readme_summary.rstrip(".") + "."
+    elif description:
+        differentiation = description.rstrip(".") + "."
+    else:
+        differentiation = f"Repository signals suggest a {project_type.lower()} focused on practical delivery."
+
+    stack_summary = ", ".join(frameworks) if frameworks else "No dominant framework detected"
+
+    return {
+        "project_name": project_name,
+        "mission": mission,
+        "vision": "TBD - confirm the long-term product direction with the project owner.",
+        "personality": infer_personality(project_type),
+        "voice_tone": infer_voice_tone(project_type),
+        "primary_audience": infer_primary_audience(project_type),
+        "core_values": infer_core_values(project_type),
+        "differentiation": differentiation,
+        "color_palette": "TBD - no explicit palette found in repository files",
+        "typography": "TBD - no explicit font system found in repository files",
+        "logo_status": detect_logo_status(project_root),
+        "visual_direction": "Undecided - confirm preferred light/dark direction",
+        "project_type": project_type,
+        "design_priority": infer_design_priority(project_type),
+        "notes": [
+            "Auto-generated from existing repository signals. Review and correct inferred fields.",
+            f"Evidence reviewed: {', '.join(dict.fromkeys(evidence)) or 'directory structure only'}",
+            f"Detected stack: {stack_summary}",
+        ],
+    }
+
+def render_inferred_brand_context(project_root):
+    context = infer_brand_context_from_project(project_root)
+    notes = "\n".join(f"- {note}" for note in context["notes"])
+    return f"""# Brand Context
+> Managed by ARMS Engine. Auto-generated from an existing project repository.
+> Review inferred fields before relying on this as final brand truth.
 
 ---
 
 ## Identity
-- **Project Name:** [Name]
-- **Mission:** [Purpose]
-- **Vision:** [Long-term goal]
-- **Personality:** [Voice/Tone]
-- **Voice & Tone:** [Approach]
+- **Project Name:** {context["project_name"]}
+- **Mission:** {context["mission"]}
+- **Vision:** {context["vision"]}
+- **Personality:** {context["personality"]}
+- **Voice & Tone:** {context["voice_tone"]}
 
 ## Positioning
-- **Primary Audience:** [Target]
-- **Core Values:** [Values]
-- **Differentiation:** [Unique Factor]
+- **Primary Audience:** {context["primary_audience"]}
+- **Core Values:** {context["core_values"]}
+- **Differentiation:** {context["differentiation"]}
 
 ## Visual Identity
-- **Color Palette:** [HEX/OKLCH]
-- **Typography:** [Google Fonts]
-- **Logo Status:** [Generated/Pending]
-- **Visual Direction:** [Glassmorphism/Dark Mode/etc]
+- **Color Palette:** {context["color_palette"]}
+- **Typography:** {context["typography"]}
+- **Logo Status:** {context["logo_status"]}
+- **Visual Direction:** {context["visual_direction"]}
 
 ## Use Case Implications
-- **Project Type:** [SaaS/Community/etc]
-- **Design Priority:** [UX Factor]
+- **Project Type:** {context["project_type"]}
+- **Design Priority:** {context["design_priority"]}
 
 ## Notes
-- [Misc preferences]
+{notes}
 """
-    with open(brand_path, 'w') as f:
-        f.write(template)
-    print("📢 BRAND.md created. ACTION REQUIRED: Please fill out the identity and vision to enable high-fidelity orchestration.")
+
+def render_new_project_brand_questionnaire(project_root):
+    project_name = os.path.basename(os.path.abspath(project_root)) or "TBD"
+    return f"""# Brand Context
+> Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
+> New project detected. Fill in the questions below before design-oriented work begins.
+
+---
+
+## Identity
+- **Project Name:** {project_name}
+- **Mission:** TBD
+- **Vision:** TBD
+- **Personality:** TBD
+- **Voice & Tone:** TBD
+
+## Positioning
+- **Primary Audience:** TBD
+- **Core Values:** TBD
+- **Differentiation:** TBD
+
+## Visual Identity
+- **Color Palette:** TBD
+- **Typography:** TBD
+- **Logo Status:** TBD
+- **Visual Direction:** TBD
+
+## Use Case Implications
+- **Project Type:** TBD
+- **Design Priority:** TBD
+
+## Notes
+- Answer these before approving design or marketing work:
+- What is the exact project name or working title?
+- What problem does the project solve, and for whom?
+- What is the long-term vision?
+- Pick up to 3 brand personality words.
+- What should the voice sound like?
+- Who is the primary audience?
+- What core values should the brand signal?
+- What makes it meaningfully different from alternatives?
+- Do you already have a logo, color palette, typography, or an existing site?
+- Should the visual direction default to light, dark, system, or something else?
+"""
+
+def initialize_brand_context(project_root):
+    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+
+    existing_content = read_text_file(brand_path)
+    if existing_content and not brand_file_requires_bootstrap(existing_content):
+        return
+
+    if detect_existing_project(project_root):
+        print("🎨 Generating BRAND.md from existing project context...")
+        with open(brand_path, "w", encoding="utf-8") as f:
+            f.write(render_inferred_brand_context(project_root))
+        print("📢 BRAND.md generated from repository signals. Review inferred fields and refine where needed.")
+        return
+
+    print("🎨 Initializing new-project BRAND.md questionnaire...")
+    with open(brand_path, "w", encoding="utf-8") as f:
+        f.write(render_new_project_brand_questionnaire(project_root))
+    print("📢 BRAND.md created for a new project. User answers are required before high-fidelity brand work begins.")
 
 def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
     print("📄 Updating session log...")

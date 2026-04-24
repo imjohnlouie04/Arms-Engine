@@ -23,7 +23,7 @@ When initialized, ARMS performs a **Split Installation** to isolate project stat
 #### 📂 `.arms/` — Project Engine State
 - **`SESSION.md`**: The live orchestration board and task registry.
 - **`SESSION_ARCHIVE.md`**: Permanent history of completed tasks.
-- **`BRAND.md`**: Project identity and brand metadata (Logo, Colors, Tone).
+- **`BRAND.md`**: Project identity and brand metadata. Existing repos get an inferred first draft; new projects get a question-driven brief for the owner to complete.
 
 #### 📂 `.gemini/` — AI Assistant Context
 - **`MEMORY.md`**: Project-specific persistent knowledge and technical debt tracker.
@@ -64,6 +64,10 @@ pip install -e .
 | `arms init` | **Standard** | Boots engine, syncs assets, and generates a **Strategic Task Table**. |
 | `arms init yolo` | **Automated** | Skips the planning gate. Executes all tasks sequentially. |
 | `arms-docs` | **Documentation** | Updates the `README.md` agent roster from `agents.yaml`. |
+
+During `arms init`, missing brand context is handled differently by project state:
+- Existing repository: ARMS inspects the project and writes a first-pass `.arms/BRAND.md`.
+- New / empty project: ARMS creates a question-driven `.arms/BRAND.md` for the user to answer.
 
 ---
 

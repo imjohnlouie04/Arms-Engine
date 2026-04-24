@@ -80,7 +80,9 @@ When `./.arms/` or `./.gemini/` does not exist or is missing required files, `ar
 4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, or other legacy brand files into `./.arms/` when the `.arms/` target file does not already exist
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
 6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-7. Scaffold .arms/SESSION.md, .gemini/MEMORY.md, and .arms/BRAND.md with required sections
+7. Scaffold `.arms/SESSION.md` and `.gemini/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
+   - Existing project with missing or placeholder brand file: inspect repository signals and auto-generate a first-pass `BRAND.md`
+   - New / empty project with missing brand file: create a question-driven `BRAND.md` that must be completed from user answers
 8. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
 9. Run skill discovery: 
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
@@ -133,38 +135,57 @@ None
 ## Known Bugs & Fixes
 ```
 
-### BRAND.md Bootstrap Template
+### BRAND.md Bootstrap Rules
 
 ```markdown
+If the workspace is an existing project and `.arms/BRAND.md` is missing or still a placeholder, generate a first-pass brand file from repository evidence:
+- infer project name from package metadata or folder name
+- infer mission/differentiation from package description, README, or other top-level docs
+- infer project type, audience, and design priority from stack and repository structure
+- mark anything not evidenced in the repo as `TBD`
+- include a note that the file was auto-generated and must be reviewed
+
+If the workspace is a new/empty project, create a question-driven brand brief instead of pretending the answers are known:
+
 # Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
+> New project detected. Fill in the unanswered prompts before design-oriented work begins.
 
 ---
 
 ## Identity
-- **Project Name:** [Name]
-- **Mission:** [Purpose]
-- **Vision:** [Long-term goal]
-- **Personality:** [Voice/Tone]
-- **Voice & Tone:** [Approach]
+- **Project Name:** TBD
+- **Mission:** TBD
+- **Vision:** TBD
+- **Personality:** TBD
+- **Voice & Tone:** TBD
 
 ## Positioning
-- **Primary Audience:** [Target]
-- **Core Values:** [Values]
-- **Differentiation:** [Unique Factor]
+- **Primary Audience:** TBD
+- **Core Values:** TBD
+- **Differentiation:** TBD
 
 ## Visual Identity
-- **Color Palette:** [HEX/OKLCH]
-- **Typography:** [Google Fonts]
-- **Logo Status:** [Generated/Pending]
-- **Visual Direction:** [Glassmorphism/Dark Mode/etc]
+- **Color Palette:** TBD
+- **Typography:** TBD
+- **Logo Status:** TBD
+- **Visual Direction:** TBD
 
 ## Use Case Implications
-- **Project Type:** [SaaS/Community/etc]
-- **Design Priority:** [UX Factor]
+- **Project Type:** TBD
+- **Design Priority:** TBD
 
 ## Notes
-- [Misc preferences]
+- What is the exact project name or working title?
+- What problem does the project solve, and for whom?
+- What is the long-term vision?
+- Pick up to 3 brand personality words.
+- What should the voice sound like?
+- Who is the primary audience?
+- What core values should the brand signal?
+- What makes it meaningfully different from alternatives?
+- Do you already have a logo, color palette, typography, or an existing site?
+- Should the visual direction default to light, dark, system, or something else?
 ```
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.

@@ -1,5 +1,4 @@
 ---
-tools: ["*"]
 name: logo-design
 description: >
   Gather client requirements and generate a beautiful, professional HD logo using Gemini

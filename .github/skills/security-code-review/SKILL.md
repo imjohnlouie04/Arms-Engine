@@ -1,5 +1,4 @@
 ---
-tools: ["*"]
 name: security-code-review
 description: >
   Perform security-focused code reviews following OWASP best practices. Use this for code review requests, security audits, vulnerability assessments, pull request reviews, or whenever code is shared for feedback. Covers injection flaws, authentication issues, XSS, CSRF, insecure dependencies, cryptographic failures, access control problems, security misconfigurations, and other OWASP Top 10 vulnerabilities. Applies to any programming language including JavaScript, Python, Java, C#, PHP, Go, Ruby, and others.
