@@ -1,0 +1,26 @@
+{
+  "workflow": "Deployment Gate",
+  "version": "1.0.0",
+  "description": "Enforces mandatory QA and Security approval before production deployment.",
+  "gates": [
+    {
+      "id": "qa_gate",
+      "agent": "arms-qa-agent",
+      "requirement": "Pre-flight checks (lint, tests, build) must pass.",
+      "blocking": true
+    },
+    {
+      "id": "security_gate",
+      "agent": "arms-security-agent",
+      "requirement": "Security audit of new dependencies and sensitive logic.",
+      "blocking": true
+    }
+  ],
+  "triggers": [
+    {
+      "command": "deploy",
+      "action": "validate_gates"
+    }
+  ],
+  "enforcement": "The arms-devops-agent is prohibited from executing deployment commands if any gate status is 'FAILED' or 'PENDING' in the current session."
+}

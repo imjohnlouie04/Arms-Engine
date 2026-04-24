@@ -1,0 +1,256 @@
+import os
+import sys
+import shutil
+import datetime
+import argparse
+import re
+
+def get_arms_root():
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_project_root():
+    return os.getcwd()
+
+def setup_folders(project_root):
+    folders = [
+        ".gemini/agent-outputs",
+        ".gemini/reports",
+        ".gemini/agents",
+        ".gemini/skills",
+        ".gemini/workflow"
+    ]
+    for folder in folders:
+        path = os.path.join(project_root, folder)
+        os.makedirs(path, exist_ok=True)
+
+def sync_agents(arms_root, project_root):
+    print("🤖 Syncing Agents...")
+    agents_dir = os.path.join(arms_root, "agents")
+    target_dir = os.path.join(project_root, ".gemini/agents")
+    
+    if os.path.exists(agents_dir):
+        for filename in os.listdir(agents_dir):
+            if filename.endswith(".md"):
+                src = os.path.join(agents_dir, filename)
+                dest = os.path.join(target_dir, filename)
+                
+                with open(src, 'r') as f:
+                    content = f.read()
+                
+                if "tools:" not in content:
+                    # Insert tools: ["*"] after the first ---
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
+                
+                with open(dest, 'w') as f:
+                    f.write(content)
+    
+    # Sync agents.yaml
+    yaml_src = os.path.join(arms_root, "agents.yaml")
+    yaml_dest = os.path.join(project_root, ".gemini/agents.yaml")
+    if os.path.exists(yaml_src):
+        print("📄 Syncing agents.yaml...")
+        shutil.copy(yaml_src, yaml_dest)
+
+def sync_skills(arms_root, project_root):
+    print("🔌 Installing Skills...")
+    skills_src = os.path.join(arms_root, "skills")
+    skills_dest = os.path.join(project_root, ".gemini/skills")
+    
+    if os.path.exists(skills_src):
+        for name in os.listdir(skills_src):
+            src_path = os.path.join(skills_src, name)
+            dest_path = os.path.join(skills_dest, name)
+            
+            if os.path.isdir(src_path) and os.path.exists(os.path.join(src_path, "SKILL.md")):
+                if os.path.exists(dest_path):
+                    shutil.rmtree(dest_path)
+                shutil.copytree(src_path, dest_path)
+
+def sync_workflow(arms_root, project_root):
+    print("📋 Syncing Workflow Protocols...")
+    wf_src = os.path.join(arms_root, "workflow")
+    wf_dest = os.path.join(project_root, ".gemini/workflow")
+    
+    if os.path.exists(wf_src):
+        for filename in os.listdir(wf_src):
+            src = os.path.join(wf_src, filename)
+            dest = os.path.join(wf_dest, filename)
+            if os.path.isfile(src):
+                shutil.copy(src, dest)
+
+def discover_skills(arms_root):
+    print("🔍 Discovering Skills...")
+    skills_dir = os.path.join(arms_root, "skills")
+    skills = []
+    if os.path.exists(skills_dir):
+        for name in sorted(os.listdir(skills_dir)):
+            path = os.path.join(skills_dir, name)
+            if os.path.isdir(path) and os.path.exists(os.path.join(path, "SKILL.md")):
+                if name == "arms-orchestrator":
+                    skills.append(f"- {name} [Active]")
+                else:
+                    skills.append(f"- {name}")
+    return "\n".join(skills)
+
+def discover_agents_and_skills(arms_root):
+    print("👥 Discovering Agents & associated Skills...")
+    yaml_path = os.path.join(arms_root, "agents.yaml")
+    agents_info = []
+    if os.path.exists(yaml_path):
+        with open(yaml_path, 'r') as f:
+            lines = f.readlines()
+        
+        current_agent = None
+        current_skills = []
+        in_skills = False
+        
+        for line in lines:
+            # Match agent name: ^  agent-name:
+            agent_match = re.match(r'^\s\s([\w-]+):', line)
+            if agent_match:
+                if current_agent:
+                    skills_str = f" ({', '.join(current_skills)})" if current_skills else ""
+                    agents_info.append(f"- {current_agent}{skills_str}")
+                current_agent = agent_match.group(1)
+                current_skills = []
+                in_skills = False
+                continue
+            
+            # Match skills header: ^    skills:
+            if current_agent and re.match(r'^\s\s\s\sskills:', line):
+                in_skills = True
+                continue
+            
+            # Match skill item: ^      - skill-name
+            if in_skills:
+                skill_match = re.match(r'^\s\s\s\s\s\s-\s([\w-]+)', line)
+                if skill_match:
+                    current_skills.append(skill_match.group(1))
+                else:
+                    # If it's not a skill item and we were in skills, we might be out
+                    if line.strip() and not line.strip().startswith("-"):
+                        in_skills = False
+        
+        # Add last agent
+        if current_agent:
+            skills_str = f" ({', '.join(current_skills)})" if current_skills else ""
+            agents_info.append(f"- {current_agent}{skills_str}")
+            
+    return "\n".join(agents_info)
+
+def update_session(project_root, arms_root, skills_list, agents_list):
+    print("📄 Updating session log...")
+    session_path = os.path.join(project_root, ".gemini/SESSION.md")
+    
+    existing_content = ""
+    if os.path.exists(session_path):
+        with open(session_path, 'r') as f:
+            existing_content = f.read()
+    
+    # Extract tasks section to preserve it
+    tasks_match = re.search(r'(## Active Tasks.*)', existing_content, re.DOTALL)
+    if tasks_match:
+        tasks_content_raw = tasks_match.group(1)
+        # De-duplicate sections (Active Tasks, Completed Tasks, Blockers)
+        header_pattern = r'## (Active Tasks|Completed Tasks|Blockers)'
+        parts = re.split(header_pattern, tasks_content_raw)
+        seen_headers = set()
+        new_tasks_content = []
+        for i in range(1, len(parts), 2):
+            header = parts[i]
+            content = parts[i+1].strip()
+            if header not in seen_headers:
+                if content:
+                    new_tasks_content.append(f"## {header}\n{content}")
+                else:
+                    # Provide default content for empty sections
+                    if header == "Active Tasks":
+                        new_tasks_content.append(f"## {header}\n| # | Task | Assigned Agent | Active Skill | Status |\n|---|------|----------------|--------------|--------|")
+                    elif header == "Completed Tasks":
+                        new_tasks_content.append(f"## {header}\n- None")
+                    elif header == "Blockers":
+                        new_tasks_content.append(f"## {header}\nNone")
+                seen_headers.add(header)
+        
+        # Ensure all required sections are present even if not in original
+        for req in ["Active Tasks", "Completed Tasks", "Blockers"]:
+            if req not in seen_headers:
+                if req == "Active Tasks":
+                    new_tasks_content.append(f"## {req}\n| # | Task | Assigned Agent | Active Skill | Status |\n|---|------|----------------|--------------|--------|")
+                elif req == "Completed Tasks":
+                    new_tasks_content.append(f"## {req}\n- None")
+                elif req == "Blockers":
+                    new_tasks_content.append(f"## {req}\nNone")
+
+        tasks_content = "\n\n".join(new_tasks_content)
+    else:
+        tasks_content = """## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Status |
+|---|------|----------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None"""
+
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    content = f"""# ARMS Session Log
+Generated: {now}
+
+## Environment
+- ARMS Root: {arms_root}
+- Project Root: {project_root}
+- Execution Mode: Parallel
+
+## Active Agents
+{agents_list}
+
+## Active Skills
+{skills_list}
+
+{tasks_content}"""
+
+    with open(session_path, 'w') as f:
+        f.write(content)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ARMS Engine Initializer")
+    parser.add_argument("--yolo", action="store_true", help="Run in non-interactive mode")
+    args = parser.parse_args()
+
+    arms_root = get_arms_root()
+    project_root = get_project_root()
+
+    print(f"🚀 Plugging ARMS Engine into: {project_root}")
+    
+    setup_folders(project_root)
+    sync_agents(arms_root, project_root)
+    sync_skills(arms_root, project_root)
+    sync_workflow(arms_root, project_root)
+    skills_list = discover_skills(arms_root)
+    agents_list = discover_agents_and_skills(arms_root)
+    update_session(project_root, arms_root, skills_list, agents_list)
+    
+    # Sync GEMINI.md
+    gemini_src = os.path.join(arms_root, "GEMINI.md")
+    gemini_dest = os.path.join(project_root, ".gemini/GEMINI.md")
+    if not os.path.exists(gemini_dest):
+        shutil.copy(gemini_src, gemini_dest)
+    
+    # Sync RULES.md if it exists
+    rules_src = os.path.join(arms_root, "RULES.md")
+    rules_dest = os.path.join(project_root, ".gemini/RULES.md")
+    if os.path.exists(rules_src) and not os.path.exists(rules_dest):
+        shutil.copy(rules_src, rules_dest)
+
+    print(f"✅ ARMS is now connected. Path set to {arms_root}")
+    print("👉 Refreshing context. All agents and skills are now synced.")
+
+if __name__ == "__main__":
+    main()
+
