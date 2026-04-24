@@ -444,7 +444,7 @@ def main():
     # Sync AGENTS.md for Copilot CLI
     sync_copilot_instructions(arms_root, project_root)
 
-    print("\n✅ ARMS Engine sequence complete. → HALT")
+    print("\n✅ ARMS Engine ready. Fleet mode activated.")
 
 if __name__ == "__main__":
     main()
