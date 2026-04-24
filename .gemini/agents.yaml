@@ -3,7 +3,7 @@ agents:
     role: Orchestrator
     scope: Planning, delegation, session management.
     writes: 
-      - .gemini/SESSION.md
+      - .arms/SESSION.md
       - .gemini/MEMORY.md
     skills:
       - arms-docs-generator

@@ -25,6 +25,13 @@
 
 **File:** `.github/skills/backend-system-architect.md`
 
+### `caveman-compressor.md`
+**caveman-compressor**
+
+
+
+**File:** `.github/skills/caveman-compressor.md`
+
 ### `frontend-design.md`
 **frontend-design**
 

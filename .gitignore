@@ -28,6 +28,8 @@ _version.py
 
 # ARMS Engine local state
 .gemini/
+.arms/
+.github/
 Arms-Engine/
 
 # OS

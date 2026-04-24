@@ -47,7 +47,7 @@ Re-run `init` or `start` once Arms-Engine is in place.
 Once `$ARMS_ROOT` is confirmed, immediately execute the global linker script to scaffold the project workspace and link the engine's skills:
 **Run:** `bash $ARMS_ROOT/init-arms.sh`
 
-This script ensures the local `./.github/` and `./.gemini/` structures are present and all global ARMS agents and skills are registered to the current project.
+This script ensures the local `./.github/`, `./.gemini/`, and `./.arms/` structures are present, migrates legacy project state into `./.arms/`, and registers all global ARMS agents and skills to the current project.
 
 ### Step 2: Load Global Engine
 

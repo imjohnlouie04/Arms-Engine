@@ -8,7 +8,7 @@ import re
 try:
     from ._version import version as __version__
 except (ImportError, ValueError):
-    __version__ = "1.0.0-dev" # Fallback for local development
+    __version__ = "1.3.3-dev" # Fallback for local development
 
 def get_arms_root():
     # When installed as a package, this is the arms_engine directory
@@ -39,6 +39,79 @@ def setup_folders(project_root):
     for folder in gemini_folders + arms_folders:
         path = os.path.join(project_root, folder)
         os.makedirs(path, exist_ok=True)
+
+def migrate_legacy_state(project_root):
+    """Move legacy project-state files into .arms/ without overwriting existing state."""
+    migrations = [
+        (
+            "session log",
+            os.path.join(project_root, ".gemini/SESSION.md"),
+            os.path.join(project_root, ".arms/SESSION.md"),
+        ),
+        (
+            "session archive",
+            os.path.join(project_root, ".gemini/SESSION_ARCHIVE.md"),
+            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+        ),
+        (
+            "brand context",
+            os.path.join(project_root, "brand-context.md"),
+            os.path.join(project_root, ".arms/BRAND.md"),
+        ),
+        (
+            "brand context",
+            os.path.join(project_root, ".gemini/brand-context.md"),
+            os.path.join(project_root, ".arms/BRAND.md"),
+        ),
+        (
+            "brand context",
+            os.path.join(project_root, ".gemini/BRAND.md"),
+            os.path.join(project_root, ".arms/BRAND.md"),
+        ),
+    ]
+
+    for label, legacy_path, target_path in migrations:
+        if not os.path.exists(legacy_path):
+            continue
+        if os.path.exists(target_path):
+            print(
+                f"ℹ️  Found legacy {label} at {os.path.relpath(legacy_path, project_root)}, "
+                f"but keeping existing {os.path.relpath(target_path, project_root)} as authoritative."
+            )
+            continue
+
+        print(
+            f"📦 Migrating legacy {label} from "
+            f"{os.path.relpath(legacy_path, project_root)} to {os.path.relpath(target_path, project_root)}..."
+        )
+        shutil.move(legacy_path, target_path)
+
+def normalize_active_tasks_table(content):
+    """Upgrade legacy Active Tasks tables to the current schema."""
+    new_header = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
+    new_divider = "|---|------|----------------|--------------|--------------|--------|"
+    legacy_header = "| # | Task | Assigned Agent | Active Skill | Status |"
+    legacy_divider = "|---|------|----------------|--------------|--------|"
+
+    stripped = content.strip()
+    if not stripped:
+        return f"{new_header}\n{new_divider}"
+
+    lines = stripped.splitlines()
+    if len(lines) >= 2 and lines[0].strip() == legacy_header and lines[1].strip() == legacy_divider:
+        normalized = [new_header, new_divider]
+        for line in lines[2:]:
+            row = line.strip()
+            if row.startswith("|") and row.endswith("|"):
+                cells = [cell.strip() for cell in row.strip("|").split("|")]
+                if len(cells) == 5:
+                    cells.insert(4, "None")
+                    normalized.append("| " + " | ".join(cells) + " |")
+                    continue
+            normalized.append(line)
+        return "\n".join(normalized)
+
+    return stripped
 
 def sync_agents(arms_root, project_root):
     print("🤖 Syncing Agents...")
@@ -284,12 +357,7 @@ def discover_agents_and_skills(arms_root):
 
 def initialize_brand_context(project_root):
     brand_path = os.path.join(project_root, ".arms/BRAND.md")
-    legacy_paths = [
-        os.path.join(project_root, "brand-context.md"),
-        os.path.join(project_root, ".gemini/brand-context.md"),
-        os.path.join(project_root, ".gemini/BRAND.md"),  # Migrate from old .gemini location
-    ]
-    
+
     # 1. Check for existing BRAND.md
     if os.path.exists(brand_path):
         with open(brand_path, 'r') as f:
@@ -297,14 +365,7 @@ def initialize_brand_context(project_root):
                 print("⚠️  BRAND.md is currently a template. Please fill it out to provide agents with design context!")
         return
 
-    # 2. Migration check
-    for legacy in legacy_paths:
-        if os.path.exists(legacy):
-            print(f"📦 Migrating legacy brand context from {os.path.basename(legacy)}...")
-            shutil.move(legacy, brand_path)
-            return
-
-    # 3. Create new template
+    # 2. Create new template
     print("🎨 Initializing new BRAND.md...")
     template = """# Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
@@ -395,6 +456,8 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
             content = parts[i+1].strip()
             if header not in seen_headers:
                 if content:
+                    if header == "Active Tasks":
+                        content = normalize_active_tasks_table(content)
                     new_tasks_content.append(f"## {header}\n{content}")
                 else:
                     # Provide default content for empty sections
@@ -486,6 +549,7 @@ def main():
         print("⚡ Mode:    YOLO (Full Automation)")
     
     setup_folders(project_root)
+    migrate_legacy_state(project_root)
     sync_agents(arms_root, project_root)
     sync_agents_copilot(arms_root, project_root)
 

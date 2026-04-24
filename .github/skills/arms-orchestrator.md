@@ -61,25 +61,28 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
-- Local project state: `./.gemini/` (SESSION.md, MEMORY.md, BRAND.md, GEMINI.md, RULES.md)
+- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
+- Gemini AI config: `./.gemini/` (GEMINI.md, MEMORY.md, RULES.md)
 - Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
 
 ---
 
 ## Session Bootstrap (Run After Path Discovery)
 
-When `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold it before any work begins. Never assume these files exist.
+When `./.arms/` or `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold them before any work begins. Never assume these files exist.
 
 ### Bootstrap Sequence
 
 ```
-1. Create ./.gemini/ directory if missing
-2. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
-3. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
-4. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-5. Scaffold SESSION.md, MEMORY.md, and BRAND.md with required sections
-6. Detect execution mode → write to SESSION.md under ## Execution Mode
-7. Run skill discovery: 
+1. Create ./.gemini/ directory if missing (AI config)
+2. Create ./.arms/ directory if missing (ARMS engine state)
+3. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, or other legacy brand files into `./.arms/` when the `.arms/` target file does not already exist
+5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
+6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
+7. Scaffold .arms/SESSION.md, .gemini/MEMORY.md, and .arms/BRAND.md with required sections
+8. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
+9. Run skill discovery: 
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
@@ -95,7 +98,12 @@ Generated: <ISO 8601 timestamp>
 ## Environment
 - ARMS Root: <$ARMS_ROOT resolved path>
 - Project Root: <working directory>
+- Project Name: <extracted from BRAND.md or Unknown>
 - Execution Mode: <Parallel | Simulated>
+- YOLO Mode: <Enabled | Disabled>
+
+## Active Agents
+<populated by agent discovery>
 
 ## Active Skills
 <populated by skill discovery scan>
@@ -105,10 +113,10 @@ Generated: <ISO 8601 timestamp>
 |---|------|----------------|--------------|--------------|--------|
 
 ## Completed Tasks
-<archived from Active Tasks on completion>
+- None
 
 ## Blockers
-<any unresolved blockers>
+None
 ```
 
 ### MEMORY.md Bootstrap Template
@@ -131,18 +139,35 @@ Generated: <ISO 8601 timestamp>
 # Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
 
+---
+
 ## Identity
 - **Project Name:** [Name]
 - **Mission:** [Purpose]
+- **Vision:** [Long-term goal]
 - **Personality:** [Voice/Tone]
+- **Voice & Tone:** [Approach]
+
+## Positioning
+- **Primary Audience:** [Target]
+- **Core Values:** [Values]
+- **Differentiation:** [Unique Factor]
 
 ## Visual Identity
 - **Color Palette:** [HEX/OKLCH]
 - **Typography:** [Google Fonts]
 - **Logo Status:** [Generated/Pending]
+- **Visual Direction:** [Glassmorphism/Dark Mode/etc]
+
+## Use Case Implications
+- **Project Type:** [SaaS/Community/etc]
+- **Design Priority:** [UX Factor]
+
+## Notes
+- [Misc preferences]
 ```
 
-**CRITICAL RULE:** If `./.gemini/` already exists with populated files, read them — **NEVER overwrite existing SESSION.md or MEMORY.md files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+**CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
 
 ---
@@ -155,7 +180,7 @@ Generated: <ISO 8601 timestamp>
 [Speaking Agent]: <agent-name>
 [Active Skill]:   <skill folder name if SKILL.md was read, else "None">
 
-[State Updates]: <What was written to ./.gemini/SESSION.md or ./.gemini/MEMORY.md? If nothing → "None">
+[State Updates]: <What was written to .arms/SESSION.md or .gemini/MEMORY.md? If nothing → "None">
 
 [Action / Code]: <Task execution, code generation, or task table>
 
@@ -219,7 +244,7 @@ Pending → In Progress → Pre-Flight → Done
 
 ### Rules
 
-- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `SESSION.md` and appended to `./.gemini/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
+- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -227,11 +252,17 @@ Pending → In Progress → Pre-Flight → Done
 
 ---
 
-## YOLO Mode & Flash Recovery
+## YOLO Mode — Full Automation Mandate
 
 When **YOLO mode** is active (via `init yolo` or `yolo` command):
-- The System Architect executes the entire task table without halting for individual approvals.
-- **Flash Recovery:** For minor errors (lint, type-check), the Architect may attempt **one (1) self-healing turn** before suspending YOLO mode and halting.
+- The System Architect executes the **entire task table** without halting for individual approvals.
+- **Zero-Prompt Mandate:** ALL interactive confirmations and recommended fixes are automatically accepted as `yes`. This includes:
+  - Context mismatch overwrite prompts.
+  - File overwrite and branch switch confirmations.
+  - Lint, type error, and build failure recommended fixes.
+- **Suppression Mandate:** No agent response may append `→ HALT` during YOLO execution.
+- **Audit Trail:** Every auto-accepted action MUST be logged to `SESSION.md` with a `[YOLO Auto-Accepted]` prefix.
+- **Flash Recovery:** For minor errors (lint, type-check), the Architect may attempt **one (1) self-healing turn** before suspending YOLO mode and halting for manual intervention.
 - `SESSION.md` MUST still be updated after every turn.
 
 ---
@@ -244,7 +275,7 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 |---|---|---|
 | `init` | Standard | Standard boot sequence. Halt for plan approval. |
 | `init yolo` | Automated | Full automation. Skip initial plan approval gate. |
-| `init compress`| Efficiency| Scaffold and then run Caveman skill to shrink session/memory. |
+| `init compress`| Efficiency| Scaffold and then run caveman-compressor skill to shrink session/memory. |
 | `yolo` | Override | Activate Fast-Track Execution for current plan. |
 | `run review` | REVIEW_PROTOCOL.md | Delegate audit to QA, Security, Frontend. → **HALT** |
 | `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review report, generate Task Table, delegate. → **HALT** |
@@ -257,7 +288,7 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 This command does NOT read a protocol file. `arms-main-agent` executes it inline:
 
 ```
-1. Read ./.gemini/SESSION.md
+1. Read `.arms/SESSION.md`
 2. Output the following summary:
 
 [Speaking Agent]: arms-main-agent
@@ -321,7 +352,7 @@ ELSE
   → MODE: Simulated (Web UI / API)
 ```
 
-Log the detected mode to `./.gemini/SESSION.md` under `## Execution Mode`.
+Log the detected mode to `.arms/SESSION.md` under `## Execution Mode`.
 
 ---
 
@@ -525,7 +556,7 @@ git add . && git commit -m "chore: checkpoint before [Task Name]"
 
 | Severity | Type | Response |
 |---|---|---|
-| **Minor** | Naming inconsistency | Auto-correct + log in ./.gemini/SESSION.md |
+| **Minor** | Naming inconsistency | Auto-correct + log in `.arms/SESSION.md` |
 | **Major** | Security breach, skipped pre-flight | Pause → present violation + proposed fix → **HALT** |
 
 ---
@@ -534,9 +565,9 @@ git add . && git commit -m "chore: checkpoint before [Task Name]"
 
 After significant technical work, `arms-main-agent` must ask:
 
-> "May I update `./.gemini/MEMORY.md` with this bug fix / preference / architectural decision?" → **HALT**
+> "May I update `.gemini/MEMORY.md` with this bug fix / preference / architectural decision?" → **HALT**
 
-- All agents read `./.gemini/MEMORY.md` at session start.
+- All agents read `.gemini/MEMORY.md` at session start.
 - Adapt based on past decisions; never repeat known mistakes.
 
 ### Archival Criteria
@@ -545,13 +576,13 @@ SESSION.md must be pruned when any of the following triggers occur:
 
 | Trigger | Action |
 |---|---|
-| **Task Completion** — status becomes `Done` or `Cancelled` | Immediately append the task to `./.gemini/SESSION_ARCHIVE.md` and remove it from `SESSION.md` |
-| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `./.gemini/SESSION_ARCHIVE.md`, reset to empty |
+| **Task Completion** — status becomes `Done` or `Cancelled` | Immediately append the task to `.arms/SESSION_ARCHIVE.md` and remove it from `.arms/SESSION.md` |
+| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `.arms/SESSION_ARCHIVE.md`, reset to empty |
 | **User requests cleanup** — explicit `clean session` or `archive tasks` | Archive any remaining `Failed` tasks |
 
 ### Archival Format
 
-Append to `./.gemini/SESSION_ARCHIVE.md`:
+Append to `.arms/SESSION_ARCHIVE.md`:
 
 ```markdown
 ## Archive — <ISO 8601 date>
@@ -564,10 +595,10 @@ Append to `./.gemini/SESSION_ARCHIVE.md`:
 
 ### Archival Integrity Protocol (Record of Truth)
 
-The `./.gemini/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for completed work.
+The `.arms/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for completed work.
 - **Never delete this file.**
 - If an agent or the AI is unsure if a task has already been completed, it MUST search this file.
-- If the archive file becomes too large, use the `compress` skill to shrink it into a high-density format, but **NEVER delete** the history.
+- If the archive file becomes too large, use the `caveman-compressor` skill to shrink it into a high-density format, but **NEVER delete** the history.
 
 ---
 
@@ -598,7 +629,7 @@ The `./.gemini/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for 
 ## `./.gemini/` Configuration Files
 
 ### `GEMINI.md`
-Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `brand-context.md` for all design decisions.
+Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `BRAND.md` for all design decisions.
 
 ### `RULES.md`
 Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
@@ -639,7 +670,7 @@ All reference files live in `references/`. Load only when the task requires it �
 
 | File | Read When |
 |---|---|
-| `brand-and-scope.md` | Brand context generation, MVP scoping, supplemental business prompts |
+| `BRAND.md` | Brand context generation, MVP scoping, supplemental business prompts |
 | `agent-orchestration-patterns.md` | Designing custom workflows, debugging handoffs, adding agents, choosing sequential vs. parallel |
 | `supabase-local-workflow.md` | Schema changes, migrations, RLS policies, type generation, `db reset` / `db push` / `db diff` |
 | `deployment-protocol.md` | `run deploy`, env var management, Vercel / Docker / VPS steps, release notes |

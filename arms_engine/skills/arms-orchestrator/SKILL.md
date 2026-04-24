@@ -69,7 +69,7 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 ## Session Bootstrap (Run After Path Discovery)
 
-When `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold it before any work begins. Never assume these files exist.
+When `./.arms/` or `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold them before any work begins. Never assume these files exist.
 
 ### Bootstrap Sequence
 
@@ -77,11 +77,12 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
-4. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
-5. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-6. Scaffold .arms/SESSION.md, .gemini/MEMORY.md, and .arms/BRAND.md with required sections
-7. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
-8. Run skill discovery: 
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, or other legacy brand files into `./.arms/` when the `.arms/` target file does not already exist
+5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
+6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
+7. Scaffold .arms/SESSION.md, .gemini/MEMORY.md, and .arms/BRAND.md with required sections
+8. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
+9. Run skill discovery: 
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
