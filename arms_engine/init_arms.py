@@ -18,14 +18,19 @@ def get_project_root():
     return os.getcwd()
 
 def setup_folders(project_root):
-    folders = [
+    # .gemini/ — Gemini AI assistant config (GEMINI.md, MEMORY.md, synced assets)
+    gemini_folders = [
         ".gemini/agent-outputs",
         ".gemini/reports",
         ".gemini/agents",
         ".gemini/skills",
         ".gemini/workflow"
     ]
-    for folder in folders:
+    # .arms/ — ARMS engine state (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
+    arms_folders = [
+        ".arms",
+    ]
+    for folder in gemini_folders + arms_folders:
         path = os.path.join(project_root, folder)
         os.makedirs(path, exist_ok=True)
 
@@ -272,10 +277,11 @@ def discover_agents_and_skills(arms_root):
     return "\n".join(agents_info)
 
 def initialize_brand_context(project_root):
-    brand_path = os.path.join(project_root, ".gemini/BRAND.md")
+    brand_path = os.path.join(project_root, ".arms/BRAND.md")
     legacy_paths = [
         os.path.join(project_root, "brand-context.md"),
-        os.path.join(project_root, ".gemini/brand-context.md")
+        os.path.join(project_root, ".gemini/brand-context.md"),
+        os.path.join(project_root, ".gemini/BRAND.md"),  # Migrate from old .gemini location
     ]
     
     # 1. Check for existing BRAND.md
@@ -330,7 +336,7 @@ def initialize_brand_context(project_root):
 
 def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
     print("📄 Updating session log...")
-    session_path = os.path.join(project_root, ".gemini/SESSION.md")
+    session_path = os.path.join(project_root, ".arms/SESSION.md")
     
     existing_content = ""
     existing_root = None
@@ -349,7 +355,7 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
 
     # Get current project name from BRAND.md if available
     current_name = "Unknown"
-    brand_path = os.path.join(project_root, ".gemini/BRAND.md")
+    brand_path = os.path.join(project_root, ".arms/BRAND.md")
     if os.path.exists(brand_path):
         with open(brand_path, 'r') as f:
             brand_content = f.read()

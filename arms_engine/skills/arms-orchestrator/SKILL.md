@@ -61,7 +61,8 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
-- Local project state: `./.gemini/` (SESSION.md, MEMORY.md, BRAND.md, GEMINI.md, RULES.md)
+- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
+- Gemini AI config: `./.gemini/` (GEMINI.md, MEMORY.md, RULES.md)
 - Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
 
 ---
@@ -73,13 +74,14 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
 ### Bootstrap Sequence
 
 ```
-1. Create ./.gemini/ directory if missing
-2. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
-3. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
-4. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-5. Scaffold SESSION.md, MEMORY.md, and BRAND.md with required sections
-6. Detect execution mode → write to SESSION.md under ## Execution Mode
-7. Run skill discovery: 
+1. Create ./.gemini/ directory if missing (AI config)
+2. Create ./.arms/ directory if missing (ARMS engine state)
+3. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
+4. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
+5. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
+6. Scaffold .arms/SESSION.md, .gemini/MEMORY.md, and .arms/BRAND.md with required sections
+7. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
+8. Run skill discovery: 
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
@@ -164,7 +166,7 @@ None
 - [Misc preferences]
 ```
 
-**CRITICAL RULE:** If `./.gemini/` already exists with populated files, read them — **NEVER overwrite existing SESSION.md or MEMORY.md files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+**CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
 
 ---
@@ -177,7 +179,7 @@ None
 [Speaking Agent]: <agent-name>
 [Active Skill]:   <skill folder name if SKILL.md was read, else "None">
 
-[State Updates]: <What was written to ./.gemini/SESSION.md or ./.gemini/MEMORY.md? If nothing → "None">
+[State Updates]: <What was written to .arms/SESSION.md or .gemini/MEMORY.md? If nothing → "None">
 
 [Action / Code]: <Task execution, code generation, or task table>
 
@@ -241,7 +243,7 @@ Pending → In Progress → Pre-Flight → Done
 
 ### Rules
 
-- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `SESSION.md` and appended to `./.gemini/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
+- **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -285,7 +287,7 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 This command does NOT read a protocol file. `arms-main-agent` executes it inline:
 
 ```
-1. Read ./.gemini/SESSION.md
+1. Read `.arms/SESSION.md`
 2. Output the following summary:
 
 [Speaking Agent]: arms-main-agent
@@ -349,7 +351,7 @@ ELSE
   → MODE: Simulated (Web UI / API)
 ```
 
-Log the detected mode to `./.gemini/SESSION.md` under `## Execution Mode`.
+Log the detected mode to `.arms/SESSION.md` under `## Execution Mode`.
 
 ---
 
@@ -553,7 +555,7 @@ git add . && git commit -m "chore: checkpoint before [Task Name]"
 
 | Severity | Type | Response |
 |---|---|---|
-| **Minor** | Naming inconsistency | Auto-correct + log in ./.gemini/SESSION.md |
+| **Minor** | Naming inconsistency | Auto-correct + log in `.arms/SESSION.md` |
 | **Major** | Security breach, skipped pre-flight | Pause → present violation + proposed fix → **HALT** |
 
 ---
@@ -562,9 +564,9 @@ git add . && git commit -m "chore: checkpoint before [Task Name]"
 
 After significant technical work, `arms-main-agent` must ask:
 
-> "May I update `./.gemini/MEMORY.md` with this bug fix / preference / architectural decision?" → **HALT**
+> "May I update `.gemini/MEMORY.md` with this bug fix / preference / architectural decision?" → **HALT**
 
-- All agents read `./.gemini/MEMORY.md` at session start.
+- All agents read `.gemini/MEMORY.md` at session start.
 - Adapt based on past decisions; never repeat known mistakes.
 
 ### Archival Criteria
@@ -573,13 +575,13 @@ SESSION.md must be pruned when any of the following triggers occur:
 
 | Trigger | Action |
 |---|---|
-| **Task Completion** — status becomes `Done` or `Cancelled` | Immediately append the task to `./.gemini/SESSION_ARCHIVE.md` and remove it from `SESSION.md` |
-| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `./.gemini/SESSION_ARCHIVE.md`, reset to empty |
+| **Task Completion** — status becomes `Done` or `Cancelled` | Immediately append the task to `.arms/SESSION_ARCHIVE.md` and remove it from `.arms/SESSION.md` |
+| **Pipeline completion** — `run pipeline` finishes successfully | Archive entire Active Tasks table to `.arms/SESSION_ARCHIVE.md`, reset to empty |
 | **User requests cleanup** — explicit `clean session` or `archive tasks` | Archive any remaining `Failed` tasks |
 
 ### Archival Format
 
-Append to `./.gemini/SESSION_ARCHIVE.md`:
+Append to `.arms/SESSION_ARCHIVE.md`:
 
 ```markdown
 ## Archive — <ISO 8601 date>
@@ -592,7 +594,7 @@ Append to `./.gemini/SESSION_ARCHIVE.md`:
 
 ### Archival Integrity Protocol (Record of Truth)
 
-The `./.gemini/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for completed work.
+The `.arms/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for completed work.
 - **Never delete this file.**
 - If an agent or the AI is unsure if a task has already been completed, it MUST search this file.
 - If the archive file becomes too large, use the `compress` skill to shrink it into a high-density format, but **NEVER delete** the history.
