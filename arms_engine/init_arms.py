@@ -328,7 +328,7 @@ def initialize_brand_context(project_root):
         f.write(template)
     print("📢 BRAND.md created. ACTION REQUIRED: Please fill out the identity and vision to enable high-fidelity orchestration.")
 
-def update_session(project_root, arms_root, skills_list, agents_list):
+def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
     print("📄 Updating session log...")
     session_path = os.path.join(project_root, ".gemini/SESSION.md")
     
@@ -385,6 +385,7 @@ def update_session(project_root, arms_root, skills_list, agents_list):
 None"""
 
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mode = "Automated (YOLO)" if yolo else "Standard (Halt)"
     
     content = f"""# ARMS Session Log
 Generated: {now}
@@ -392,7 +393,7 @@ Generated: {now}
 ## Environment
 - ARMS Root: {arms_root}
 - Project Root: {project_root}
-- Execution Mode: Parallel
+- Execution Mode: {mode}
 
 ## Active Agents
 {agents_list}
@@ -408,17 +409,23 @@ Generated: {now}
 
 def main():
     parser = argparse.ArgumentParser(description="ARMS Engine Activator")
-    parser.add_argument("command", nargs="?", default="init", help="Command to run (default: init)")
+    parser.add_argument("command", nargs="*", default=["init"], help="Command to run (e.g., init, init yolo, start)")
     parser.add_argument("--root", help="Override arms root path")
     parser.add_argument("--version", action="version", version=f"ARMS Engine {__version__}")
     args = parser.parse_args()
 
+    # Normalize command
+    full_command = " ".join(args.command)
+    is_yolo = "yolo" in full_command.lower()
+    
     project_root = get_project_root()
     arms_root = args.root or get_arms_root()
     
     print(f"🚀 Initializing ARMS Engine...")
     print(f"📂 Project: {project_root}")
     print(f"🛡️  Engine:  {arms_root}")
+    if is_yolo:
+        print("⚡ Mode:    YOLO (Full Automation)")
     
     setup_folders(project_root)
     sync_agents(arms_root, project_root)
@@ -432,7 +439,7 @@ def main():
     
     skills_list = discover_skills(arms_root)
     agents_list = discover_agents_and_skills(arms_root)
-    update_session(project_root, arms_root, skills_list, agents_list)
+    update_session(project_root, arms_root, skills_list, agents_list, yolo=is_yolo)
     
     # Sync GEMINI.md
     gemini_src = os.path.join(arms_root, "GEMINI.md")
@@ -444,8 +451,10 @@ def main():
     # Sync AGENTS.md for Copilot CLI
     sync_copilot_instructions(arms_root, project_root)
 
-    print("\n✅ ARMS Engine ready. Fleet mode activated.")
+    if is_yolo:
+        print("\n✅ ARMS Engine ready. Fleet mode activated.")
+    else:
+        print("\n✅ ARMS Engine sequence complete. → HALT")
 
 if __name__ == "__main__":
     main()
-
