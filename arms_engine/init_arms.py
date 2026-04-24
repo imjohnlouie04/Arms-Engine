@@ -91,6 +91,25 @@ def sync_agents_copilot(arms_root, project_root):
                 with open(dest, 'w') as f:
                     f.write(content)
 
+def sync_skills_copilot(arms_root, project_root):
+    """Sync skill SKILL.md files to .github/skills/ for Copilot CLI discovery."""
+    print("🔌 Syncing Skills for Copilot CLI...")
+    skills_src = os.path.join(arms_root, "skills")
+    target_dir = os.path.join(project_root, ".github/skills")
+    os.makedirs(target_dir, exist_ok=True)
+
+    if os.path.exists(skills_src):
+        for skill_name in os.listdir(skills_src):
+            skill_path = os.path.join(skills_src, skill_name)
+            skill_md_path = os.path.join(skill_path, "SKILL.md")
+            
+            if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
+                dest = os.path.join(target_dir, f"{skill_name}.md")
+                with open(skill_md_path, 'r') as f:
+                    content = f.read()
+                with open(dest, 'w') as f:
+                    f.write(content)
+
 def sync_copilot_instructions(arms_root, project_root):
     """Deploy AGENTS.md to the project root for Copilot CLI instruction loading."""
     print("📄 Syncing AGENTS.md (Copilot Instructions)...")
@@ -325,6 +344,7 @@ def main():
     sync_agents_copilot(arms_root, project_root)
 
     sync_skills(arms_root, project_root)
+    sync_skills_copilot(arms_root, project_root)
     sync_workflow(arms_root, project_root)
     initialize_brand_context(project_root)
     

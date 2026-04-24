@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/Users/johnlouiebinas/Documents/Project/Arms-Engine"],
+      "description": "File system access for syncing agents, skills, and workflow protocols across projects",
+      "recommended": true
+    },
+    "git": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-git", "/Users/johnlouiebinas/Documents/Project/Arms-Engine"],
+      "description": "Git operations for version management, tagging releases, and commit history inspection",
+      "recommended": true
+    },
+    "python": {
+      "command": "python3",
+      "args": ["-m", "mcp", "python"],
+      "description": "Python environment inspection for development, debugging, and dependency management",
+      "recommended": true
+    }
+  },
+  "notes": {
+    "setup": "MCP servers provide Copilot CLI with advanced capabilities for this project. Install the necessary MCP server packages if not already available.",
+    "filesystem": "Enables efficient syncing of agents.md files, skills directories, and workflow protocols to projects during 'arms init'.",
+    "git": "Supports version control operations like git tag, git push, and commit verification essential for ARMS release workflow.",
+    "python": "Helps with understanding the codebase structure, debugging init_arms.py, and verifying package builds."
+  }
+}
