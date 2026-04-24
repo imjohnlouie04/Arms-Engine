@@ -53,15 +53,15 @@ This script ensures the local `./.gemini/` structure is present and all global A
 
 Once the linker completes, read:
 ```
-$ARMS_ROOT/skills/arms-orchestrator/SKILL.md
+$ARMS_ROOT/arms_engine/skills/arms-orchestrator/SKILL.md
 ```
 This file establishes all core orchestration logic. Follow its instructions for all subsequent steps.
 
 ### Step 3: Discover Agents & Skills
 
 Scan:
-- `$ARMS_ROOT/agents.yaml` — agent roster and capabilities
-- `$ARMS_ROOT/skills/` — available global domain skills
+- `$ARMS_ROOT/arms_engine/agents.yaml` — agent roster and capabilities
+- `$ARMS_ROOT/arms_engine/skills/` — available global domain skills
 
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
@@ -76,7 +76,7 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 
 ### Step 5: Enforce Workspace Isolation
 
-- All global logic is read from `$ARMS_ROOT/`
+- All global logic is read from `$ARMS_ROOT/arms_engine/`
 - All project-specific config, memory, and session state are written exclusively to `./.gemini/`
 - Never write project state to `$ARMS_ROOT/`
 - Never read session state from anywhere other than `./.gemini/`
