@@ -146,6 +146,45 @@ def discover_agents_and_skills(arms_root):
             
     return "\n".join(agents_info)
 
+def initialize_brand_context(project_root):
+    brand_path = os.path.join(project_root, ".gemini/BRAND.md")
+    if os.path.exists(brand_path):
+        return
+
+    print("🎨 Initializing Brand Context...")
+    template = """# Brand Context
+> Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
+
+---
+
+## Identity
+- **Project Name:** [Enter Name]
+- **Mission:** [Core purpose of the project]
+- **Vision:** [Long-term goal]
+- **Personality:** [e.g., Warm, Modern, Professional, Minimalist]
+- **Voice & Tone:** [e.g., Approachable, Technical, Authoritative]
+
+## Positioning
+- **Primary Audience:** [Who is this for?]
+- **Core Values:** [What do you stand for?]
+- **Differentiation:** [How is this project unique?]
+
+## Visual Identity
+- **Color Palette:** [e.g., Primary, Secondary, Accent colors in HEX/OKLCH]
+- **Typography:** [Preferred Google Fonts for Titles and Body]
+- **Logo Status:** [Pending/Generated]
+- **Visual Direction:** [e.g., Glassmorphism, Dark Mode, High-Density]
+
+## Use Case Implications
+- **Project Type:** [e.g., SaaS, Portfolio, Community, E-commerce]
+- **Design Priority:** [What is the most important UX factor?]
+
+## Notes
+- [Misc preferences]
+"""
+    with open(brand_path, 'w') as f:
+        f.write(template)
+
 def update_session(project_root, arms_root, skills_list, agents_list):
     print("📄 Updating session log...")
     session_path = os.path.join(project_root, ".gemini/SESSION.md")
@@ -243,6 +282,7 @@ def main():
     
     sync_skills(arms_root, project_root)
     sync_workflow(arms_root, project_root)
+    initialize_brand_context(project_root)
     
     skills_list = discover_skills(arms_root)
     agents_list = discover_agents_and_skills(arms_root)
