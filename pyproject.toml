@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arms-engine"
+dynamic = ["version"]
+description = "ARMS Multi-Agent Orchestration Engine"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "ARMS Development Team"}
+]
+dependencies = [
+    "pyyaml",
+]
+
+[project.scripts]
+arms = "init_arms:main"
+arms-docs = "update_docs:main"
+
+[tool.setuptools]
+py-modules = ["init_arms", "update_docs"]
+
+[tool.setuptools_scm]
+write_to = "_version.py"

@@ -5,7 +5,7 @@
 
 ---
 
-**Activation Command:** When the user types exactly `init` or `start`, immediately invoke the global orchestration engine. When the user types `init yolo` or `start yolo`, invoke the engine in **Full Automation Mode** (skipping the planning gate halt). Do not output generic greetings or conversational filler — let the explicit boot sequence dictate your response.
+**Activation Command:** When the user types exactly `arms init` or `arms start`, immediately invoke the global orchestration engine. When the user types `arms init yolo` or `arms start yolo`, invoke the engine in **Full Automation Mode** (skipping the planning gate halt). Do not output generic greetings or conversational filler — let the explicit boot sequence dictate your response.
 
 ---
 
@@ -129,7 +129,7 @@ No feature task can be marked **Done** without verification from `arms-qa-agent`
 - If checks fail, the task reverts to **In Progress** for the original agent to fix.
 
 ### 5. Context Compression (Token Efficiency)
-To maintain performance in large projects, use the command **"init compress"**:
+To maintain performance in large projects, use the command **"arms init compress"**:
 - This invokes the `compress` (Caveman) skill to shrink `SESSION.md` and `MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
 
 ### 6. Memory Integrity Protocol

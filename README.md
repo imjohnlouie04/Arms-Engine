@@ -28,23 +28,24 @@ When initialized, ARMS performs a **Full Installation** into the project root, c
 
 ## 🚀 Getting Started
 
-### 1. Global Installation
-Clone the engine into your system's global config directory:
+### 1. Global Installation (Recommended)
+The best way to install the ARMS Engine is using `pipx`, which keeps the engine isolated and accessible from anywhere:
+
 ```bash
-mkdir -p ~/.gemini
-git clone https://github.com/imjohnlouie04/Arms-Engine.git ~/.gemini/Arms-Engine
+# Install once globally
+pipx install git+https://github.com/imjohnlouie04/Arms-Engine.git
+
+# Use it in any project
+arms init
 ```
 
-### 2. Bootstrapping a Project
-Navigate to any project directory and run the activator:
+### 2. Development Setup
+If you are contributing to the engine or prefer a local link:
 ```bash
-bash ~/.gemini/Arms-Engine/init-arms.sh
+git clone https://github.com/imjohnlouie04/Arms-Engine.git
+cd Arms-Engine
+pip install -e .
 ```
-This script:
-1.  **Scaffolds** the local `.gemini/` infrastructure.
-2.  **Installs** all global agents, skills, and protocols into the project.
-3.  **Synchronizes** `agents.yaml` and `RULES.md`.
-4.  **Initializes** the `SESSION.md` with an active roster of discovered entities.
 
 ---
 
@@ -52,23 +53,51 @@ This script:
 
 | Command | Mode | Execution Logic |
 |:--- |:--- |:--- |
-| `init` | **Standard** | Boots engine, syncs assets, and generates a **Strategic Task Table**. Halts for approval. |
-| `init yolo` | **Automated** | Skips the planning gate. Executes all tasks sequentially without halting. |
-| `init compress` | **Optimization** | Invokes the `compress` skill to shrink logs into token-efficient formats. |
+| `arms init` | **Standard** | Boots engine, syncs assets, and generates a **Strategic Task Table**. |
+| `arms init yolo` | **Automated** | Skips the planning gate. Executes all tasks sequentially. |
+| `arms-docs` | **Documentation** | Updates the `README.md` agent roster from `agents.yaml`. |
+
+---
+
+## 🔄 Updating & Versioning
+
+### Standard Installation
+```bash
+pipx upgrade arms-engine
+```
+
+### Development Installation
+```bash
+cd /path/to/Arms-Engine
+git pull
+```
+
+### Tagging a Release
+To formally update the version number:
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+The engine uses **Dynamic Versioning** to automatically sync with your Git tags.
 
 ---
 
 ## 🤖 The Agent Roster
 
-ARMS dynamically discovers agents and their skills from `agents.yaml`. Standard agents include:
+ARMS dynamically discovers agents and their skills from `agents.yaml`.
 
-- **`arms-main-agent` (Architect)**: Orchestrates handoffs and maintains session integrity.
-- **`arms-backend-agent`**: Logic, API design, and server-side stability.
-- **`arms-frontend-agent`**: Visual excellence and responsive implementation.
-- **`arms-data-agent`**: Schema management and query optimization.
-- **`arms-security-agent`**: Security audits and OWASP compliance.
-- **`arms-qa-agent`**: Quality gates and automated testing.
-- **`arms-media-agent`**: Branding and asset generation.
+<!-- AGENT_ROSTER_START -->
+- **`arms-main-agent`** (Orchestrator): Planning, delegation, session management.
+- **`arms-product-agent`** (Product Manager): Requirements gathering, user stories, PRD generation, feature prioritization.
+- **`arms-backend-agent`** (Backend Specialist): APIs, models, auth, backend services.
+- **`arms-frontend-agent`** (Frontend Specialist): UI components, routing, state, API integration.
+- **`arms-devops-agent`** (DevOps Specialist): CI/CD, deployment, boilerplate initialization based on chosen tech stack.
+- **`arms-seo-agent`** (SEO Specialist): Search engine optimization, meta tags, semantic HTML validation, schema markup, Core Web Vitals.
+- **`arms-media-agent`** (Media Specialist): Asset creation.
+- **`arms-data-agent`** (Data Specialist): Schema design, migrations, query optimization.
+- **`arms-qa-agent`** (QA & Testing Specialist): Writing unit/E2E tests, performing pre-flight validation.
+- **`arms-security-agent`** (Security Specialist): Enforces OWASP standards, validates auth flows, configures RLS, audits dependencies.
+<!-- AGENT_ROSTER_END -->
 
 ---
 

@@ -5,6 +5,11 @@ import datetime
 import argparse
 import re
 
+try:
+    from _version import version as __version__
+except ImportError:
+    __version__ = "1.0.0-dev" # Fallback for local development
+
 def get_arms_root():
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -219,19 +224,25 @@ Generated: {now}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ARMS Engine Initializer")
-    parser.add_argument("--yolo", action="store_true", help="Run in non-interactive mode")
+    parser = argparse.ArgumentParser(description="ARMS Engine Activator")
+    parser.add_argument("command", nargs="?", default="init", help="Command to run (default: init)")
+    parser.add_argument("--root", help="Override arms root path")
+    parser.add_argument("--version", action="version", version=f"ARMS Engine {__version__}")
     args = parser.parse_args()
 
-    arms_root = get_arms_root()
     project_root = get_project_root()
-
-    print(f"🚀 Plugging ARMS Engine into: {project_root}")
+    arms_root = args.root or get_arms_root()
+    
+    print(f"🚀 Initializing ARMS Engine...")
+    print(f"📂 Project: {project_root}")
+    print(f"🛡️  Engine:  {arms_root}")
     
     setup_folders(project_root)
     sync_agents(arms_root, project_root)
+    
     sync_skills(arms_root, project_root)
     sync_workflow(arms_root, project_root)
+    
     skills_list = discover_skills(arms_root)
     agents_list = discover_agents_and_skills(arms_root)
     update_session(project_root, arms_root, skills_list, agents_list)
@@ -239,17 +250,11 @@ def main():
     # Sync GEMINI.md
     gemini_src = os.path.join(arms_root, "GEMINI.md")
     gemini_dest = os.path.join(project_root, ".gemini/GEMINI.md")
-    if not os.path.exists(gemini_dest):
-        shutil.copy(gemini_src, gemini_dest)
-    
-    # Sync RULES.md if it exists
-    rules_src = os.path.join(arms_root, "RULES.md")
-    rules_dest = os.path.join(project_root, ".gemini/RULES.md")
-    if os.path.exists(rules_src) and not os.path.exists(rules_dest):
-        shutil.copy(rules_src, rules_dest)
+    if os.path.exists(gemini_src):
+        shutil.copy2(gemini_src, gemini_dest)
+        print("📄 Core Directives (GEMINI.md) synced.")
 
-    print(f"✅ ARMS is now connected. Path set to {arms_root}")
-    print("👉 Refreshing context. All agents and skills are now synced.")
+    print("\n✅ ARMS Engine sequence complete. → HALT")
 
 if __name__ == "__main__":
     main()
