@@ -249,11 +249,17 @@ Pending → In Progress → Pre-Flight → Done
 
 ---
 
-## YOLO Mode & Flash Recovery
+## YOLO Mode — Full Automation Mandate
 
 When **YOLO mode** is active (via `init yolo` or `yolo` command):
-- The System Architect executes the entire task table without halting for individual approvals.
-- **Flash Recovery:** For minor errors (lint, type-check), the Architect may attempt **one (1) self-healing turn** before suspending YOLO mode and halting.
+- The System Architect executes the **entire task table** without halting for individual approvals.
+- **Zero-Prompt Mandate:** ALL interactive confirmations and recommended fixes are automatically accepted as `yes`. This includes:
+  - Context mismatch overwrite prompts.
+  - File overwrite and branch switch confirmations.
+  - Lint, type error, and build failure recommended fixes.
+- **Suppression Mandate:** No agent response may append `→ HALT` during YOLO execution.
+- **Audit Trail:** Every auto-accepted action MUST be logged to `SESSION.md` with a `[YOLO Auto-Accepted]` prefix.
+- **Flash Recovery:** For minor errors (lint, type-check), the Architect may attempt **one (1) self-healing turn** before suspending YOLO mode and halting for manual intervention.
 - `SESSION.md` MUST still be updated after every turn.
 
 ---

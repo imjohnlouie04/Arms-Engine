@@ -135,11 +135,17 @@ After the Boot Sequence is complete, your first action must be to review the exi
 ### 2. Approval Mandate
 Once the Task Table is generated, you MUST **HALT** and await user approval. No agent may begin work until the table is confirmed.
 
-### 3. YOLO Mode (Fast-Track Execution)
+### 3. YOLO Mode — Full Automation Mandate
 If the user provides the command **"yolo"** or **"YOLO"** after the initial Task Table is approved (or via **"init yolo"**):
 - The System Architect is authorized to execute the **entire task sequence** without halting for individual sub-task approvals.
-- **Suppression Mandate:** In YOLO mode, agents MUST NOT append `→ HALT` to their responses, allowing for automated batch processing.
-- **Flash Recovery:** If a minor error (lint, type-check) occurs during YOLO mode, the Architect may attempt **one (1) self-healing turn** (e.g., `eslint --fix`) before suspending YOLO mode and halting for manual intervention.
+- **Zero-Prompt Mandate:** ALL interactive confirmations are automatically accepted as `yes`. This includes:
+  - Context mismatch overwrite prompts.
+  - File overwrite confirmations.
+  - Branch switch or destructive action approvals.
+  - Recommended fix applications (lint, type errors, build failures).
+- **Suppression Mandate:** Agents MUST NOT append `→ HALT` to their responses during YOLO execution.
+- **Audit Trail:** Every auto-accepted action MUST be logged to `SESSION.md` with a `[YOLO Auto-Accepted]` prefix to maintain full auditability.
+- **Flash Recovery:** If a minor error (lint, type-check) occurs, the Architect may attempt **one (1) self-healing turn** (e.g., `eslint --fix`) before suspending YOLO mode and halting for manual intervention.
 - The Architect MUST still update `SESSION.md` after every step to maintain state synchronization.
 
 ### 4. Auto-Critique (The Quality Gate)

@@ -359,9 +359,11 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
 
     # Validate Context
     if existing_root and os.path.abspath(existing_root) != os.path.abspath(project_root):
-        print(f"⚠️  Context Mismatch: Session file at {session_path} points to {existing_root}")
+        print(f"⚠️  Context Mismatch: Session file points to '{existing_root}'")
         print(f"   Current root: {project_root}")
-        if not yolo:
+        if yolo:
+            print("🤖 [YOLO] Auto-accepting: Overwriting session with current project context.")
+        else:
             confirm = input("Overwrite session with current context? (y/n): ")
             if confirm.lower() != 'y':
                 print("Aborting to preserve session state.")
