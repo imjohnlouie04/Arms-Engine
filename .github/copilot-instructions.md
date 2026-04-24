@@ -1,5 +1,7 @@
 # Copilot Instructions for Arms-Engine
 
+> **Source of Truth:** `.github/copilot-instructions.md` is derived from `arms_engine/skills/arms-orchestrator/SKILL.md`, which is the authoritative specification for ARMS. If this document and SKILL.md diverge, **SKILL.md is correct**. Refer to the full skill document for authoritative protocol details.
+
 ## Build, Test & Lint
 
 ### Development Installation
@@ -72,7 +74,166 @@ The main entry point orchestrates:
 
 ---
 
-## Key Conventions
+## ARMS System: Critical Protocols
+
+This section documents protocols from `arms_engine/skills/arms-orchestrator/SKILL.md`. All future Copilot sessions must follow these rules strictly.
+
+### 1. **Path Discovery (Always Run First)**
+Resolve ARMS engine location in this order:
+1. `~/.gemini/Arms-Engine/` (Global Safe Zone — Preferred)
+2. `../Arms-Engine/` (Sibling to project)
+3. `./Arms-Engine/` (Inside project root)
+
+Never assume a path. If not found, halt immediately and request setup.
+
+### 2. **Session Bootstrap Files (Never Overwrite)**
+The `./.gemini/` directory contains project-specific state that persists across sessions:
+- **`SESSION.md`**: Active task table, execution mode, active skills. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
+- **`MEMORY.md`**: Continuous learning file. **CRITICAL:** APPEND only; NEVER overwrite with template.
+- **`BRAND.md`**: Visual identity & positioning (referenced by Frontend, SEO, Media agents).
+- **`GEMINI.md`**: Architectural overview, tech stack, deployment target, standards.
+- **`RULES.md`**: Folder structure, naming conventions, TypeScript strict mode, testing standards.
+
+**Golden Rule:** If `./.gemini/` exists with populated files, READ them — NEVER overwrite. Overwriting project memory is a **protocol violation**.
+
+### 3. **Task Table Schema (Standardized)**
+Every task delegation uses this schema:
+
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Concise description | agent-name | skill-folder OR — | — OR task #'s | Pending/In Progress/Pre-Flight/Done/Blocked/Failed |
+
+**Status Lifecycle:**
+```
+Pending → In Progress → Pre-Flight → Done
+                      ↘ Blocked (+ reason)
+                      ↘ Failed (+ reason)
+```
+
+**Status Rules:**
+- Only `arms-main-agent` transitions tasks to `Done`
+- **Auto-Critique Gate:** No feature can be marked `Done` without `arms-qa-agent` validation (tests/lint/build)
+- When task status becomes `Done` or `Cancelled`, immediately remove from `SESSION.md` and append to `SESSION_ARCHIVE.md`
+- `SESSION_ARCHIVE.md` is the **ultimate record of truth** for completed work — NEVER delete
+
+### 4. **Strict Response Template (Every Response)**
+All agents must follow this structure — no exceptions:
+
+```
+[Speaking Agent]: <agent-name>
+[Active Skill]:   <skill folder OR "None">
+
+[State Updates]: <Files written to ./.gemini/ | "None">
+
+[Action / Code]:
+<Task execution, code generation, or task table>
+
+[Next Step / Blocker]: <Clear instruction ending with HALT for approval>
+```
+
+### 5. **Global Commands & Protocols**
+When users invoke commands, `arms-main-agent` reads the corresponding protocol:
+
+| Command | Protocol | Action |
+|---|---|---|
+| `init` | Standard | Boot sequence. Halt for plan approval. |
+| `init yolo` | Automated | Full automation. Skip initial approval. |
+| `init compress` | Efficiency | Bootstrap + compress SESSION/MEMORY for token efficiency. |
+| `yolo` | Override | Fast-track execution for current plan. |
+| `run review` | REVIEW_PROTOCOL.md | Audit via QA, Security, Frontend. |
+| `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review, generate tasks, delegate. |
+| `run deploy` | DEPLOY_PROTOCOL.md | Pre-flight, sync DB, deploy. |
+| `run status` | Inline | Dump current state (tasks, blockers, phase). |
+| `run pipeline` | Sequence | REVIEW → FIX → DEPLOY (gates between phases). |
+
+**YOLO Mode:** Architect executes entire task table without individual approvals. Flash Recovery allowed (one auto-fix attempt on minor lint/type errors) before halting.
+
+### 6. **Execution Modes (Detect at Session Start)**
+
+**Mode A — Parallel (Copilot CLI with subagent support):**
+- Spawn all independent agents in the same turn
+- Never sequential-first; launch everything at once
+- Agents with dependencies → spawn sequentially, gate on output
+- `arms-main-agent` aggregates outputs
+
+**Mode B — Simulated (Web UI / No subagent environment):**
+- YOU (Copilot) embody each agent in sequence (inline, same response)
+- Every agent turn rendered explicitly with strict response template
+- Separated by dividers; never collapsed or summarized
+- Dependencies respected: independent agents first, dependent agents after
+
+**Shared Rules (Both Modes):**
+- NEVER overwrite `## Environment` or `## Active Skills` in SESSION.md
+- NEVER overwrite MEMORY.md
+- Every agent receives: role definition + SKILL.md + SESSION.md + MEMORY.md
+- `arms-main-agent` owns aggregation — subagents return output, orchestrator writes to SESSION.md
+- If any agent returns a blocker → HALT immediately
+
+### 7. **Conflict Resolution Protocol**
+When agents produce contradictory outputs:
+
+1. **PAUSE** — Do not apply either
+2. **PRESENT** — Side-by-side recommendations
+3. **CLASSIFY** — Label conflict type:
+   - Security vs. Feature → Security wins (user can override)
+   - Performance vs. UX → Present trade-off, user decides
+   - Style/Convention → Defer to RULES.md, then user
+   - Architectural → Always escalate
+4. **RECOMMEND** — Single recommended resolution
+5. **HALT** — Never auto-resolve architectural or security conflicts
+
+### 8. **Error Recovery Playbook**
+| Failure | Symptoms | Recovery |
+|---------|----------|----------|
+| Agent Timeout | No output / incomplete response | Mark `Failed`. Re-queue. If fails twice → decompose + **HALT** |
+| Build Failure | npm build or type-check fails | Mark `Failed`. Present error. Do NOT advance pipeline → **HALT** |
+| Conflicting File Writes | Two agents modified same file | Invoke Conflict Resolution. Revert later write + **HALT** |
+| SESSION.md Corruption | Empty/malformed/missing sections | Re-scaffold from Bootstrap Template. Preserve readable content → **HALT** |
+| Missing Skill | Task requires non-existent skill | Execute using baseline from agents.yaml. Log warning. |
+| Partial Pipeline Failure | Pipeline fails mid-sequence | DO NOT restart from beginning. Resume from failed phase → **HALT** |
+
+**Recovery Rules:**
+- Never silently retry. Surface every failure.
+- Never discard partial work.
+- Always log failure in SESSION.md under `## Blockers` with timestamp.
+- Escalate after 2 consecutive failures — present decomposition strategy → **HALT**
+
+### 9. **Memory Management & Archival**
+After significant technical work, ask user approval before updating `MEMORY.md`:
+
+> "May I update `./.gemini/MEMORY.md` with this bug fix / preference / architectural decision?"
+
+**Archival Triggers:**
+- Task completion (Done/Cancelled) → append to SESSION_ARCHIVE.md + remove from SESSION.md
+- Pipeline completion → archive entire Active Tasks table + reset
+- User requests cleanup → archive remaining Failed tasks
+
+**Archival Format:**
+```markdown
+## Archive — <ISO 8601 date>
+### Context: <feature name or pipeline run>
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+<tasks>
+```
+
+**Archival Integrity:** SESSION_ARCHIVE.md is the ultimate record of truth. Never delete. If too large, use `compress` skill but NEVER delete history.
+
+### 10. **Safety Gates & Checkpoints**
+- **Git Checkpoint (Before major work):** `git add . && git commit -m "chore: checkpoint before [Task Name]"`
+- **Pre-Flight QA (Mandatory before Done):** Run local build, lint, type-check. Auto-fix minor issues or escalate blockers.
+- **Automated Commit (After task completion):** Formulate Conventional Commit (`feat(...)`, `fix(...)`). Request approval before committing → **HALT**
+
+### 11. **Security & Standards**
+- Never read/write `.env` — use `.env.local` or `.env.example`
+- TypeScript strict mode mandatory, no exceptions
+- OWASP enforcement via `arms-security-agent`
+- Supabase RLS policies required for all tables
+- Pre-flight validation before every commit
+- Responsive design mandate: sidebar breakpoint = `xl` (1280px), **never** `lg` (1024px)
+
+---
 
 ### 1. **Workspace Isolation Rule**
 - **Read from**: `arms_engine/` (global engine logic, agents, skills, workflows) — ALWAYS install via package
