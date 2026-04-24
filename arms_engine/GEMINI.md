@@ -67,7 +67,7 @@ Scan:
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
 3. **Logging:** Register all discovered agents and skills to `./.gemini/SESSION.md` under `## Active Skills`.
-4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/skills/`. NEVER prune or omit skills based on the current task's scope.
+4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
 5. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 
 ### Step 4: Execute Initialization Flow
