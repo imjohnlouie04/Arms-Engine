@@ -16,13 +16,29 @@ def get_arms_root():
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_project_root():
-    """Climb up from CWD to find the nearest project root (marked by .git, .arms, or .gemini)."""
+    """Resolve the active project root.
+
+    If the current directory is effectively empty, treat it as a new project root
+    instead of climbing to a parent repository marker.
+    """
     curr = os.getcwd()
+    original_cwd = curr
+
+    meaningful_entries = [
+        name for name in os.listdir(original_cwd)
+        if name not in IGNORED_PROJECT_ENTRIES and not name.startswith(".")
+    ]
+    if not meaningful_entries and not any(
+        os.path.exists(os.path.join(original_cwd, marker))
+        for marker in [".git", ".arms", ".gemini", "package.json"]
+    ):
+        return original_cwd
+
     while curr != os.path.dirname(curr):
         if any(os.path.exists(os.path.join(curr, m)) for m in [".git", ".arms", ".gemini", "package.json"]):
             return curr
         curr = os.path.dirname(curr)
-    return os.getcwd() # Fallback to CWD if no marker found
+    return original_cwd
 
 def setup_folders(project_root):
     # .gemini/ — Gemini AI assistant config (GEMINI.md, MEMORY.md, synced assets)
@@ -31,7 +47,8 @@ def setup_folders(project_root):
         ".gemini/reports",
         ".gemini/agents",
         ".gemini/skills",
-        ".gemini/workflow"
+        ".gemini/workflow",
+        ".agents/skills",
     ]
     # .arms/ — ARMS engine state (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
     arms_folders = [
@@ -213,10 +230,10 @@ def ensure_skill_frontmatter(content, skill_name):
     return frontmatter + stripped
 
 def sync_skills_copilot(arms_root, project_root):
-    """Sync skill directories to .github/skills/<skill-name>/SKILL.md for Copilot discovery."""
+    """Sync skill directories to .agents/skills/<skill-name>/SKILL.md for Copilot discovery."""
     print("🔌 Syncing Skills for Copilot CLI...")
     skills_src = os.path.join(arms_root, "skills")
-    target_dir = os.path.join(project_root, ".github/skills")
+    target_dir = os.path.join(project_root, ".agents/skills")
     os.makedirs(target_dir, exist_ok=True)
 
     if os.path.exists(skills_src):
@@ -251,8 +268,8 @@ def create_skills_registry(arms_root, project_root):
     """Create a skills registry file for Copilot CLI discovery."""
     print("📋 Creating Skills Registry...")
     skills_src = os.path.join(arms_root, "skills")
-    registry_dest = os.path.join(project_root, ".github/skills.yaml")
-    index_dest = os.path.join(project_root, ".github/skills-index.md")
+    registry_dest = os.path.join(project_root, ".agents/skills.yaml")
+    index_dest = os.path.join(project_root, ".agents/skills-index.md")
     
     skills_data = {}
     if os.path.exists(skills_src):
@@ -303,12 +320,12 @@ def create_skills_registry(arms_root, project_root):
             f.write(f"### `{skill_name}/SKILL.md`\n")
             f.write(f"**{skill_info['name']}**\n\n")
             f.write(f"{skill_info['description']}\n\n")
-            f.write(f"**File:** `.github/skills/{skill_name}/SKILL.md`\n\n")
+            f.write(f"**File:** `.agents/skills/{skill_name}/SKILL.md`\n\n")
         
         f.write("## Usage\n\n")
         f.write("Reference a skill in Copilot CLI:\n\n")
         f.write("```\n")
-        f.write("@skills/arms-orchestrator/SKILL.md\n")
+        f.write(".agents/skills/arms-orchestrator/SKILL.md\n")
         f.write("Describe your task here\n")
         f.write("```\n")
 
@@ -459,6 +476,40 @@ IGNORED_PROJECT_ENTRIES = {
     "__pycache__",
     ".DS_Store",
 }
+
+NEW_PROJECT_BRAND_QUESTIONS = [
+    "1. Primary use case: SaaS · Content/Marketing · Mobile-First · Multi-Purpose",
+    "2. Target audience",
+    "3. Core features",
+    "4. Goal / Monetization model",
+    "5. Brand name (or working title if unnamed)",
+    "6. Brand personality — pick up to 3 words:",
+    "   Bold · Minimal · Playful · Premium · Technical · Warm · Rebellious · Trustworthy · Friendly · Sharp",
+    "7. Closest competitor or reference brand? (URL or name)",
+    "8. What should your brand feel like vs. that reference?",
+    "   e.g. \"Like Notion but warmer\" · \"Like Stripe but more human\"",
+    "9. Existing brand assets?",
+    "   Logo (Y/N) · Color palette (Y/N) · Typography (Y/N) · Existing site (URL or N)",
+    "10. Preferred visual direction: Light · Dark · System default · Undecided",
+]
+
+NEW_PROJECT_TECH_STACK_QUESTIONS = [
+    "11. Preferred tech stack:",
+    "    [A] Next.js + Supabase + shadcn (Latest)",
+    "    [B] Nuxt 4 + Firebase + Nuxt UI (Latest)",
+    "    [C] Astro + DaisyUI (Latest)",
+    "    [D] Custom",
+    "12. Preferred deployment target:",
+    "    [1] Vercel",
+    "    [2] Docker / VPS",
+    "    [3] AWS / GCP",
+    "13. Preferred backend / data layer if custom or undecided:",
+    "    Supabase · Firebase · Postgres · MySQL · REST API · GraphQL · Custom · Unsure",
+    "14. Authentication requirement:",
+    "    Email/password · OAuth · Magic link · Anonymous/guest · None yet · Unsure",
+    "15. Any hard technical constraints or must-use tools?",
+    "    e.g. TypeScript only, Tailwind required, self-hosted only, no Firebase, mobile-first, CMS needed",
+]
 
 def read_text_file(path, max_chars=40000):
     if not os.path.exists(path):
@@ -839,24 +890,40 @@ def render_new_project_brand_questionnaire(project_root):
 - Should the visual direction default to light, dark, system, or something else?
 """
 
+def render_new_project_brand_prompt():
+    brand_questions = "\n".join(NEW_PROJECT_BRAND_QUESTIONS)
+    tech_stack_questions = "\n".join(NEW_PROJECT_TECH_STACK_QUESTIONS)
+    return (
+        "📝 Brand Context is required for a new / empty project.\n"
+        "Answer these in one block before design-oriented work begins:\n\n"
+        f"{brand_questions}\n\n"
+        "After Brand Context, confirm the initial tech stack:\n\n"
+        f"{tech_stack_questions}\n\n"
+        "The Brand Context questionnaire has also been written to `.arms/BRAND.md`."
+    )
+
 def initialize_brand_context(project_root):
     brand_path = os.path.join(project_root, ".arms/BRAND.md")
 
     existing_content = read_text_file(brand_path)
     if existing_content and not brand_file_requires_bootstrap(existing_content):
-        return
+        return {"status": "existing"}
 
     if detect_existing_project(project_root):
         print("🎨 Generating BRAND.md from existing project context...")
         with open(brand_path, "w", encoding="utf-8") as f:
             f.write(render_inferred_brand_context(project_root))
         print("📢 BRAND.md generated from repository signals. Review inferred fields and refine where needed.")
-        return
+        return {"status": "inferred"}
 
     print("🎨 Initializing new-project BRAND.md questionnaire...")
     with open(brand_path, "w", encoding="utf-8") as f:
         f.write(render_new_project_brand_questionnaire(project_root))
     print("📢 BRAND.md created for a new project. User answers are required before high-fidelity brand work begins.")
+    return {
+        "status": "questions_required",
+        "prompt": render_new_project_brand_prompt(),
+    }
 
 def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
     print("📄 Updating session log...")
@@ -1014,7 +1081,7 @@ def main():
     sync_skills_copilot(arms_root, project_root)
     create_skills_registry(arms_root, project_root)
     sync_workflow(arms_root, project_root)
-    initialize_brand_context(project_root)
+    brand_context_state = initialize_brand_context(project_root)
     
     skills_list = discover_skills(arms_root)
     agents_list = discover_agents_and_skills(arms_root)
@@ -1035,7 +1102,11 @@ def main():
         # In the future, this would invoke the actual caveman-compressor logic
         # For now, we just acknowledge the command to avoid the discrepancy.
 
-    if is_yolo:
+    if brand_context_state and brand_context_state.get("status") == "questions_required":
+        print()
+        print(brand_context_state["prompt"])
+        print("\n✅ ARMS Engine sequence complete. Awaiting Brand Context answers. → HALT")
+    elif is_yolo:
         print("\n✅ ARMS Engine ready. Fleet mode activated.")
     else:
         print("\n✅ ARMS Engine sequence complete. → HALT")

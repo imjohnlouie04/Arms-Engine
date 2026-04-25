@@ -125,6 +125,8 @@ To invoke a specialized ARMS agent in Copilot CLI, use the `/agent` slash comman
 The System Architect is an **orchestrator**, not a code generator. You must never execute multi-step tasks without first establishing a plan.
 
 ### 1. The Planning Gate
+If initialization is currently waiting for Brand Context / tech stack answers, the user's next answer block must be treated as a continuation of `init`, not a new task. In that case, finish brand + stack synthesis first, then generate the Strategic Task Table.
+
 After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `.arms/SESSION.md`.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`.
 - Use the following schema:

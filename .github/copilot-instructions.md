@@ -55,7 +55,7 @@ ARMS operates with a strict separation of global engine logic from project-speci
 - **Structure**: Each skill is a directory with a required `SKILL.md` + optional `references/` (checklists, best practices) and `scripts/` (utility scripts)
 - **Metadata Headers**: Each `SKILL.md` has frontmatter with `name`, `description`, and optional metadata (same format as agents)
 - **Discovery**: Valid skills must contain `SKILL.md` (validated in `init_arms.py:sync_skills()`)
-- **Copilot CLI Sync**: All valid `SKILL.md` files are synced to `.github/skills/` as individual `.md` files for Copilot CLI discovery
+- **Copilot CLI Sync**: All valid `SKILL.md` files are synced to `.agents/skills/` for Copilot CLI discovery
 - **Current Skills**: arms-orchestrator, backend-system-architect, frontend-design, logo-designer, nano-banana-pro, qa-automation-testing, security-code-review, seo-web-performance-expert, arms-docs-generator
 - **Skill Adoption**: Skills are adopted by agents to gain domain-specific capabilities for specialized tasks
 
@@ -67,7 +67,7 @@ ARMS operates with a strict separation of global engine logic from project-speci
 The main entry point orchestrates:
 1. **Folder Setup** – Creates `.gemini/` structure (agents, skills, workflow, reports, agent-outputs)
 2. **Agent Sync** – Copies agent .md files to `.gemini/agents/` and `.github/agents/` (for Copilot CLI `/agent` discovery)
-3. **Skill Sync** – Copies skill directories (with `SKILL.md`) to `.gemini/skills/` and `SKILL.md` files to `.github/skills/` (for Copilot CLI skill discovery)
+3. **Skill Sync** – Copies skill directories (with `SKILL.md`) to `.gemini/skills/` and `.agents/skills/` (for Copilot CLI skill discovery)
 4. **Workflow Sync** – Copies protocol files to `.gemini/workflow/`
 5. **Copilot Instructions** – Syncs AGENTS.md to project root (Copilot instruction loading)
 6. **Agent + Skill Discovery** – Scans `agents.yaml` and `skills/` directory, logs them to console output
@@ -308,18 +308,18 @@ Use Copilot CLI's `/agent` command to invoke specialized agents (available in `.
 
 ## Accessing Skills in Copilot CLI
 
-Skills are fully discoverable in the Copilot CLI. After `arms init`, all skill files are synced to `.github/skills/` with proper metadata for CLI discovery.
+Skills are fully discoverable in the Copilot CLI. After `arms init`, all skill files are synced to `.agents/skills/` with proper metadata for CLI discovery.
 
 ### Skills Registry & Index
 
 Three files support skill discovery:
-- **`.github/skills/`** – Directory containing all `{skill-name}.md` files with `tools: ["*"]` metadata
-- **`.github/skills.yaml`** – Auto-generated YAML registry of all available skills with metadata
-- **`.github/skills-index.md`** – Markdown index with quick reference and usage examples
+- **`.agents/skills/`** – Directory containing all skill folders with `SKILL.md`
+- **`.agents/skills.yaml`** – Auto-generated YAML registry of all available skills with metadata
+- **`.agents/skills-index.md`** – Markdown index with quick reference and usage examples
 
 ### Available Skills (Post-Init)
 
-Reference any skill in `.github/skills/`:
+Reference any skill in `.agents/skills/`:
 
 - **`arms-orchestrator.md`** – Full-stack project orchestration, multi-agent workflows, approval gates
 - **`backend-system-architect.md`** – Backend architecture, API design, database schemas

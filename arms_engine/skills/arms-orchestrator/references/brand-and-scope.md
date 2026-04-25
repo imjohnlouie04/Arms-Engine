@@ -38,9 +38,37 @@ If the current workspace is a **new / empty project**, ask the user the followin
 10. Preferred visual direction: Light · Dark · System default · Undecided
 ```
 
+After Brand Context, ask for the initial tech stack in the same flow:
+
+```
+11. Preferred tech stack:
+    [A] Next.js + Supabase + shadcn (Latest)
+    [B] Nuxt 4 + Firebase + Nuxt UI (Latest)
+    [C] Astro + DaisyUI (Latest)
+    [D] Custom
+12. Preferred deployment target:
+    [1] Vercel
+    [2] Docker / VPS
+    [3] AWS / GCP
+13. Preferred backend / data layer if custom or undecided:
+    Supabase · Firebase · Postgres · MySQL · REST API · GraphQL · Custom · Unsure
+14. Authentication requirement:
+    Email/password · OAuth · Magic link · Anonymous/guest · None yet · Unsure
+15. Any hard technical constraints or must-use tools?
+    e.g. TypeScript only, Tailwind required, self-hosted only, no Firebase, mobile-first, CMS needed
+```
+
 After receiving answers for a new project, or after reviewing repository signals for an existing project:
 1. Generate `.arms/BRAND.md` using the canonical ARMS brand schema (see template below).
-2. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
+2. Recommend one primary tech stack with clear justification, then list viable alternatives.
+3. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
+4. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
+   - **Step 1 — Logo** (`arms-media-agent` → `logo-designer` skill): Generate HD PNG logo from brand identity
+   - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `nano-banana-pro` skill): Generate hero images, textures, or UI illustrations using the approved logo as reference
+   - **Step 3 — Frontend Scaffold** (`arms-frontend-agent` → `frontend-design` skill): Build the initial UI shell using approved assets and design tokens
+5. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table → **HALT**
+
+If these answers were provided as a follow-up to a previous `init` HALT, treat them as the continuation of the same initialization flow. Do not restart from the beginning or repeat the same question block unless critical information is still missing.
 
 ---
 

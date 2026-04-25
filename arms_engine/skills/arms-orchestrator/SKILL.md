@@ -91,6 +91,20 @@ When `./.arms/` or `./.gemini/` does not exist or is missing required files, `ar
    - **Persistence:** Update `SESSION.md` under `## Active Skills`. Never delete the roster during a task update.
 ```
 
+### Initialization Continuation Rule
+
+If initialization HALTS to collect Brand Context and initial tech stack answers for a new / empty project, the **next user reply containing those answers is not a fresh request**. It is the continuation signal for the same `init` flow.
+
+Resume from that point in this order:
+1. Update `.arms/BRAND.md` from the user's answers
+2. Recommend one primary tech stack and deployment target, with alternatives noted
+3. Update `.gemini/GEMINI.md` with the chosen or proposed architecture direction
+4. **Trigger the Media & Design Pipeline** (see `## Media & Design Pipeline` below) — generate logo and hero assets before scaffolding begins
+5. Generate or update the Strategic Task Table in `.arms/SESSION.md`
+6. HALT only at the normal Planning Gate for task-table approval
+
+Do not ask the same Brand Context questions again unless the user's reply is incomplete or contradictory.
+
 ### SESSION.md Bootstrap Template
 
 ```markdown
@@ -145,7 +159,7 @@ If the workspace is an existing project and `.arms/BRAND.md` is missing or still
 - mark anything not evidenced in the repo as `TBD`
 - include a note that the file was auto-generated and must be reviewed
 
-If the workspace is a new/empty project, create a question-driven brand brief instead of pretending the answers are known:
+If the workspace is a new/empty project, create a question-driven brand brief and surface the questions immediately in the CLI response instead of pretending the answers are known:
 
 # Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
@@ -186,6 +200,10 @@ If the workspace is a new/empty project, create a question-driven brand brief in
 - What makes it meaningfully different from alternatives?
 - Do you already have a logo, color palette, typography, or an existing site?
 - Should the visual direction default to light, dark, system, or something else?
+
+The initialization flow must then HALT and wait for the user's Brand Context answers.
+
+Immediately after Brand Context for a new/empty project, the CLI must also ask for the initial tech stack choice, deployment target, auth direction, and hard technical constraints before moving into MVP and architecture recommendations.
 ```
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
@@ -348,7 +366,7 @@ arms-main-agent
   └─▶ Delegate to subagent (+ skill context if applicable)
 
     subagent
-      └─▶ Read SKILL.md from $ARMS_ROOT/arms_engine/skills/ if task falls within skill domain
+      └─▶ Read SKILL.md from .agents/skills/<skill-name>/SKILL.md if task falls within skill domain
       └─▶ Execute with strict response template
       └─▶ Report back to arms-main-agent (output + status recommendation)
 
@@ -384,7 +402,7 @@ Spawn all independent agents **in the same turn**. Never spawn with-skill runs f
 **Spawn template per agent:**
 ```
 Execute this task as <agent-name>:
-- Skill path: $ARMS_ROOT/skills/<skill-folder>/SKILL.md (read before executing)
+- Skill path: .agents/skills/<skill-folder>/SKILL.md (read before executing)
 - Task: <specific task from task table>
 - Session context: <paste relevant SESSION.md + MEMORY.md excerpt>
 - Save outputs to: ./.gemini/agent-outputs/<agent-name>/
@@ -663,13 +681,76 @@ Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and co
 
 ---
 
+## Media & Design Pipeline
+
+After brand context is confirmed (`.arms/BRAND.md` approved by user), `arms-main-agent` MUST trigger the following skill sequence **before** generating the Strategic Task Table. This ensures the project has real visual assets — not placeholders — from the very first task.
+
+### Trigger Condition
+
+Activate this pipeline when ALL of the following are true:
+- `.arms/BRAND.md` is populated and approved (not placeholder TBDs)
+- The project is new OR the Logo Status field is `Not yet created` / `TBD`
+- The chosen tech stack is [A], [B], or [C] (a structured framework project)
+
+### Pipeline Sequence
+
+```
+Step 1 — Logo Generation (arms-media-agent → logo-designer skill)
+  Read: .agents/skills/logo-designer/SKILL.md
+  Input: Project name, brand personality, visual direction, color palette from BRAND.md
+  Action: Run Phase 1–7 of the logo-designer skill
+  Output: HD PNG logo saved to ./.gemini/agent-outputs/arms-media-agent/logo-<project-name>.png
+  → Confirm logo with user before proceeding → HALT
+
+Step 2 — Hero & UI Asset Generation (arms-media-agent → nano-banana-pro skill)
+  Read: .agents/skills/nano-banana-pro/SKILL.md
+  Input: Approved logo, brand palette, visual direction, project type from BRAND.md
+  Action: Generate hero image, background textures, or UI illustrations as required
+  Output: Assets saved to ./.gemini/agent-outputs/arms-media-agent/ with descriptive filenames
+  → Present generated assets and confirm before proceeding → HALT
+
+Step 3 — Frontend Design System Scaffold (arms-frontend-agent → frontend-design skill)
+  Read: .agents/skills/frontend-design/SKILL.md
+  Input: Approved logo, approved hero/UI assets, BRAND.md visual identity, chosen tech stack
+  Action: Define aesthetic direction, design tokens (colors, typography, spacing), and
+          produce the initial landing page or app shell component using the generated assets
+  Output: Code scaffold saved to the project's primary source directory
+  → Present design scaffold for approval → HALT
+```
+
+### Rules
+
+- **Never skip this pipeline** for new projects with an unresolved Logo Status.
+- **Assets are inputs to code** — nano-banana-pro runs before frontend-design, never after.
+- **Logo is the anchor** — all downstream design decisions (color palette, typography weight,
+  spatial mood) must be consistent with the approved logo.
+- **YOLO mode:** All three steps execute sequentially without individual HALTs. The user
+  sees a single aggregated output at the end. Log all auto-accepted actions in SESSION.md
+  with `[YOLO Auto-Accepted]`.
+- **Existing projects:** If a logo already exists (Logo Status = `Existing asset detected`),
+  skip Step 1. Use the existing logo as a `--reference` input for Step 2.
+
+### Skill Paths (synced by `arms init` to `.agents/skills/`)
+
+> These paths are resolved from the local project's `.agents/skills/` directory, which is
+> automatically populated by `arms init`. Both Gemini CLI and Copilot CLI discover skills
+> from this folder without any additional configuration.
+
+| Skill | Path | Agent |
+|---|---|---|
+| logo-designer | `.agents/skills/logo-designer/SKILL.md` | arms-media-agent |
+| nano-banana-pro | `.agents/skills/nano-banana-pro/SKILL.md` | arms-media-agent |
+| frontend-design | `.agents/skills/frontend-design/SKILL.md` | arms-frontend-agent |
+
+---
+
 ## Tech Stack Options
 
 | Option | Stack | Deployment |
 |---|---|---|
-| **[A]** | Next.js + Supabase + shadcn | **[1]** Vercel |
-| **[B]** | Nuxt 4 + Firebase + Nuxt UI | **[2]** Docker / VPS |
-| **[C]** | Astro + DaisyUI | **[3]** AWS / GCP |
+| **[A]** | Next.js + Supabase + shadcn (Latest) | **[1]** Vercel |
+| **[B]** | Nuxt 4 + Firebase + Nuxt UI (Latest) | **[2]** Docker / VPS |
+| **[C]** | Astro + DaisyUI (Latest) | **[3]** AWS / GCP |
 | **[D]** | Custom | — |
 
 When recommending a stack, provide ONE primary recommendation with full justification and list all viable alternatives.
@@ -700,6 +781,9 @@ All reference files live in `references/`. Load only when the task requires it �
 | `git-workflow.md` | Commits, branching, PRs, release tagging, hotfix flow, `.gitignore` validation |
 | `error-recovery-playbook.md` | Any agent failure, partial pipeline failure, deploy rollback, state recovery |
 | `performance-seo-checklist.md` | `run review` SEO pass, Core Web Vitals, meta tags, schema markup, sitemap |
+| `.agents/skills/logo-designer/SKILL.md` | Generating project logos — read by arms-media-agent during the Media & Design Pipeline |
+| `.agents/skills/nano-banana-pro/SKILL.md` | Generating hero images and UI assets — read by arms-media-agent after logo is approved |
+| `.agents/skills/frontend-design/SKILL.md` | Scaffolding UI with generated assets — read by arms-frontend-agent as Step 3 of the Media & Design Pipeline |
 
 ---
 
