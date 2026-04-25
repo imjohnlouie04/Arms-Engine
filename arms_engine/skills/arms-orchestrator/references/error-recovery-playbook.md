@@ -142,8 +142,8 @@ psql <connection-string> < supabase/backups/pre-migration-<date>.sql
 
 ### MEMORY.md Corrupted
 ```
-1. Check git history: git log --follow .gemini/MEMORY.md
-2. Restore last good version: git checkout <commit-hash> -- .gemini/MEMORY.md
+1. Check git history: git log --follow .arms/MEMORY.md
+2. Restore last good version: git checkout <commit-hash> -- .arms/MEMORY.md
 3. Review restored content with user before proceeding → HALT
 ```
 

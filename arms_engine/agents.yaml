@@ -4,17 +4,22 @@ agents:
     scope: Planning, delegation, session management.
     writes: 
       - .arms/SESSION.md
-      - .gemini/MEMORY.md
+      - .arms/MEMORY.md
     skills:
+      - arms-orchestrator
       - arms-docs-generator
     rules: "Must present a markdown task table (Task | Assigned Agent | Dependencies | Status) and wait for explicit user approval before delegating. Must ask for explicit user approval before updating memory.md. Must append blocker resolutions and project context to memory.md only after approval."
   arms-product-agent:
     role: Product Manager
     scope: Requirements gathering, user stories, PRD generation, feature prioritization.
+    skills:
+      - arms-docs-generator
     rules: "Must focus on 'Why' and 'Who' before the 'How'. Translates vague user requests into structured technical tasks for the Architect."
   arms-backend-agent:
     role: Backend Specialist
     scope: APIs, models, auth, backend services.
+    skills:
+      - backend-system-architect
   arms-frontend-agent:
     role: Frontend Specialist
     scope: UI components, routing, state, API integration.
@@ -24,6 +29,8 @@ agents:
   arms-devops-agent:
     role: DevOps Specialist
     scope: CI/CD, deployment, boilerplate initialization based on chosen tech stack.
+    skills:
+      - devops-orchestrator
   arms-seo-agent:
     role: SEO Specialist
     scope: Search engine optimization, meta tags, semantic HTML validation, schema markup, Core Web Vitals.
@@ -52,4 +59,3 @@ agents:
     skills:
       - security-code-review
     rules: "Must perform a security audit on all database migrations and authentication logic. Ensures zero exposure of PII/Secrets."
-

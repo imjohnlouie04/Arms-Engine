@@ -26,6 +26,10 @@ If the current workspace is an **existing project** and brand context is missing
 
 If the current workspace is a **new / empty project**, ask the user the following questions together in a single prompt block.
 
+Fast intake options:
+- If the user already has structured answers, allow them to provide a single answer block and map it directly into `.arms/BRAND.md`.
+- If the project clearly matches a preset shape, recommend a preset such as `local-business`, `saas`, `portfolio`, `ecommerce`, or `content-site` before asking for refinements.
+
 ```
 5.  Brand name (or working title if unnamed)
 6.  Brand personality — pick up to 3 words:
@@ -58,15 +62,39 @@ After Brand Context, ask for the initial tech stack in the same flow:
     e.g. TypeScript only, Tailwind required, self-hosted only, no Firebase, mobile-first, CMS needed
 ```
 
+If the new project is a website, landing page, or local-business marketing build, also ask this brief in the same flow. Tell the user to answer `N/A` where a field does not apply.
+
+```
+16. If this project needs a website or landing page, what experience type is it?
+    Local service business · Marketing site · Portfolio · Ecommerce · Editorial · Other · N/A
+17. What industry or business niche should the site speak to?
+    e.g. classic car restoration, dental clinic, boutique hotel, law firm, SaaS
+18. What location or service area matters for local SEO, if any?
+    e.g. Austin, Texas · Metro Manila · Nationwide · N/A
+19. Which sections must be present on the page?
+    e.g. Header/Nav, Hero, Services, Gallery, About, Process, Testimonials, Contact Form, Footer
+20. What are the primary calls to action?
+    e.g. Request a Quote, Book a Consultation, Call Now, View Recent Work
+21. What icon system should the UI use?
+    Default to Font Awesome for marketing pages unless there is a stronger requirement
+22. What image coverage is needed?
+    e.g. 5+ images, hero image, detail shots, before/after work, finished showcase pieces
+23. What SEO priorities should the build emphasize?
+    e.g. local service keywords, visible contact info, trust signals, semantic headings, descriptive alt text
+24. Any content or visual non-negotiables?
+    e.g. no emoji, premium tone, visible phone number, dark theme, editorial typography
+```
+
 After receiving answers for a new project, or after reviewing repository signals for an existing project:
 1. Generate `.arms/BRAND.md` using the canonical ARMS brand schema (see template below).
-2. Recommend one primary tech stack with clear justification, then list viable alternatives.
-3. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
-4. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
+2. Generate `.arms/GENERATED_PROMPTS.md` from the approved brand brief so the gathered context becomes reusable build prompts.
+3. Recommend one primary tech stack with clear justification, then list viable alternatives.
+4. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
+5. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
    - **Step 1 — Logo** (`arms-media-agent` → `.agents/skills/logo-designer/SKILL.md`): Generate HD PNG logo from brand identity
    - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `.agents/skills/nano-banana-pro/SKILL.md`): Generate hero images, textures, or UI illustrations using the approved logo as reference
    - **Step 3 — Frontend Scaffold** (`arms-frontend-agent` → `.agents/skills/frontend-design/SKILL.md`): Build the initial UI shell using approved assets and design tokens
-5. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table → **HALT**
+6. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table → **HALT**
 
 If these answers were provided as a follow-up to a previous `init` HALT, treat them as the continuation of the same initialization flow. Do not restart from the beginning or repeat the same question block unless critical information is still missing.
 
@@ -114,7 +142,7 @@ Present `.arms/BRAND.md` for review before proceeding. → **HALT**
 ## MVP vs. Backlog (5.3)
 
 - **Phase 1 (MVP):** Must-haves for launch only
-- **Phase 2 (Backlog):** Nice-to-haves → log to `./.gemini/MEMORY.md`
+- **Phase 2 (Backlog):** Nice-to-haves -> log to `./.arms/MEMORY.md`
 
 ## Pages & Design System (5.4)
 

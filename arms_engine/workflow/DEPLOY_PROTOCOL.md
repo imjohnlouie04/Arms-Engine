@@ -26,7 +26,7 @@ Transform raw technical progress into client-friendly updates.
 
 1.  **Fetch History:** Extract the recent conventional commits added since the last deployment.
 2.  **AI Synthesis:** Process these technical commits through the AI context window to rewrite them into a polished, client-friendly changelog. Highlight new features, resolved bugs, and performance improvements while stripping out internal developer jargon.
-3.  **Log State:** Save this changelog to `./.gemini/reports/release-notes-<YYYY-MM-DD>.md` in the local project directory.
+3.  **Log State:** Save this changelog to `./.arms/reports/release-notes-<YYYY-MM-DD>.md` in the local project directory.
 
 ## Phase 4: Final Deployment (`arms-devops-agent`)
 The final step triggers the remote build process (e.g., pushing to the `main` branch to trigger Vercel, or pushing a Docker container).

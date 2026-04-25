@@ -8,11 +8,16 @@ Use these commands to interact with the **Global ARMS Orchestrator**.
 | `init` | Standard boot sequence. Generates a Task Table and **HALTS** for approval. |
 | `init yolo` | **Full Automation Mode.** Generates a Task Table and immediately begins execution without halting. |
 | `init compress` | Initializes and then uses the **Caveman Skill** to shrink session and memory files for token efficiency. |
+| `init --watch` | Waits on `.arms/BRAND.md` and automatically reruns init when the brand brief changes. |
 
 Brand bootstrap behavior during `init`:
 - Existing project with no brand file: ARMS inspects the repo and drafts `.arms/BRAND.md`.
-- New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, including the initial tech stack fields, prints the questionnaire in the CLI, and halts for the user's answers.
+- New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, including the initial tech stack fields plus a website / landing-page brief for content, marketing, and local-business projects, prints the questionnaire in the CLI, and halts for the user's answers.
 - After the user fills in `.arms/BRAND.md`, re-run `init` to resume from that checkpoint. Incomplete questionnaires stay active instead of being treated as finished state.
+- `init --watch` keeps the process alive at that checkpoint and resumes automatically after `.arms/BRAND.md` changes.
+- When the brand brief is complete, `init` also refreshes `.arms/GENERATED_PROMPTS.md` so the gathered context becomes agent-ready implementation prompts automatically.
+- `init` also accepts `--preset <name>` to prefill common defaults (`local-business`, `saas`, `portfolio`, `ecommerce`, `content-site`).
+- `init --answers-file path/to/answers.md` and `init --answers-text "Mission: ..."` apply structured answers directly into `.arms/BRAND.md`.
 
 ## Execution Commands (Post-Init)
 | Command | Action |

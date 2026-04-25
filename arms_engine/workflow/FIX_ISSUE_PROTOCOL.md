@@ -7,7 +7,7 @@ This protocol dictates the execution phase following a code review. It enforces 
 ---
 
 ## Phase 1: Ingestion & Task Planning (`arms-main-agent`)
-1. **Read the Report:** The orchestrator must read the latest `./.gemini/reports/review-<YYYY-MM-DD>.md` file.
+1. **Read the Report:** The orchestrator must read the latest `./.arms/reports/review-<YYYY-MM-DD>.md` file.
 2. **Decompose & Delegate:** Break down the required fixes into a Task Table. 
    * *Columns:* Task | Assigned Agent | Dependencies | Status
 3. **Session Sync:** Write the active Task Table to the local `./.arms/SESSION.md`.

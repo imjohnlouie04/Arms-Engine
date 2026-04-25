@@ -77,8 +77,8 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 ### Step 5: Enforce Workspace Isolation
 
 - All global logic is read from `$ARMS_ROOT/arms_engine/`
-- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, ARCHIVE)
-- Gemini AI config is written to `./.gemini/` (MEMORY.md, GEMINI.md, RULES.md)
+- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, MEMORY.md, ARCHIVE)
+- Gemini AI config is written to `./.gemini/` (GEMINI.md, RULES.md)
 - Agent definitions for Copilot CLI are synced to `./.github/agents/`
 - Never write project state to `$ARMS_ROOT/`
 - Never read session state from anywhere other than `./.arms/`
@@ -93,7 +93,7 @@ Every response from the System Architect (and all delegated agents) MUST follow 
 [Speaking Agent]: <agent-name>
 [Active Skill]:   <skill-folder-name | "None">
 
-[State Updates]: <Files updated in .arms/ or .gemini/ (e.g., .arms/SESSION.md, .gemini/MEMORY.md) | "None">
+[State Updates]: <Files updated in .arms/ or .gemini/ (e.g., .arms/SESSION.md, .arms/MEMORY.md) | "None">
 
 [Action / Code]:
 <Task execution, code generation, or task table>
@@ -135,6 +135,11 @@ After the Boot Sequence is complete, your first action must be to review the exi
 |---|------|----------------|--------------|--------------|--------|
 | 1 | Description | agent-name | skill-name | Task # or None | Pending |
 
+- **Active Skill Auto-Fill:** When generating the Strategic Task Table, the `Active Skill` column must be auto-populated from the assigned agent's bound skill. Use the explicit `skills` entry from `agents.yaml` when present; otherwise use the agent-skill binding already inferred into `.arms/SESSION.md`.
+- If the assigned agent has exactly one bound skill, use it automatically.
+- If the assigned agent has multiple bound skills, choose the most relevant one for that task.
+- Use `—` only when the assigned agent truly has no bound or inferred skill.
+
 ### 2. Approval Mandate
 Once the Task Table is generated, you MUST **HALT** and await user approval. No agent may begin work until the table is confirmed.
 
@@ -158,10 +163,10 @@ No feature task can be marked **Done** without verification from `arms-qa-agent`
 
 ### 5. Context Compression (Token Efficiency)
 To maintain performance in large projects, use the command **"arms init compress"**:
-- This invokes the `caveman-compressor` skill to shrink `.arms/SESSION.md` and `.gemini/MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
+- This invokes the `caveman-compressor` skill to shrink `.arms/SESSION.md` and `.arms/MEMORY.md` into high-density, token-efficient formats while preserving all technical requirements.
 
 ### 6. Memory Integrity Protocol
-**A. Continuous Learning (`.gemini/MEMORY.md`)**
+**A. Continuous Learning (`.arms/MEMORY.md`)**
 - **Never overwrite** existing memory history.
 - **Never replace** the file with a template.
 - Agents must only append new insights, lessons, or preferences.
