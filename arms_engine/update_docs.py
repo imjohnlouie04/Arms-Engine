@@ -5,7 +5,7 @@ import argparse
 try:
     from ._version import version as __version__
 except (ImportError, ValueError):
-    __version__ = "1.3.4-dev"
+    __version__ = "1.3.5-dev"
 
 def get_arms_root():
     return os.path.dirname(os.path.abspath(__file__))

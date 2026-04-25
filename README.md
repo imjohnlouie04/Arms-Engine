@@ -29,8 +29,12 @@ When initialized, ARMS performs a **Split Installation** to isolate project stat
 - **`MEMORY.md`**: Project-specific persistent knowledge and technical debt tracker.
 - **`GEMINI.md`**: Core system directives for the AI assistant.
 - **`RULES.md`**: Project-specific coding standards and guardrails.
-- **`agents/` & `skills/`**: Local mirrors of the engine's assets.
+- **`agents/`**: Local mirror of the engine's agent assets.
 - **`workflow/`**: Local copies of standard operating protocols.
+
+#### 📂 `.agents/` — Cross-CLI Skill Discovery
+- **`skills/`**: Canonical skill mirror used for local CLI skill discovery.
+- **`skills.yaml`** / **`skills-index.md`**: Generated registries that document the synced skill set.
 
 ---
 
@@ -67,7 +71,7 @@ pip install -e .
 
 During `arms init`, missing brand context is handled differently by project state:
 - Existing repository: ARMS inspects the project and writes a first-pass `.arms/BRAND.md`.
-- New / empty project: ARMS creates a question-driven `.arms/BRAND.md` for the user to answer.
+- New / empty project: ARMS creates a question-driven `.arms/BRAND.md` that captures both brand context and the initial technical direction. After filling it in, re-run `arms init` to resume from that checkpoint.
 
 ---
 

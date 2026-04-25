@@ -63,9 +63,9 @@ After receiving answers for a new project, or after reviewing repository signals
 2. Recommend one primary tech stack with clear justification, then list viable alternatives.
 3. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
 4. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
-   - **Step 1 — Logo** (`arms-media-agent` → `logo-designer` skill): Generate HD PNG logo from brand identity
-   - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `nano-banana-pro` skill): Generate hero images, textures, or UI illustrations using the approved logo as reference
-   - **Step 3 — Frontend Scaffold** (`arms-frontend-agent` → `frontend-design` skill): Build the initial UI shell using approved assets and design tokens
+   - **Step 1 — Logo** (`arms-media-agent` → `.agents/skills/logo-designer/SKILL.md`): Generate HD PNG logo from brand identity
+   - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `.agents/skills/nano-banana-pro/SKILL.md`): Generate hero images, textures, or UI illustrations using the approved logo as reference
+   - **Step 3 — Frontend Scaffold** (`arms-frontend-agent` → `.agents/skills/frontend-design/SKILL.md`): Build the initial UI shell using approved assets and design tokens
 5. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table → **HALT**
 
 If these answers were provided as a follow-up to a previous `init` HALT, treat them as the continuation of the same initialization flow. Do not restart from the beginning or repeat the same question block unless critical information is still missing.

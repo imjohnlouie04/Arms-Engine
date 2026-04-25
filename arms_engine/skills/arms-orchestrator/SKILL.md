@@ -63,7 +63,7 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
 - ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
 - Gemini AI config: `./.gemini/` (GEMINI.md, MEMORY.md, RULES.md)
-- Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
+- Local mirrored assets: `./.gemini/agents/`, `./.gemini/workflow/` (mirrored for assistant context)
 
 ---
 
@@ -695,10 +695,10 @@ Activate this pipeline when ALL of the following are true:
 ### Pipeline Sequence
 
 ```
-Step 1 — Logo Generation (arms-media-agent → logo-designer skill)
+Step 1 — Logo Generation (arms-media-agent → logo-design skill)
   Read: .agents/skills/logo-designer/SKILL.md
   Input: Project name, brand personality, visual direction, color palette from BRAND.md
-  Action: Run Phase 1–7 of the logo-designer skill
+  Action: Run Phase 1–7 of the logo-design skill
   Output: HD PNG logo saved to ./.gemini/agent-outputs/arms-media-agent/logo-<project-name>.png
   → Confirm logo with user before proceeding → HALT
 
@@ -738,7 +738,7 @@ Step 3 — Frontend Design System Scaffold (arms-frontend-agent → frontend-des
 
 | Skill | Path | Agent |
 |---|---|---|
-| logo-designer | `.agents/skills/logo-designer/SKILL.md` | arms-media-agent |
+| logo-design | `.agents/skills/logo-designer/SKILL.md` | arms-media-agent |
 | nano-banana-pro | `.agents/skills/nano-banana-pro/SKILL.md` | arms-media-agent |
 | frontend-design | `.agents/skills/frontend-design/SKILL.md` | arms-frontend-agent |
 

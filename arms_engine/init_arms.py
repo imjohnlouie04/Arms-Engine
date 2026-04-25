@@ -9,7 +9,90 @@ import re
 try:
     from ._version import version as __version__
 except (ImportError, ValueError):
-    __version__ = "1.3.4-dev" # Fallback for local development
+    __version__ = "1.3.5-dev" # Fallback for local development
+
+NEW_PROJECT_BRAND_MARKER = "> New project detected."
+NEW_PROJECT_BRAND_FIELDS = (
+    "Mission",
+    "Vision",
+    "Personality",
+    "Voice & Tone",
+    "Primary Audience",
+    "Core Values",
+    "Differentiation",
+    "Color Palette",
+    "Typography",
+    "Logo Status",
+    "Visual Direction",
+    "Project Type",
+    "Design Priority",
+    "Preferred Tech Stack",
+    "Deployment Target",
+    "Backend / Data Layer",
+    "Authentication Requirement",
+    "Technical Constraints",
+)
+BOOTSTRAP_ONLY_FILES = {
+    "README.md",
+    "README.mdx",
+    "LICENSE",
+    "LICENSE.md",
+    "CHANGELOG",
+    "CHANGELOG.md",
+}
+SOURCE_FILE_EXTENSIONS = {
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".py",
+    ".go",
+    ".rs",
+    ".java",
+    ".kt",
+    ".rb",
+    ".php",
+    ".cs",
+    ".swift",
+    ".scala",
+    ".sh",
+}
+MEMORY_TEMPLATE = """# ARMS Project Memory
+
+> Managed by ARMS Engine. This is a continuous learning file. APPEND only; never overwrite.
+
+## Project Context & MVP
+## Primary Use Case & Implications
+## Phase 2 Backlog
+## Developer Preferences
+## Known Bugs & Fixes
+"""
+RULES_TEMPLATE = """# ARMS Project Rules
+
+> Managed by ARMS Engine. Replace these defaults with project-specific rules as the workspace matures.
+
+## Structure & Naming
+- Follow the existing project structure and naming conventions before introducing new patterns.
+- Prefer feature- or domain-based organization over one-off utility sprawl.
+
+## Code Quality
+- Keep changes precise, type-safe, and explicit.
+- Reuse existing helpers and conventions before adding new abstractions.
+- Surface errors clearly; avoid silent fallbacks.
+
+## Validation
+- Use the project's existing build, lint, and test commands.
+- Run the relevant validation before marking work complete.
+
+## Agent Protocol
+- Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.gemini/MEMORY.md` before major changes.
+- Append new project knowledge to `.gemini/MEMORY.md`; never overwrite it wholesale.
+- Keep `.arms/SESSION.md` synchronized with task progress and blockers.
+"""
+SESSION_ARCHIVE_TEMPLATE = """# ARMS Session Archive
+
+> Managed by ARMS Engine. Append completed or cancelled work here; never delete history.
+"""
 
 def get_arms_root():
     # When installed as a package, this is the arms_engine directory
@@ -41,22 +124,66 @@ def get_project_root():
     return original_cwd
 
 def setup_folders(project_root):
+    # .agents/ — Skill & agent discovery folder (detected by Gemini CLI and Copilot CLI)
+    agents_folders = [
+        ".agents/skills",
+    ]
     # .gemini/ — Gemini AI assistant config (GEMINI.md, MEMORY.md, synced assets)
     gemini_folders = [
         ".gemini/agent-outputs",
         ".gemini/reports",
         ".gemini/agents",
-        ".gemini/skills",
         ".gemini/workflow",
-        ".agents/skills",
     ]
     # .arms/ — ARMS engine state (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
     arms_folders = [
         ".arms",
     ]
-    for folder in gemini_folders + arms_folders:
+    for folder in agents_folders + gemini_folders + arms_folders:
         path = os.path.join(project_root, folder)
         os.makedirs(path, exist_ok=True)
+
+def write_file_if_missing(path, content, label):
+    if os.path.exists(path):
+        return
+    print(f"🧱 Scaffolding {label}...")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+def bootstrap_runtime_files(project_root):
+    write_file_if_missing(
+        os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+        SESSION_ARCHIVE_TEMPLATE,
+        ".arms/SESSION_ARCHIVE.md",
+    )
+    write_file_if_missing(
+        os.path.join(project_root, ".gemini/MEMORY.md"),
+        MEMORY_TEMPLATE,
+        ".gemini/MEMORY.md",
+    )
+    write_file_if_missing(
+        os.path.join(project_root, ".gemini/RULES.md"),
+        RULES_TEMPLATE,
+        ".gemini/RULES.md",
+    )
+
+def clean_legacy_gemini_skill_mirror(project_root):
+    legacy_dir = os.path.join(project_root, ".gemini/skills")
+    if not os.path.isdir(legacy_dir):
+        return
+
+    removed_entries = False
+    for entry in os.listdir(legacy_dir):
+        entry_path = os.path.join(legacy_dir, entry)
+        if os.path.isdir(entry_path):
+            shutil.rmtree(entry_path)
+            removed_entries = True
+        elif os.path.isfile(entry_path) and entry.endswith(".md"):
+            os.remove(entry_path)
+            removed_entries = True
+
+    if removed_entries:
+        print("🧹 Removed legacy .gemini/skills mirror to prevent duplicate CLI skill discovery.")
 
 def migrate_legacy_state(project_root):
     """Move legacy project-state files into .arms/ without overwriting existing state."""
@@ -161,21 +288,6 @@ def sync_agents(arms_root, project_root):
         print("📄 Syncing agents.yaml...")
         shutil.copy(yaml_src, yaml_dest)
 
-def sync_skills(arms_root, project_root):
-    print("🔌 Installing Skills...")
-    skills_src = os.path.join(arms_root, "skills")
-    skills_dest = os.path.join(project_root, ".gemini/skills")
-    
-    if os.path.exists(skills_src):
-        for name in os.listdir(skills_src):
-            src_path = os.path.join(skills_src, name)
-            dest_path = os.path.join(skills_dest, name)
-            
-            if os.path.isdir(src_path) and os.path.exists(os.path.join(src_path, "SKILL.md")):
-                if os.path.exists(dest_path):
-                    shutil.rmtree(dest_path)
-                shutil.copytree(src_path, dest_path)
-
 def sync_agents_copilot(arms_root, project_root):
     """Sync agent .md files to .github/agents/ for Copilot CLI /agent discovery."""
     print("🤖 Syncing Agents for Copilot CLI...")
@@ -215,6 +327,28 @@ def infer_skill_description(content, skill_name):
         return line[:240]
     return f"Specialized guidance for {skill_name.replace('-', ' ')}."
 
+def parse_skill_metadata(skill_md_path, fallback_name):
+    metadata = {"name": fallback_name, "description": ""}
+    with open(skill_md_path, "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+
+    lines = content.splitlines()
+    if lines and lines[0].strip() == "---":
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            metadata[key.strip().lower()] = value.strip().strip('"').strip("'")
+
+    metadata["name"] = metadata.get("name") or fallback_name
+    raw_description = metadata.get("description", "")
+    if raw_description in {"", ">", "|"}:
+        raw_description = infer_skill_description(content, fallback_name)
+    metadata["description"] = raw_description
+    return metadata
+
 def ensure_skill_frontmatter(content, skill_name):
     stripped = content.lstrip()
     if stripped.startswith("---"):
@@ -230,11 +364,20 @@ def ensure_skill_frontmatter(content, skill_name):
     return frontmatter + stripped
 
 def sync_skills_copilot(arms_root, project_root):
-    """Sync skill directories to .agents/skills/<skill-name>/SKILL.md for Copilot discovery."""
-    print("🔌 Syncing Skills for Copilot CLI...")
+    """Sync skill directories to CLI discovery folders."""
+    print("🔌 Syncing Skills for CLI discovery...")
     skills_src = os.path.join(arms_root, "skills")
-    target_dir = os.path.join(project_root, ".agents/skills")
-    os.makedirs(target_dir, exist_ok=True)
+    target_dirs = [
+        os.path.join(project_root, ".agents/skills"),
+    ]
+    for target_dir in target_dirs:
+        os.makedirs(target_dir, exist_ok=True)
+        for entry in os.listdir(target_dir):
+            entry_path = os.path.join(target_dir, entry)
+            if os.path.isdir(entry_path):
+                shutil.rmtree(entry_path)
+            elif os.path.isfile(entry_path):
+                os.remove(entry_path)
 
     if os.path.exists(skills_src):
         for skill_name in os.listdir(skills_src):
@@ -242,30 +385,30 @@ def sync_skills_copilot(arms_root, project_root):
             skill_md_path = os.path.join(skill_path, "SKILL.md")
             
             if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
-                legacy_dest = os.path.join(target_dir, f"{skill_name}.md")
-                if os.path.isfile(legacy_dest):
-                    os.remove(legacy_dest)
+                metadata = parse_skill_metadata(skill_md_path, skill_name)
+                for target_dir in target_dirs:
+                    legacy_dest = os.path.join(target_dir, f"{skill_name}.md")
+                    if os.path.isfile(legacy_dest):
+                        os.remove(legacy_dest)
 
-                dest_dir = os.path.join(target_dir, skill_name)
-                if os.path.exists(dest_dir):
-                    shutil.rmtree(dest_dir)
-                shutil.copytree(
-                    skill_path,
-                    dest_dir,
-                    ignore=shutil.ignore_patterns(".DS_Store", "__pycache__"),
-                )
+                    dest_dir = os.path.join(target_dir, skill_name)
+                    shutil.copytree(
+                        skill_path,
+                        dest_dir,
+                        ignore=shutil.ignore_patterns(".DS_Store", "__pycache__"),
+                    )
 
-                dest_skill_md_path = os.path.join(dest_dir, "SKILL.md")
-                with open(dest_skill_md_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
+                    dest_skill_md_path = os.path.join(dest_dir, "SKILL.md")
+                    with open(dest_skill_md_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
 
-                normalized_content = ensure_skill_frontmatter(content, skill_name)
+                    normalized_content = ensure_skill_frontmatter(content, metadata["name"])
 
-                with open(dest_skill_md_path, 'w', encoding='utf-8') as f:
-                    f.write(normalized_content)
+                    with open(dest_skill_md_path, 'w', encoding='utf-8') as f:
+                        f.write(normalized_content)
 
 def create_skills_registry(arms_root, project_root):
-    """Create a skills registry file for Copilot CLI discovery."""
+    """Create a skills registry file for CLI discovery."""
     print("📋 Creating Skills Registry...")
     skills_src = os.path.join(arms_root, "skills")
     registry_dest = os.path.join(project_root, ".agents/skills.yaml")
@@ -278,27 +421,12 @@ def create_skills_registry(arms_root, project_root):
             skill_md_path = os.path.join(skill_path, "SKILL.md")
             
             if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
-                # Extract metadata from SKILL.md frontmatter
-                with open(skill_md_path, 'r') as f:
-                    lines = f.readlines()
-                
-                # Parse YAML frontmatter
-                metadata = {}
-                in_frontmatter = False
-                for i, line in enumerate(lines):
-                    if line.strip() == "---":
-                        if not in_frontmatter:
-                            in_frontmatter = True
-                        else:
-                            break
-                    elif in_frontmatter and i > 0:
-                        if ":" in line:
-                            key, value = line.split(":", 1)
-                            metadata[key.strip().lower()] = value.strip()
-                
-                skills_data[skill_name] = {
-                    "name": metadata.get("name", skill_name),
-                    "description": metadata.get("description", ""),
+                metadata = parse_skill_metadata(skill_md_path, skill_name)
+                canonical_name = metadata["name"]
+                skills_data[canonical_name] = {
+                    "name": canonical_name,
+                    "description": metadata["description"],
+                    "source_directory": skill_name,
                 }
     
     # Write YAML registry
@@ -306,24 +434,29 @@ def create_skills_registry(arms_root, project_root):
         f.write("# ARMS Skills Registry\n")
         f.write("# Auto-generated by arms init\n\n")
         f.write("skills:\n")
-        for skill_name, skill_info in skills_data.items():
+        for skill_name, skill_info in sorted(skills_data.items()):
             f.write(f"  {skill_name}:\n")
             f.write(f"    name: {skill_info['name']}\n")
             f.write(f"    description: {skill_info['description']}\n")
+            if skill_info["source_directory"] != skill_name:
+                f.write(f"    source_directory: {skill_info['source_directory']}\n")
     
     # Write Markdown index for quick reference
     with open(index_dest, 'w') as f:
         f.write("# ARMS Skills Index\n\n")
-        f.write("> **Quick reference:** All available skills for Copilot CLI\n\n")
+        f.write("> **Quick reference:** All available skills for supported CLIs\n\n")
         f.write("## Available Skills\n\n")
-        for skill_name, skill_info in skills_data.items():
+        for skill_name, skill_info in sorted(skills_data.items()):
             f.write(f"### `{skill_name}/SKILL.md`\n")
             f.write(f"**{skill_info['name']}**\n\n")
             f.write(f"{skill_info['description']}\n\n")
-            f.write(f"**File:** `.agents/skills/{skill_name}/SKILL.md`\n\n")
+            skill_file_dir = skill_info["source_directory"]
+            f.write(f"**File:** `.agents/skills/{skill_file_dir}/SKILL.md`\n\n")
+            if skill_info["source_directory"] != skill_name:
+                f.write(f"**Source Directory:** `arms_engine/skills/{skill_info['source_directory']}`\n\n")
         
         f.write("## Usage\n\n")
-        f.write("Reference a skill in Copilot CLI:\n\n")
+        f.write("Reference a skill from the local `.agents/skills/` mirror:\n\n")
         f.write("```\n")
         f.write(".agents/skills/arms-orchestrator/SKILL.md\n")
         f.write("Describe your task here\n")
@@ -354,13 +487,15 @@ def discover_skills(arms_root):
     skills_dir = os.path.join(arms_root, "skills")
     skills = []
     if os.path.exists(skills_dir):
-        for name in sorted(os.listdir(skills_dir)):
-            path = os.path.join(skills_dir, name)
+        for directory_name in sorted(os.listdir(skills_dir)):
+            path = os.path.join(skills_dir, directory_name)
             if os.path.isdir(path) and os.path.exists(os.path.join(path, "SKILL.md")):
-                if name == "arms-orchestrator":
-                    skills.append(f"- {name} [Active]")
+                metadata = parse_skill_metadata(os.path.join(path, "SKILL.md"), directory_name)
+                skill_name = metadata["name"]
+                if skill_name == "arms-orchestrator":
+                    skills.append(f"- {skill_name} [Active]")
                 else:
-                    skills.append(f"- {name}")
+                    skills.append(f"- {skill_name}")
     return "\n".join(skills)
 
 def discover_agents_and_skills(arms_root):
@@ -517,10 +652,34 @@ def read_text_file(path, max_chars=40000):
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read(max_chars)
 
+def is_new_project_brand_questionnaire(content):
+    return NEW_PROJECT_BRAND_MARKER in content
+
+def extract_brand_field(content, field_name):
+    pattern = rf"(?m)^- \*\*{re.escape(field_name)}:\*\* (.*)$"
+    match = re.search(pattern, content)
+    return match.group(1).strip() if match else ""
+
+def brand_field_is_unanswered(value):
+    normalized = value.strip().lower()
+    return normalized in {"", "tbd", "unknown", "undecided", "unsure", "none yet"}
+
+def get_missing_new_project_brand_fields(content):
+    missing_fields = []
+    for field_name in NEW_PROJECT_BRAND_FIELDS:
+        value = extract_brand_field(content, field_name)
+        if brand_field_is_unanswered(value):
+            missing_fields.append(field_name)
+    return missing_fields
+
 def brand_file_requires_bootstrap(content):
     if not content.strip():
         return True
-    return any(token in content for token in PLACEHOLDER_BRAND_TOKENS)
+    if any(token in content for token in PLACEHOLDER_BRAND_TOKENS):
+        return True
+    if is_new_project_brand_questionnaire(content):
+        return bool(get_missing_new_project_brand_fields(content))
+    return False
 
 def extract_first_meaningful_paragraph(text):
     lines = text.splitlines()
@@ -557,23 +716,35 @@ def extract_first_meaningful_paragraph(text):
     return " ".join(paragraph).strip()
 
 def detect_existing_project(project_root):
-    for marker in PROJECT_MARKER_FILES:
+    substantive_markers = [marker for marker in PROJECT_MARKER_FILES if marker not in {"README.md", "README.mdx"}]
+    for marker in substantive_markers:
         if os.path.exists(os.path.join(project_root, marker)):
             return True
 
     for marker_dir in PROJECT_MARKER_DIRS:
         path = os.path.join(project_root, marker_dir)
         if os.path.isdir(path):
-            with os.scandir(path) as entries:
-                if next(entries, None) is not None:
-                    return True
+            try:
+                with os.scandir(path) as entries:
+                    if next(entries, None) is not None:
+                        return True
+            except OSError:
+                continue
 
     meaningful_entries = [
         name
         for name in os.listdir(project_root)
         if name not in IGNORED_PROJECT_ENTRIES and not name.startswith(".")
     ]
-    return bool(meaningful_entries)
+    source_like_entries = [
+        name for name in meaningful_entries
+        if os.path.splitext(name)[1].lower() in SOURCE_FILE_EXTENSIONS
+    ]
+    if source_like_entries:
+        return True
+
+    substantive_entries = [name for name in meaningful_entries if name not in BOOTSTRAP_ONLY_FILES]
+    return len(substantive_entries) >= 2
 
 def detect_logo_status(project_root):
     candidate_dirs = (
@@ -876,6 +1047,13 @@ def render_new_project_brand_questionnaire(project_root):
 - **Project Type:** TBD
 - **Design Priority:** TBD
 
+## Initial Technical Direction
+- **Preferred Tech Stack:** TBD
+- **Deployment Target:** TBD
+- **Backend / Data Layer:** TBD
+- **Authentication Requirement:** TBD
+- **Technical Constraints:** TBD
+
 ## Notes
 - Answer these before approving design or marketing work:
 - What is the exact project name or working title?
@@ -888,26 +1066,46 @@ def render_new_project_brand_questionnaire(project_root):
 - What makes it meaningfully different from alternatives?
 - Do you already have a logo, color palette, typography, or an existing site?
 - Should the visual direction default to light, dark, system, or something else?
+- What stack, deployment target, auth approach, and hard technical constraints should ARMS plan around?
 """
 
-def render_new_project_brand_prompt():
+def render_new_project_brand_prompt(missing_fields=None):
     brand_questions = "\n".join(NEW_PROJECT_BRAND_QUESTIONS)
     tech_stack_questions = "\n".join(NEW_PROJECT_TECH_STACK_QUESTIONS)
+    missing_block = ""
+    if missing_fields:
+        missing_block = (
+            "Still incomplete in `.arms/BRAND.md`:\n"
+            + "\n".join(f"- {field}" for field in missing_fields)
+            + "\n\n"
+        )
     return (
         "📝 Brand Context is required for a new / empty project.\n"
-        "Answer these in one block before design-oriented work begins:\n\n"
+        "Fill the unanswered fields in `.arms/BRAND.md` or answer these in one block, then re-run `arms init` to resume:\n\n"
+        f"{missing_block}"
         f"{brand_questions}\n\n"
         "After Brand Context, confirm the initial tech stack:\n\n"
         f"{tech_stack_questions}\n\n"
-        "The Brand Context questionnaire has also been written to `.arms/BRAND.md`."
+        "The Brand Context and technical-direction questionnaire is stored in `.arms/BRAND.md`."
     )
 
 def initialize_brand_context(project_root):
     brand_path = os.path.join(project_root, ".arms/BRAND.md")
 
     existing_content = read_text_file(brand_path)
-    if existing_content and not brand_file_requires_bootstrap(existing_content):
-        return {"status": "existing"}
+    if existing_content:
+        if is_new_project_brand_questionnaire(existing_content):
+            missing_fields = get_missing_new_project_brand_fields(existing_content)
+            if missing_fields:
+                print("📝 New-project BRAND.md is still incomplete. Reusing saved questionnaire.")
+                return {
+                    "status": "questions_required",
+                    "prompt": render_new_project_brand_prompt(missing_fields),
+                }
+            print("✅ New-project BRAND.md is complete. Continuing initialization from saved answers.")
+            return {"status": "existing"}
+        if not brand_file_requires_bootstrap(existing_content):
+            return {"status": "existing"}
 
     if detect_existing_project(project_root):
         print("🎨 Generating BRAND.md from existing project context...")
@@ -924,6 +1122,23 @@ def initialize_brand_context(project_root):
         "status": "questions_required",
         "prompt": render_new_project_brand_prompt(),
     }
+
+def detect_execution_mode():
+    override = os.getenv("ARMS_EXECUTION_MODE", "").strip().lower()
+    if override in {"parallel", "simulated"}:
+        return override.capitalize()
+
+    parallel_env_markers = (
+        "COPILOT_CLI",
+        "GITHUB_COPILOT_CLI",
+        "GEMINI_CLI",
+        "CLAUDECODE",
+        "CLAUDE_CODE",
+        "OPENAI_CODEX_CLI",
+    )
+    if any(os.getenv(marker) for marker in parallel_env_markers):
+        return "Parallel"
+    return "Simulated"
 
 def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
     print("📄 Updating session log...")
@@ -1019,7 +1234,7 @@ None"""
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     # Environment detection
-    exec_mode = "Parallel" 
+    exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
     
     content = f"""# ARMS Session Log
@@ -1074,10 +1289,11 @@ def main():
     
     setup_folders(project_root)
     migrate_legacy_state(project_root)
+    bootstrap_runtime_files(project_root)
+    clean_legacy_gemini_skill_mirror(project_root)
     sync_agents(arms_root, project_root)
     sync_agents_copilot(arms_root, project_root)
 
-    sync_skills(arms_root, project_root)
     sync_skills_copilot(arms_root, project_root)
     create_skills_registry(arms_root, project_root)
     sync_workflow(arms_root, project_root)

@@ -11,8 +11,8 @@ Use these commands to interact with the **Global ARMS Orchestrator**.
 
 Brand bootstrap behavior during `init`:
 - Existing project with no brand file: ARMS inspects the repo and drafts `.arms/BRAND.md`.
-- New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, prints the Brand Context questions plus initial tech stack questions in the CLI, and halts for the user's answers.
-- After the user answers those questions, `init` is expected to resume from that checkpoint, synthesize brand + stack decisions, and continue to the Task Table instead of restarting the questionnaire.
+- New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, including the initial tech stack fields, prints the questionnaire in the CLI, and halts for the user's answers.
+- After the user fills in `.arms/BRAND.md`, re-run `init` to resume from that checkpoint. Incomplete questionnaires stay active instead of being treated as finished state.
 
 ## Execution Commands (Post-Init)
 | Command | Action |

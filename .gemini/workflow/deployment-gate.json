@@ -1,6 +1,6 @@
 {
   "workflow": "Deployment Gate",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "description": "Enforces mandatory QA and Security approval before production deployment.",
   "gates": [
     {
