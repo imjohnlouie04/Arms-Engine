@@ -113,6 +113,7 @@ Generated: <ISO 8601 timestamp>
 
 ## Environment
 - ARMS Root: <$ARMS_ROOT resolved path>
+- Engine Version: <resolved ARMS engine version>
 - Project Root: <working directory>
 - Project Name: <extracted from BRAND.md or Unknown>
 - Execution Mode: <Parallel | Simulated>
@@ -207,6 +208,16 @@ Immediately after Brand Context for a new/empty project, the CLI must also ask f
 ```
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+
+When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
+- `ARMS Root`
+- `Engine Version`
+- `Project Root`
+- `Project Name`
+- `Execution Mode`
+- `YOLO Mode`
+
+Do not remove `Engine Version` during task-table or blocker updates.
 
 
 ---

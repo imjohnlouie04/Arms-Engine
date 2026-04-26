@@ -164,6 +164,7 @@ When users invoke commands, `arms-main-agent` reads the corresponding protocol:
 
 **Shared Rules (Both Modes):**
 - NEVER overwrite `## Environment` or `## Active Skills` in SESSION.md
+- NEVER remove `- Engine Version:` from the `## Environment` block when updating tasks, blockers, or execution state
 - NEVER overwrite MEMORY.md
 - Every agent receives: role definition + SKILL.md + SESSION.md + MEMORY.md
 - `arms-main-agent` owns aggregation — subagents return output, orchestrator writes to SESSION.md
@@ -251,7 +252,7 @@ After significant technical work, ask user approval before updating `MEMORY.md`:
 - **Critical Rules from agents.yaml**:
   - **arms-frontend-agent**: Mobile-First Mandate — override default UI sizes to `h-11` min, hide dense tables on mobile (`hidden md:block`), provide stacked card layouts (`block md:hidden`)
   - **arms-data-agent**: Must use Supabase CLI (`supabase init/start`) for local schema testing before remote execution
-  - **arms-qa-agent**: Must run Vitest/Playwright before marking tasks `Done`, strictly validates pre-flight checks
+  - **arms-qa-agent**: Must run Vitest and the configured E2E suite before marking tasks `Done`; prefer Cypress and only use Playwright when the project explicitly requires it
   - **arms-security-agent**: Must audit all database migrations and auth logic, ensure zero PII/secret exposure
 
 ### 4. **Skill Discovery & Validation**
@@ -325,7 +326,7 @@ Reference any skill in `.agents/skills/`:
 - **`backend-system-architect.md`** – Backend architecture, API design, database schemas
 - **`frontend-design.md`** – Production-grade UI components with distinctive aesthetics
 - **`security-code-review.md`** – OWASP audits, auth validation, RLS configuration, secret scanning
-- **`qa-automation-testing.md`** – Unit/E2E test generation, Vitest/Playwright validation
+- **`qa-automation-testing.md`** – Unit/E2E test generation, stable QA strategy, Cypress-first with Playwright when required
 - **`seo-web-performance-expert.md`** – Meta tags, semantic HTML, Core Web Vitals, schema markup
 - **`logo-designer.md`** – Logo creation and asset design
 - **`nano-banana-pro.md`** – Specialized image generation and media handling

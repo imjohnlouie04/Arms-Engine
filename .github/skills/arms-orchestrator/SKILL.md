@@ -99,6 +99,7 @@ Generated: <ISO 8601 timestamp>
 
 ## Environment
 - ARMS Root: <$ARMS_ROOT resolved path>
+- Engine Version: <resolved ARMS engine version>
 - Project Root: <working directory>
 - Project Name: <extracted from BRAND.md or Unknown>
 - Execution Mode: <Parallel | Simulated>
@@ -189,6 +190,16 @@ If the workspace is a new/empty project, create a question-driven brand brief in
 ```
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+
+When updating `.arms/SESSION.md`, preserve the full `## Environment` block, including:
+- `ARMS Root`
+- `Engine Version`
+- `Project Root`
+- `Project Name`
+- `Execution Mode`
+- `YOLO Mode`
+
+Do not remove `Engine Version` during task-table, blocker, or status updates.
 
 
 ---
@@ -469,7 +480,7 @@ Round 2 — Aggregation (arms-main-agent synthesizes Round 1 outputs):
 
 ### Shared Rules (Both Modes)
 
-- **Persistence Mandate:** Environmental metadata (`## Environment` and `## Active Skills` in `SESSION.md`) and the entire content of `MEMORY.md` MUST be preserved during every update. **Never overwrite or discard existing project memory.** `MEMORY.md` is a continuous learning file; agents must append to it or update specific sections, but NEVER replace the entire file with a template.
+- **Persistence Mandate:** Environmental metadata (`## Environment`, including `Engine Version`, and `## Active Skills` in `SESSION.md`) and the entire content of `MEMORY.md` MUST be preserved during every update. **Never overwrite or discard existing project memory.** `MEMORY.md` is a continuous learning file; agents must append to it or update specific sections, but NEVER replace the entire file with a template.
 - Every agent call receives: its role definition + relevant SKILL.md content + current SESSION.md + MEMORY.md
 - Every agent response must use the strict response template — malformed responses are re-queued, not silently accepted
 - `arms-main-agent` owns aggregation — subagents never write directly to SESSION.md; they return structured output and the orchestrator writes

@@ -92,7 +92,7 @@ When creating pull requests, use this structure:
 
 ## Testing
 - [ ] Unit tests pass (`npm run test`)
-- [ ] E2E tests pass (`npx playwright test`)
+- [ ] E2E tests pass (`npm run test:e2e` or the project's configured stable E2E command)
 - [ ] Build passes (`npm run build`)
 - [ ] Manually tested on mobile viewport
 

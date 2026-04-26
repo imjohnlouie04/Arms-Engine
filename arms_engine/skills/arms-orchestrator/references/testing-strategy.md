@@ -9,9 +9,9 @@
 
 | Project Type | Unit/Integration | E2E |
 |---|---|---|
-| Next.js | Vitest + React Testing Library | Playwright |
-| Nuxt 4 | Vitest + @nuxt/test-utils | Playwright |
-| Astro | Vitest | Playwright |
+| Next.js | Vitest + React Testing Library | Cypress (default) / Playwright when required |
+| Nuxt 4 | Vitest + @nuxt/test-utils | Cypress (default) / Playwright when required |
+| Astro | Vitest | Cypress (default) / Playwright when required |
 
 ---
 
@@ -46,7 +46,26 @@ export default defineConfig({
 import '@testing-library/jest-dom'
 ```
 
-### Playwright
+Use Cypress as the default browser E2E runner. Choose Playwright only for cross-browser, multi-tab, multi-origin, OAuth, or other flows that Cypress cannot cover cleanly.
+
+### Cypress
+```bash
+npm install -D cypress
+```
+
+```ts
+// cypress.config.ts
+import { defineConfig } from 'cypress'
+
+export default defineConfig({
+  e2e: {
+    baseUrl: 'http://localhost:3000',
+    supportFile: 'cypress/support/e2e.ts',
+  },
+})
+```
+
+### Playwright (opt-in)
 ```bash
 npm install -D @playwright/test
 npx playwright install chromium
@@ -135,15 +154,15 @@ describe('GET /api/users', () => {
 })
 ```
 
-### Auth E2E Test (Playwright)
+### Auth E2E Test (Playwright opt-in)
 ```ts
 import { test, expect } from '@playwright/test'
 
 test('authenticated user can access dashboard', async ({ page }) => {
   await page.goto('/login')
-  await page.fill('[name="email"]', 'test@example.com')
-  await page.fill('[name="password"]', 'password123')
-  await page.click('[type="submit"]')
+  await page.getByLabel('Email').fill('test@example.com')
+  await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Log In' }).click()
   await expect(page).toHaveURL('/dashboard')
 })
 
@@ -173,7 +192,8 @@ npx vitest run --coverage
 npm run build
 
 # 5. E2E (if staging environment available)
-npx playwright test
+npm run test:e2e
+# Use Cypress by default. Use Playwright only when the project is explicitly configured for it.
 ```
 
 **Pass criteria:**

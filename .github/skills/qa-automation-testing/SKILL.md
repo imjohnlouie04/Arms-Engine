@@ -32,20 +32,21 @@ You're helping write production-grade automated tests for web applications. Focu
 - API endpoints, services, database queries (with mocking)
 - Fast feedback loop—runs in milliseconds
 
-### Playwright (E2E)
-- Cross-browser requirements (Chromium, Firefox, WebKit)
-- Complex multi-tab, multi-origin, or OAuth flows
-- Large test suites needing parallel execution
-- API testing alongside E2E (built-in request context)
-- Mobile device emulation
-
 ### Cypress (E2E)
 - Developer experience is the priority (time-travel debugger)
 - Primarily Chrome/Chromium testing
 - Teams new to E2E testing
 - Component testing (more mature than Playwright's)
 
-**Default: Use Jest for everything except full user journeys. Use Playwright for E2E unless Cypress's debugging experience is critical.**
+### Playwright (E2E, opt-in)
+- Cross-browser requirements (Chromium, Firefox, WebKit)
+- Complex multi-tab, multi-origin, or OAuth flows
+- Large test suites needing parallel execution
+- API testing alongside E2E (built-in request context)
+- Mobile device emulation
+- Existing projects that already have a stable Playwright setup
+
+**Default: Use Jest for everything except full user journeys. Use Cypress for browser E2E by default. Escalate to Playwright only when the project explicitly needs its cross-browser or multi-context capabilities.**
 
 ## Jest Patterns
 
@@ -122,6 +123,16 @@ it('admins can delete posts', () => {
   expect(canDelete(admin, post)).toBe(true);
 });
 ```
+
+## E2E Framework Gate
+
+Before choosing Playwright, confirm all of these are true:
+
+- The project already uses Playwright, or it explicitly needs cross-browser, multi-tab, multi-origin, or OAuth coverage.
+- Browser installation is reliable in local and CI environments.
+- Auth, storage state, and seed data can be stabilized without logging in through the UI in every test.
+
+If any of those are false, prefer Cypress or keep coverage at the integration-test level until the environment is stable.
 
 ## Playwright Patterns
 
@@ -411,6 +422,7 @@ Before merging test code:
 - [ ] No hardcoded waits (`sleep`, `wait(5000)`)—use explicit waits for conditions
 - [ ] Selectors are semantic (role-based or label-based, not CSS classes)
 - [ ] Each test is independent (can run in any order)
+- [ ] The chosen E2E runner matches the project's actual stable setup; do not force Playwright by default
 - [ ] Mocks are at module boundaries, not internal functions
 - [ ] Error cases and edge cases are tested, not just happy paths
 - [ ] Test names describe behavior, not implementation ("displays error when email is invalid" not "calls validateEmail")
@@ -423,6 +435,7 @@ Before merging test code:
 3. **Use debugging tools.** Playwright trace viewer, Cypress time-travel, Jest's `--watch` mode.
 4. **Reproduce locally.** If it only fails in CI, check for environment differences (ports, data, timing).
 5. **Quarantine if necessary.** If a test is flaky and you can't fix it immediately, skip it with a tracked issue. Don't let it poison the suite.
+6. **De-escalate the tool when needed.** If Playwright is still unstable after one focused stabilization pass, switch the browser E2E path to Cypress unless the project explicitly requires Playwright-only capabilities.
 
 ## Maintenance Strategy
 

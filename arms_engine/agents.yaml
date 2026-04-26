@@ -51,7 +51,7 @@ agents:
     scope: Writing unit/E2E tests, performing pre-flight validation.
     skills:
       - qa-automation-testing
-    rules: "Must run Vitest/Playwright before marking a task 'Done'. Strictly validates Pre-Flight checks for any regression."
+    rules: "Must run Vitest and the project's configured E2E suite before marking a task 'Done'. Prefer Cypress for browser E2E; use Playwright only when explicitly required. Strictly validates Pre-Flight checks for any regression."
 
   arms-security-agent:
     role: Security Specialist
