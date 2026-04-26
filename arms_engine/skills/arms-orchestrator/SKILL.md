@@ -71,13 +71,15 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 When `./.arms/` or `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold them before any work begins. Never assume these files exist.
 
+If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** begin with generic planning, repo triage, linting, or `git status`. Boot ARMS first.
+
 ### Bootstrap Sequence
 
 ```
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, or other legacy brand files into `./.arms/` when the `.arms/` target file does not already exist
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
 6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
 7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
@@ -208,6 +210,8 @@ Immediately after Brand Context for a new/empty project, the CLI must also ask f
 ```
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+
+Root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Once managed files exist in `./.arms/` or `./.gemini/`, do not read those root-level legacy files as current session authority during init orchestration.
 
 When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
 - `ARMS Root`

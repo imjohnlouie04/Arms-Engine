@@ -115,10 +115,44 @@ GENERATED_PROMPTS_HEADER = """# ARMS Generated Prompts
 > Update the brand brief and re-run `arms init` to refresh these prompts.
 """
 WATCH_POLL_INTERVAL_SECONDS = 2.0
+CURRENT_PROJECT_ROOT_MARKERS = (".git", ".arms", ".gemini", "package.json")
+LEGACY_PROJECT_ROOT_STRONG_MARKERS = (
+    "SESSION.md",
+    "session.md",
+    "SESSION_ARCHIVE.md",
+    "session_archive.md",
+    "BRAND.md",
+    "brand.md",
+    "brand-context.md",
+)
+LEGACY_PROJECT_ROOT_HINT_MARKERS = (
+    "MEMORY.md",
+    "memory.md",
+    "RULES.md",
+    "rules.md",
+    "GEMINI.md",
+    "gemini.md",
+    "agents.yaml",
+    "agents",
+)
 
 def get_arms_root():
     # When installed as a package, this is the arms_engine directory
     return os.path.dirname(os.path.abspath(__file__))
+
+def has_project_root_markers(path):
+    if any(os.path.exists(os.path.join(path, marker)) for marker in CURRENT_PROJECT_ROOT_MARKERS):
+        return True
+
+    if any(os.path.exists(os.path.join(path, marker)) for marker in LEGACY_PROJECT_ROOT_STRONG_MARKERS):
+        return True
+
+    hint_count = sum(
+        1
+        for marker in LEGACY_PROJECT_ROOT_HINT_MARKERS
+        if os.path.exists(os.path.join(path, marker))
+    )
+    return hint_count >= 2
 
 def get_project_root():
     """Resolve the active project root.
@@ -133,14 +167,16 @@ def get_project_root():
         name for name in os.listdir(original_cwd)
         if name not in IGNORED_PROJECT_ENTRIES and not name.startswith(".")
     ]
-    if not meaningful_entries and not any(
-        os.path.exists(os.path.join(original_cwd, marker))
-        for marker in [".git", ".arms", ".gemini", "package.json"]
-    ):
+    if not meaningful_entries and not has_project_root_markers(original_cwd):
+        probe = os.path.dirname(original_cwd)
+        while probe != os.path.dirname(probe):
+            if has_project_root_markers(probe):
+                return probe
+            probe = os.path.dirname(probe)
         return original_cwd
 
     while curr != os.path.dirname(curr):
-        if any(os.path.exists(os.path.join(curr, m)) for m in [".git", ".arms", ".gemini", "package.json"]):
+        if has_project_root_markers(curr):
             return curr
         curr = os.path.dirname(curr)
     return original_cwd
@@ -217,8 +253,28 @@ def migrate_legacy_state(project_root):
             os.path.join(project_root, ".arms/SESSION.md"),
         ),
         (
+            "session log",
+            os.path.join(project_root, "SESSION.md"),
+            os.path.join(project_root, ".arms/SESSION.md"),
+        ),
+        (
+            "session log",
+            os.path.join(project_root, "session.md"),
+            os.path.join(project_root, ".arms/SESSION.md"),
+        ),
+        (
             "session archive",
             os.path.join(project_root, ".gemini/SESSION_ARCHIVE.md"),
+            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+        ),
+        (
+            "session archive",
+            os.path.join(project_root, "SESSION_ARCHIVE.md"),
+            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+        ),
+        (
+            "session archive",
+            os.path.join(project_root, "session_archive.md"),
             os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
         ),
         (
@@ -237,9 +293,54 @@ def migrate_legacy_state(project_root):
             os.path.join(project_root, ".arms/BRAND.md"),
         ),
         (
+            "brand context",
+            os.path.join(project_root, "BRAND.md"),
+            os.path.join(project_root, ".arms/BRAND.md"),
+        ),
+        (
+            "brand context",
+            os.path.join(project_root, "brand.md"),
+            os.path.join(project_root, ".arms/BRAND.md"),
+        ),
+        (
             "project memory",
             os.path.join(project_root, ".gemini/MEMORY.md"),
             os.path.join(project_root, ".arms/MEMORY.md"),
+        ),
+        (
+            "project memory",
+            os.path.join(project_root, "MEMORY.md"),
+            os.path.join(project_root, ".arms/MEMORY.md"),
+        ),
+        (
+            "project memory",
+            os.path.join(project_root, "memory.md"),
+            os.path.join(project_root, ".arms/MEMORY.md"),
+        ),
+        (
+            "project rules",
+            os.path.join(project_root, "RULES.md"),
+            os.path.join(project_root, ".gemini/RULES.md"),
+        ),
+        (
+            "project rules",
+            os.path.join(project_root, "rules.md"),
+            os.path.join(project_root, ".gemini/RULES.md"),
+        ),
+        (
+            "engine directives",
+            os.path.join(project_root, "GEMINI.md"),
+            os.path.join(project_root, ".gemini/GEMINI.md"),
+        ),
+        (
+            "engine directives",
+            os.path.join(project_root, "gemini.md"),
+            os.path.join(project_root, ".gemini/GEMINI.md"),
+        ),
+        (
+            "agent registry",
+            os.path.join(project_root, "agents.yaml"),
+            os.path.join(project_root, ".gemini/agents.yaml"),
         ),
         (
             "workflow mirror",
@@ -664,6 +765,20 @@ def sync_copilot_instructions(arms_root, project_root):
     src = os.path.join(arms_root, "AGENTS.md")
     dest = os.path.join(project_root, "AGENTS.md")
     if os.path.exists(src):
+        shutil.copy2(src, dest)
+
+def sync_gemini_instructions(arms_root, project_root):
+    """Deploy GEMINI.md for Gemini CLI instruction loading."""
+    print("📄 Syncing GEMINI.md (Gemini Instructions)...")
+    src = os.path.join(arms_root, "GEMINI.md")
+    if not os.path.exists(src):
+        return
+
+    destinations = [
+        os.path.join(project_root, ".gemini/GEMINI.md"),
+        os.path.join(project_root, "GEMINI.md"),
+    ]
+    for dest in destinations:
         shutil.copy2(src, dest)
 
 def sync_workflow(arms_root, project_root):
@@ -2562,12 +2677,7 @@ def run_init_once(project_root, arms_root, full_command, is_yolo, preset_name=""
     agents_list = discover_agents_and_skills(arms_root)
     update_session(project_root, arms_root, skills_list, agents_list, yolo=is_yolo)
     
-    # Sync GEMINI.md
-    gemini_src = os.path.join(arms_root, "GEMINI.md")
-    gemini_dest = os.path.join(project_root, ".gemini/GEMINI.md")
-    if os.path.exists(gemini_src):
-        shutil.copy2(gemini_src, gemini_dest)
-        print("📄 Core Directives (GEMINI.md) synced.")
+    sync_gemini_instructions(arms_root, project_root)
 
     # Sync AGENTS.md for Copilot CLI
     sync_copilot_instructions(arms_root, project_root)

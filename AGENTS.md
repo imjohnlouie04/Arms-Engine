@@ -7,6 +7,8 @@
 
 **Activation Command:** When the user types exactly `arms init` or `arms start`, immediately invoke the global orchestration engine. When the user types `arms init yolo` or `arms start yolo`, invoke the engine in **Full Automation Mode** (skipping the planning gate halt). Do not output generic greetings or conversational filler — let the explicit boot sequence dictate your response.
 
+**Strict Init Rule:** If the command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** switch into generic planning, repo cleanup, linting, `git status`, or issue triage before the boot sequence. Resolve the ARMS engine path first, run the linker/bootstrap flow, migrate legacy state, and only then continue with normal orchestration.
+
 ---
 
 ## Boot Sequence & Initialization
@@ -69,6 +71,7 @@ Scan:
 3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md` under `## Active Skills`.
 4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
 5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
+6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. During `arms init`, use them only to migrate state into `./.arms/` or `./.gemini/`; do not treat them as the live session source of truth once the managed folders exist.
 
 ### Step 4: Execute Initialization Flow
 

@@ -58,7 +58,8 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.arms/MEMORY.md` | Persistent project memory | Created if missing, migrated from legacy `.gemini/MEMORY.md`, and append-only by convention |
 | `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete |
 | `.gemini/RULES.md` | Project rules and guardrails | Created if missing |
-| `.gemini/GEMINI.md` | Core ARMS instruction payload | Re-synced from the engine |
+| `.gemini/GEMINI.md` | Managed Gemini config mirror | Re-synced from the engine |
+| `GEMINI.md` | Project-root Gemini CLI instruction file | Re-synced from the engine so Gemini loads current ARMS init behavior |
 | `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
 | `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced from `arms_engine/agents.yaml` |
 | `.arms/workflow/` | Local mirror of workflow docs | Copied from the engine for cross-CLI use |
@@ -122,10 +123,10 @@ The package exposes two entry points:
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
 3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, and `.github/agents/`.
-4. Migrates legacy state into `.arms/` when older files are found.
+4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `GEMINI.md`, and `agents.yaml`.
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.gemini/RULES.md`, and `.arms/SESSION_ARCHIVE.md`.
 6. Removes the legacy `.gemini/skills/` mirror to avoid duplicate skill discovery.
-7. Syncs agents, skills, workflow docs, `GEMINI.md`, and root `AGENTS.md`.
+7. Syncs agents, skills, workflow docs, `.gemini/GEMINI.md`, root `GEMINI.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/GENERATED_PROMPTS.md` when the intake is complete.
