@@ -221,9 +221,9 @@ def bootstrap_runtime_files(project_root):
         ".arms/MEMORY.md",
     )
     write_file_if_missing(
-        os.path.join(project_root, ".gemini/RULES.md"),
+        os.path.join(project_root, ".arms/RULES.md"),
         RULES_TEMPLATE,
-        ".gemini/RULES.md",
+        ".arms/RULES.md",
     )
 
 def clean_legacy_gemini_skill_mirror(project_root):
@@ -319,23 +319,18 @@ def migrate_legacy_state(project_root):
         ),
         (
             "project rules",
-            os.path.join(project_root, "RULES.md"),
             os.path.join(project_root, ".gemini/RULES.md"),
+            os.path.join(project_root, ".arms/RULES.md"),
+        ),
+        (
+            "project rules",
+            os.path.join(project_root, "RULES.md"),
+            os.path.join(project_root, ".arms/RULES.md"),
         ),
         (
             "project rules",
             os.path.join(project_root, "rules.md"),
-            os.path.join(project_root, ".gemini/RULES.md"),
-        ),
-        (
-            "engine directives",
-            os.path.join(project_root, "GEMINI.md"),
-            os.path.join(project_root, ".gemini/GEMINI.md"),
-        ),
-        (
-            "engine directives",
-            os.path.join(project_root, "gemini.md"),
-            os.path.join(project_root, ".gemini/GEMINI.md"),
+            os.path.join(project_root, ".arms/RULES.md"),
         ),
         (
             "agent registry",
@@ -379,8 +374,14 @@ def migrate_legacy_state(project_root):
                     f"📦 Migrating legacy {label} entry from "
                     f"{os.path.relpath(legacy_entry, project_root)} to {os.path.relpath(target_entry, project_root)}..."
                 )
-                shutil.move(legacy_entry, target_entry)
-                moved_any = True
+                try:
+                    shutil.move(legacy_entry, target_entry)
+                    moved_any = True
+                except (OSError, shutil.Error) as e:
+                    print(
+                        f"⚠️  Skipping migration of {os.path.relpath(legacy_entry, project_root)}: {str(e)}"
+                    )
+                    continue
             if not os.listdir(legacy_path):
                 os.rmdir(legacy_path)
             elif not moved_any:
@@ -400,7 +401,12 @@ def migrate_legacy_state(project_root):
             f"📦 Migrating legacy {label} from "
             f"{os.path.relpath(legacy_path, project_root)} to {os.path.relpath(target_path, project_root)}..."
         )
-        shutil.move(legacy_path, target_path)
+        try:
+            shutil.move(legacy_path, target_path)
+        except (OSError, shutil.Error) as e:
+            print(
+                f"⚠️  Skipping migration of {os.path.relpath(legacy_path, project_root)}: {str(e)}"
+            )
 
 def is_missing_active_skill(value):
     normalized = value.strip().lower()
@@ -518,7 +524,7 @@ def sync_agents(arms_root, project_root):
                 src = os.path.join(agents_dir, filename)
                 dest = os.path.join(target_dir, filename)
                 
-                with open(src, 'r') as f:
+                with open(src, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                 
                 if "tools:" not in content:
@@ -527,7 +533,7 @@ def sync_agents(arms_root, project_root):
                     if len(parts) >= 3:
                         content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
                 
-                with open(dest, 'w') as f:
+                with open(dest, 'w', encoding='utf-8') as f:
                     f.write(content)
     
     # Sync agents.yaml
@@ -549,7 +555,7 @@ def sync_agents_copilot(arms_root, project_root):
             if filename.endswith(".md"):
                 src = os.path.join(agents_dir, filename)
                 dest = os.path.join(target_dir, filename)
-                with open(src, 'r') as f:
+                with open(src, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                 
                 # Ensure tools: ["*"] is present for Copilot CLI discovery
@@ -559,7 +565,7 @@ def sync_agents_copilot(arms_root, project_root):
                     if len(parts) >= 3:
                         content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
                 
-                with open(dest, 'w') as f:
+                with open(dest, 'w', encoding='utf-8') as f:
                     f.write(content)
 
 def infer_skill_description(content, skill_name):
@@ -767,24 +773,21 @@ def sync_copilot_instructions(arms_root, project_root):
     if os.path.exists(src):
         shutil.copy2(src, dest)
 
-def sync_gemini_instructions(arms_root, project_root):
-    """Deploy GEMINI.md for Gemini CLI instruction loading."""
-    print("📄 Syncing GEMINI.md (Gemini Instructions)...")
+def sync_engine_instructions(arms_root, project_root):
+    """Deploy engine instructions to the managed .arms workspace."""
+    print("📄 Syncing ENGINE.md (ARMS Engine Instructions)...")
     src = os.path.join(arms_root, "GEMINI.md")
     if not os.path.exists(src):
         return
 
-    destinations = [
-        os.path.join(project_root, ".gemini/GEMINI.md"),
-        os.path.join(project_root, "GEMINI.md"),
-    ]
-    for dest in destinations:
-        shutil.copy2(src, dest)
+    dest = os.path.join(project_root, ".arms/ENGINE.md")
+    shutil.copy2(src, dest)
 
 def sync_workflow(arms_root, project_root):
     print("📋 Syncing Workflow Protocols...")
     wf_src = os.path.join(arms_root, "workflow")
     wf_dest = os.path.join(project_root, ".arms/workflow")
+    os.makedirs(wf_dest, exist_ok=True)
     
     if os.path.exists(wf_src):
         for filename in os.listdir(wf_src):
@@ -2105,6 +2108,21 @@ def infer_brand_context_from_project(project_root):
         evidence.append("README.md")
         readme_summary = extract_first_meaningful_paragraph(readme_content)
 
+    project_instruction_summary = ""
+    project_instruction_candidates = (
+        "GEMINI.md",
+        "gemini.md",
+        os.path.join(".gemini", "GEMINI.md"),
+        os.path.join(".gemini", "gemini.md"),
+    )
+    for gemini_filename in project_instruction_candidates:
+        gemini_path = os.path.join(project_root, gemini_filename)
+        gemini_content = read_text_file(gemini_path)
+        if gemini_content:
+            evidence.append(gemini_filename)
+            project_instruction_summary = extract_first_meaningful_paragraph(gemini_content)
+            break
+
     if os.path.isdir(os.path.join(project_root, "src")):
         evidence.append("src/")
     if os.path.isdir(os.path.join(project_root, "app")):
@@ -2115,18 +2133,22 @@ def infer_brand_context_from_project(project_root):
     frameworks = list(dict.fromkeys(frameworks))
     directory_name = os.path.basename(os.path.abspath(project_root))
     project_name = package_name or directory_name
-    description_blob = " ".join(filter(None, [description, readme_summary, " ".join(keywords)]))
+    description_blob = " ".join(filter(None, [description, readme_summary, project_instruction_summary, " ".join(keywords)]))
     project_type = classify_project_type(description_blob, frameworks, has_project_scripts)
 
     if description:
         mission = description.rstrip(".") + "."
     elif readme_summary:
         mission = readme_summary.rstrip(".") + "."
+    elif project_instruction_summary:
+        mission = project_instruction_summary.rstrip(".") + "."
     else:
         mission = f"{project_name} is an existing {project_type.lower()} repository."
 
     if readme_summary and readme_summary.lower() != mission.lower():
         differentiation = readme_summary.rstrip(".") + "."
+    elif project_instruction_summary and project_instruction_summary.lower() != mission.lower():
+        differentiation = project_instruction_summary.rstrip(".") + "."
     elif description:
         differentiation = description.rstrip(".") + "."
     else:
@@ -2677,7 +2699,7 @@ def run_init_once(project_root, arms_root, full_command, is_yolo, preset_name=""
     agents_list = discover_agents_and_skills(arms_root)
     update_session(project_root, arms_root, skills_list, agents_list, yolo=is_yolo)
     
-    sync_gemini_instructions(arms_root, project_root)
+    sync_engine_instructions(arms_root, project_root)
 
     # Sync AGENTS.md for Copilot CLI
     sync_copilot_instructions(arms_root, project_root)
