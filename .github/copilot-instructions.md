@@ -64,8 +64,15 @@ ARMS operates with a strict separation of global engine logic from project-speci
 - Standardized procedures for CI/CD, code review, issue resolution, deployment
 - Synced to `.arms/workflow/` during `arms init` for project-specific reference
 
-#### 4. **Initialization Pipeline** (`init_arms.py`)
-The main entry point orchestrates:
+#### 4. **Initialization Pipeline** (`cli.py` + support modules)
+The public entry point remains `arms_engine.init_arms:main`, but the implementation is split across focused modules:
+- `cli.py` — CLI parsing, watch mode, and orchestration
+- `brand.py` — brand inference, questionnaires, and structured answer parsing
+- `prompts.py` — context synthesis, generated prompts, and startup task seeding
+- `skills.py` — agent/skill sync and registry generation
+- `session.py` — migrations, version guard, and atomic session updates
+
+The initialization flow orchestrates:
 1. **Folder Setup** – Creates `.arms/`, `.gemini/agents/`, `.agents/skills/`, and supporting report/output directories
 2. **Agent Sync** – Copies agent .md files to `.gemini/agents/` and `.github/agents/` (for Copilot CLI `/agent` discovery)
 3. **Skill Sync** – Copies valid skill directories (with `SKILL.md`) to `.agents/skills/` and regenerates the local skill registry/index
@@ -269,7 +276,7 @@ After significant technical work, ask user approval before updating `MEMORY.md`:
 - Parses agent role and scope from YAML and generates formatted markdown
 
 ### 6. **Package Data Management** (`pyproject.toml`)
-- Included in distribution: `agents/*.md`, `agents.yaml`, `skills/**/*`, `workflow/*`, `GEMINI.md`, `AGENTS.md`
+- Included in distribution: `agents/*.md`, `agents.yaml`, `skills/**/*`, `workflow/*`, `ENGINE.md`, `AGENTS.md`
 - These files are vendored into the installed package so ARMS works offline and from any directory
 
 ### 7. **Naming Conventions**

@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from arms_engine import init_arms
+from arms_engine import session as session_module
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -177,6 +178,45 @@ None
         )
         self.assertEqual(answers["Deployment Target"], "Docker / VPS")
 
+    def test_parse_structured_answers_handles_mixed_formats_and_continuations(self):
+        answers = init_arms.parse_structured_answers(
+            "\n".join(
+                [
+                    "- **Mission:** Build approvals that stay auditable",
+                    "without adding operational drag.",
+                    "11. Preferred tech stack: A",
+                    "Deployment Target: 3",
+                    "Technical Constraints: TypeScript only",
+                    "Tailwind required",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            answers["Mission"],
+            "Build approvals that stay auditable without adding operational drag.",
+        )
+        self.assertEqual(
+            answers["Preferred Tech Stack"],
+            "Next.js + Supabase + shadcn/ui (latest stable)",
+        )
+        self.assertEqual(answers["Deployment Target"], "AWS / GCP")
+        self.assertEqual(
+            answers["Technical Constraints"],
+            "TypeScript only Tailwind required",
+        )
+
+    def test_format_git_describe_version_handles_exact_tags_commits_and_dirty_state(self):
+        self.assertEqual(init_arms.format_git_describe_version("v1.5.0"), "1.5.0")
+        self.assertEqual(
+            init_arms.format_git_describe_version("v1.5.0-3-gabc1234"),
+            "1.5.0.dev3+gabc1234",
+        )
+        self.assertEqual(
+            init_arms.format_git_describe_version("v1.5.0-dirty"),
+            "1.5.0+dirty",
+        )
+
     def test_resolve_stack_recommendation_prefers_astro_for_content_sites(self):
         profile = init_arms.resolve_stack_recommendation(
             {
@@ -196,6 +236,317 @@ None
         self.assertEqual(profile["key"], "astro")
         self.assertEqual(profile["ui_system"], "DaisyUI")
         self.assertTrue(profile["inferred"])
+
+    def test_migrate_legacy_state_handles_move_keep_and_missing_cases(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "move-case"
+            (project_root / ".arms").mkdir(parents=True)
+            legacy_session = project_root / "session.md"
+            legacy_session.write_text("# legacy session\n", encoding="utf-8")
+
+            init_arms.migrate_legacy_state(str(project_root))
+
+            self.assertFalse(legacy_session.exists())
+            self.assertEqual(
+                (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8"),
+                "# legacy session\n",
+            )
+
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "keep-case"
+            (project_root / ".arms").mkdir(parents=True)
+            legacy_session = project_root / "session.md"
+            target_session = project_root / ".arms" / "SESSION.md"
+            legacy_session.write_text("# legacy session\n", encoding="utf-8")
+            target_session.write_text("# existing session\n", encoding="utf-8")
+
+            init_arms.migrate_legacy_state(str(project_root))
+
+            self.assertTrue(legacy_session.exists())
+            self.assertEqual(target_session.read_text(encoding="utf-8"), "# existing session\n")
+
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "missing-case"
+            (project_root / ".arms").mkdir(parents=True)
+
+            init_arms.migrate_legacy_state(str(project_root))
+
+            self.assertFalse((project_root / ".arms" / "SESSION.md").exists())
+
+    def test_brand_file_requires_bootstrap_distinguishes_empty_placeholder_and_complete_briefs(self):
+        self.assertTrue(init_arms.brand_file_requires_bootstrap(""))
+        self.assertTrue(init_arms.brand_file_requires_bootstrap("# Brand Context\n- **Mission:** [Purpose]\n"))
+
+        incomplete_questionnaire = init_arms.render_new_project_brand_questionnaire("/tmp/demo")
+        self.assertTrue(init_arms.brand_file_requires_bootstrap(incomplete_questionnaire))
+
+        complete_brand = """# Brand Context
+- **Project Name:** OrbitOps
+- **Mission:** Help teams automate approvals.
+- **Vision:** Become the operating layer for workflow automation.
+- **Personality:** Technical, trustworthy
+- **Voice & Tone:** Clear and direct
+- **Primary Audience:** Operations teams
+- **Core Values:** Clarity, reliability
+- **Differentiation:** Faster setup than legacy tools
+- **Color Palette:** Slate, indigo, white
+- **Typography:** Geist + Inter
+- **Logo Status:** Existing asset detected
+- **Visual Direction:** Dark
+- **Project Type:** Web Application
+- **Design Priority:** Product clarity
+- **Preferred Tech Stack:** Next.js + Supabase + shadcn/ui (latest stable)
+- **Deployment Target:** Vercel
+- **Backend / Data Layer:** Supabase
+- **Authentication Requirement:** OAuth
+- **Technical Constraints:** TypeScript only
+- **Experience Type:** Marketing site
+- **Industry / Business Niche:** SaaS
+- **Service Area / Local SEO Target:** Worldwide
+- **Required Website Sections:** Header/Nav, Hero, Features, CTA, Footer
+- **Primary Calls to Action:** Start Free
+- **Icon System:** Lucide
+- **Image Requirements:** 5+ images
+- **SEO Focus:** Workflow automation
+"""
+        self.assertFalse(init_arms.brand_file_requires_bootstrap(complete_brand))
+
+    def test_apply_answers_to_brand_content_round_trip_updates_direct_derived_and_note_fields(self):
+        with TemporaryDirectory() as tmp:
+            content = init_arms.render_new_project_brand_questionnaire(tmp)
+            updated_content, summary = init_arms.apply_answers_to_brand_content(
+                content,
+                {
+                    "Project Name": "OrbitOps",
+                    "Mission": "Help operations teams automate approvals.",
+                    "Primary Use Case": "SaaS",
+                    "Brand Comparison": "Like Linear but warmer",
+                    "Existing Brand Assets": "Logo (N) · Color palette (Y)",
+                    "Content / Visual Non-Negotiables": "No emoji",
+                },
+            )
+
+            self.assertIn("- **Project Name:** OrbitOps", updated_content)
+            self.assertIn("- **Mission:** Help operations teams automate approvals.", updated_content)
+            self.assertIn("- **Project Type:** Web Application", updated_content)
+            self.assertIn("- **Differentiation:** Like Linear but warmer", updated_content)
+            self.assertIn("- **Logo Status:** Not yet created", updated_content)
+            self.assertIn("- **Technical Constraints:** No emoji", updated_content)
+            self.assertIn("- Primary Use Case: SaaS", updated_content)
+            self.assertIn("- Brand Comparison: Like Linear but warmer", updated_content)
+            self.assertIn("- Existing Brand Assets: Logo (N) · Color palette (Y)", updated_content)
+            self.assertIn("- Content / Visual Non-Negotiables: No emoji", updated_content)
+            self.assertIn("Project Name", summary["fields"])
+            self.assertIn("Primary Use Case", summary["notes"])
+
+    def test_update_session_preserves_existing_valid_tasks_and_uses_atomic_write(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            (project_root / ".arms" / "BRAND.md").write_text(
+                "# Brand Context\n- **Project Name:** Demo\n",
+                encoding="utf-8",
+            )
+            (project_root / ".arms" / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Existing task | arms-main-agent | arms-orchestrator | None | Pending |
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(session_module, "write_text_atomic", wraps=session_module.write_text_atomic) as atomic_write:
+                updated = init_arms.update_session(
+                    str(project_root),
+                    str(ARMS_ROOT),
+                    "- arms-orchestrator [Active]",
+                    "- arms-main-agent",
+                    startup_tasks_content=(
+                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                        "|---|------|----------------|--------------|--------------|--------|\n"
+                        "| 1 | Seeded task | arms-main-agent | arms-orchestrator | — | Pending |"
+                    ),
+                )
+
+            self.assertTrue(updated)
+            atomic_write.assert_called_once()
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | None | Pending |", session_content)
+            self.assertNotIn("Seeded task", session_content)
+            self.assertIn(f"- Engine Version: {init_arms.__version__}", session_content)
+
+    def test_is_development_engine_requires_dev_or_local_version_marker(self):
+        with mock.patch.object(session_module, "__version__", "1.5.0"):
+            self.assertFalse(init_arms.is_development_engine(str(ARMS_ROOT)))
+
+        with mock.patch.object(session_module, "__version__", "1.5.1.dev2+g123"):
+            self.assertTrue(init_arms.is_development_engine(str(ARMS_ROOT)))
+
+    def test_run_init_once_existing_project_generates_inferred_brand_and_prompts(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                """[project]
+name = "orbitops"
+description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+
+            result = init_arms.run_init_once(
+                str(project_root),
+                str(ARMS_ROOT),
+                "init yolo",
+                True,
+                show_banner=False,
+            )
+
+            brand = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            synthesis = (project_root / ".arms" / "CONTEXT_SYNTHESIS.md").read_text(encoding="utf-8")
+            prompts = (project_root / ".arms" / "GENERATED_PROMPTS.md").read_text(encoding="utf-8")
+
+            self.assertEqual(result["status"], "complete")
+            self.assertIn("- **Project Name:** orbitops", brand)
+            self.assertIn("Automate operational approvals and audit workflows.", brand)
+            self.assertIn("## Project Overview", synthesis)
+            self.assertIn("## Master Build Prompt", prompts)
+
+    def test_run_init_once_normalizes_repo_root_override_to_package_root(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                """[project]
+name = "orbitops"
+description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+
+            result = init_arms.run_init_once(
+                str(project_root),
+                str(REPO_ROOT),
+                "init yolo",
+                True,
+                show_banner=False,
+            )
+
+            self.assertEqual(result["status"], "complete")
+            session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn(f"- ARMS Root: {ARMS_ROOT}", session)
+
+    def test_run_init_once_raises_context_mismatch_until_overwrite_is_confirmed(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            (project_root / ".gemini").mkdir()
+            (project_root / ".arms" / "BRAND.md").write_text(
+                """# Brand Context
+- **Project Name:** Demo
+- **Mission:** Ship useful software.
+- **Vision:** Keep teams aligned.
+- **Personality:** Technical
+- **Voice & Tone:** Clear
+- **Primary Audience:** Developers
+- **Core Values:** Reliability
+- **Differentiation:** Faster orchestration
+- **Color Palette:** Slate
+- **Typography:** Inter
+- **Logo Status:** Pending
+- **Visual Direction:** Dark
+- **Project Type:** Web Application
+- **Design Priority:** Product clarity
+- **Preferred Tech Stack:** Next.js + Supabase + shadcn/ui (latest stable)
+- **Deployment Target:** Vercel
+- **Backend / Data Layer:** Supabase
+- **Authentication Requirement:** OAuth
+- **Technical Constraints:** TypeScript only
+- **Experience Type:** Marketing site
+- **Industry / Business Niche:** SaaS
+- **Service Area / Local SEO Target:** Worldwide
+- **Required Website Sections:** Header/Nav, Hero, Features, CTA, Footer
+- **Primary Calls to Action:** Start Free
+- **Icon System:** Lucide
+- **Image Requirements:** 5+ images
+- **SEO Focus:** Workflow automation
+""",
+                encoding="utf-8",
+            )
+            (project_root / ".arms" / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: /tmp/other-project
+- Project Name: Other
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(init_arms.SessionContextMismatchError):
+                init_arms.run_init_once(
+                    str(project_root),
+                    str(ARMS_ROOT),
+                    "init",
+                    False,
+                    show_banner=False,
+                )
+
+            result = init_arms.run_init_once(
+                str(project_root),
+                str(ARMS_ROOT),
+                "init",
+                False,
+                show_banner=False,
+                context_overwrite=True,
+            )
+
+            self.assertEqual(result["status"], "complete")
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn(f"- Project Root: {project_root}", session_content)
 
     def test_new_project_answers_generate_context_synthesis_prompts_and_seeded_tasks(self):
         with TemporaryDirectory() as tmp:

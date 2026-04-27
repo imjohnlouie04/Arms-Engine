@@ -125,6 +125,21 @@ The package exposes two entry points:
 
 ---
 
+## Internal Module Layout
+
+The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init implementation is now split into focused modules so changes are easier to isolate and test:
+
+| Module | Responsibility |
+|---|---|
+| `arms_engine/cli.py` | CLI argument parsing, watch mode, confirmation prompts, and init orchestration |
+| `arms_engine/brand.py` | Brand inference, questionnaire rendering, structured-answer parsing, and brand updates |
+| `arms_engine/prompts.py` | Context synthesis, generated prompts, and seeded startup tasks |
+| `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, and registry generation |
+| `arms_engine/session.py` | Legacy migration, version guard, task-table normalization, and atomic `SESSION.md` updates |
+| `arms_engine/init_arms.py` | Compatibility shim and stable script entrypoint |
+
+---
+
 ## `arms init` In Detail
 
 `arms init` is the main entry point. Internally it performs these steps in order:
@@ -141,7 +156,7 @@ The package exposes two entry points:
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` from that synthesized brief.
 12. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Explicit agent skill bindings come from `agents.yaml`; unbound discovered skills are auto-attached to the best-matching agent for session visibility.
-13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard.
+13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
 14. Ends in either standard halt mode or YOLO-ready mode.
 
 ### Standard mode
@@ -181,10 +196,10 @@ This currently **acknowledges optimization mode** and prints that the caveman sk
 ### Overriding the engine root
 
 ```bash
-arms init --root /path/to/arms_engine
+arms init --root /path/to/Arms-Engine
 ```
 
-Use this mainly for development or when you want to point a project at a non-default engine location.
+Use this mainly for development or when you want to point a project at a non-default engine location. ARMS accepts either the repository root (for example `Arms-Engine/`) or the package directory itself (`Arms-Engine/arms_engine/`) and normalizes it to the internal package root before syncing files or recording the path in `.arms/SESSION.md`.
 
 ### Allowing an intentional downgrade
 
@@ -193,6 +208,8 @@ arms init --allow-engine-downgrade
 ```
 
 ARMS now records the engine version in `.arms/SESSION.md`. If a project was last synced by a newer engine and you run `arms init` from an older install, init stops and tells you to upgrade instead of silently downgrading project state.
+
+When ARMS is running directly from a git checkout, the recorded version is derived from the current git tag/describe output instead of relying only on a generated `_version.py`, so tagged updates display the expected release version in local development too.
 
 Use `--allow-engine-downgrade` only when you intentionally want an older engine to re-sync the project.
 
@@ -419,6 +436,10 @@ ARMS is intentionally **non-destructive** when you re-run `arms init`.
 
 If a project already has `GEMINI.md` at the root or `.gemini/GEMINI.md`, ARMS treats it as **project-owned** documentation. It is preserved as-is and can be read as repository context during brand and project inference, but it is not used as the engine-managed instruction target.
 
+### Why the engine source file is `ENGINE.md`
+
+The engine package now ships its managed instruction source as `arms_engine/ENGINE.md`. During `arms init`, ARMS deploys that engine-owned file into the project workspace as `.arms/ENGINE.md`, while any project-owned `GEMINI.md` remains separate and untouched.
+
 ### Task table normalization
 
 If ARMS finds an older `SESSION.md` task table shape, it upgrades it to the current schema:
@@ -434,7 +455,7 @@ When a new project finishes intake and the active task table is still empty, ARM
 
 ### Context mismatch protection
 
-If an existing session file points to a different project root, ARMS warns before overwriting the session context. In YOLO mode, that confirmation is auto-accepted.
+If an existing session file points to a different project root, ARMS now raises that decision to the CLI layer instead of prompting from deep inside session-writing logic. Interactive runs warn before overwriting the session context, non-interactive runs refuse to overwrite automatically, and YOLO mode still auto-accepts.
 
 ### Legacy migration
 

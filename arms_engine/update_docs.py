@@ -2,10 +2,10 @@ import os
 import re
 import argparse
 
-try:
-    from ._version import version as __version__
-except (ImportError, ValueError):
-    __version__ = "1.3.5-dev"
+from .versioning import resolve_version
+
+
+__version__ = resolve_version(os.path.dirname(os.path.abspath(__file__)))
 
 def get_arms_root():
     return os.path.dirname(os.path.abspath(__file__))

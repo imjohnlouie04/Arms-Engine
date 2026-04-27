@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+# Keep the historical entrypoint stable; init_arms.py is now a thin compatibility shim over the split init modules.
 arms = "arms_engine.init_arms:main"
 arms-docs = "arms_engine.update_docs:main"
 
@@ -24,7 +25,8 @@ arms-docs = "arms_engine.update_docs:main"
 packages = ["arms_engine"]
 
 [tool.setuptools.package-data]
-arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "GEMINI.md", "AGENTS.md"]
+# Ship the engine-owned source instructions as ENGINE.md; arms init deploys this file into projects as .arms/ENGINE.md.
+arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "ENGINE.md", "AGENTS.md"]
 
 [tool.setuptools_scm]
 write_to = "arms_engine/_version.py"
