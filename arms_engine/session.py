@@ -5,6 +5,7 @@ import shutil
 import tempfile
 
 from . import __version__
+from .brand import infer_brand_context_from_project
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
 
 
@@ -440,7 +441,12 @@ def compare_versions(left, right):
 def is_development_engine(arms_root):
     _ = arms_root
     version_text = (__version__ or "").lower()
-    return "dev" in version_text or "+" in version_text
+    return (
+        "dev" in version_text
+        or "+" in version_text
+        or version_text.startswith("0.0.0")
+        or bool(re.fullmatch(r"[0-9a-f]{7,}", version_text))
+    )
 
 
 def enforce_engine_version_guard(project_root, arms_root, allow_engine_downgrade=False):
@@ -549,8 +555,8 @@ def read_existing_session_context(session_path):
     return existing_content, existing_root, existing_name
 
 
-def extract_current_project_name(project_root):
-    current_name = "Unknown"
+def extract_current_project_name(project_root, existing_name=""):
+    current_name = ""
     brand_path = os.path.join(project_root, ".arms/BRAND.md")
     if os.path.exists(brand_path):
         with open(brand_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -558,7 +564,24 @@ def extract_current_project_name(project_root):
         name_match = re.search(r"- \*\*Project Name:\*\* (.*)", brand_content)
         if name_match:
             current_name = name_match.group(1).strip().strip("[]")
-    return current_name
+
+    if current_name and current_name.lower() not in {"unknown", "tbd"}:
+        return current_name
+
+    preserved_name = (existing_name or "").strip()
+    if preserved_name and preserved_name.lower() not in {"unknown", "tbd"}:
+        return preserved_name
+
+    inferred_name = ""
+    try:
+        inferred_name = (infer_brand_context_from_project(project_root).get("project_name") or "").strip()
+    except Exception:
+        inferred_name = ""
+    if inferred_name and inferred_name.lower() not in {"unknown", "tbd"}:
+        return inferred_name
+
+    directory_name = os.path.basename(os.path.abspath(project_root)).strip()
+    return directory_name or "Project"
 
 
 def update_session(project_root, arms_root, skills_list, agents_list, yolo=False, startup_tasks_content="", context_overwrite=None):
@@ -566,7 +589,7 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
     session_path = os.path.join(project_root, ".arms/SESSION.md")
 
     existing_content, existing_root, existing_name = read_existing_session_context(session_path)
-    current_name = extract_current_project_name(project_root)
+    current_name = extract_current_project_name(project_root, existing_name=existing_name or "")
 
     if existing_root and os.path.abspath(existing_root) != os.path.abspath(project_root):
         print(f"⚠️  Context Mismatch: Session file points to '{existing_root}'")

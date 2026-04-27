@@ -10,7 +10,9 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from arms_engine import init_arms
+from arms_engine import cli as cli_module
 from arms_engine import session as session_module
+from arms_engine import versioning as versioning_module
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +219,17 @@ None
             "1.5.0+dirty",
         )
 
+    def test_format_git_describe_version_handles_bare_commit_hash(self):
+        result = versioning_module.format_git_describe_version("abc1234")
+        self.assertEqual(result, "0.0.0.dev0+gabc1234")
+
+    def test_read_version_file_reads_generated_module_without_package_import(self):
+        with TemporaryDirectory() as tmp:
+            version_file = Path(tmp) / "_version.py"
+            version_file.write_text("__version__ = version = '9.9.9'\n", encoding="utf-8")
+
+            self.assertEqual(versioning_module._read_version_file(tmp), "9.9.9")
+
     def test_resolve_stack_recommendation_prefers_astro_for_content_sites(self):
         profile = init_arms.resolve_stack_recommendation(
             {
@@ -399,11 +412,83 @@ None
             self.assertNotIn("Seeded task", session_content)
             self.assertIn(f"- Engine Version: {init_arms.__version__}", session_content)
 
+    def test_update_session_falls_back_to_existing_session_name_when_brand_name_is_missing(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            (project_root / ".arms" / "BRAND.md").write_text(
+                "# Brand Context\n- **Mission:** Ship useful software\n",
+                encoding="utf-8",
+            )
+            (project_root / ".arms" / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Preserved Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+            )
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("- Project Name: Preserved Demo", session_content)
+
+    def test_update_session_infers_project_name_when_brand_is_missing(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "discipleship-community"
+            project_root.mkdir()
+            (project_root / ".arms").mkdir()
+            (project_root / "package.json").write_text(
+                '{"name":"discipleship-community","description":"A community platform."}',
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+            )
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("- Project Name: discipleship-community", session_content)
+
     def test_is_development_engine_requires_dev_or_local_version_marker(self):
         with mock.patch.object(session_module, "__version__", "1.5.0"):
             self.assertFalse(init_arms.is_development_engine(str(ARMS_ROOT)))
 
         with mock.patch.object(session_module, "__version__", "1.5.1.dev2+g123"):
+            self.assertTrue(init_arms.is_development_engine(str(ARMS_ROOT)))
+
+        with mock.patch.object(session_module, "__version__", "abc1234"):
             self.assertTrue(init_arms.is_development_engine(str(ARMS_ROOT)))
 
     def test_run_init_once_existing_project_generates_inferred_brand_and_prompts(self):
@@ -547,6 +632,23 @@ None
             self.assertEqual(result["status"], "complete")
             session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
             self.assertIn(f"- Project Root: {project_root}", session_content)
+
+    def test_run_init_once_warns_when_version_resolution_falls_back(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            stdout = io.StringIO()
+            with mock.patch.object(cli_module, "__version__", "0.0.0-dev"), mock.patch.object(
+                session_module, "__version__", "0.0.0-dev"
+            ), redirect_stdout(stdout):
+                init_arms.run_init_once(
+                    str(project_root),
+                    str(ARMS_ROOT),
+                    "init",
+                    False,
+                    show_banner=True,
+                )
+
+            self.assertIn("Could not resolve engine version", stdout.getvalue())
 
     def test_new_project_answers_generate_context_synthesis_prompts_and_seeded_tasks(self):
         with TemporaryDirectory() as tmp:

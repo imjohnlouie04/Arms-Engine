@@ -38,6 +38,7 @@ from .skills import (
     sync_skills_copilot,
     sync_workflow,
 )
+from .versioning import is_unresolved_version
 
 
 WATCH_POLL_INTERVAL_SECONDS = 2.0
@@ -178,6 +179,9 @@ def run_init_once(
         print("🚀 Initializing ARMS Engine...")
         print(f"📂 Project: {project_root}")
         print(f"🛡️  Engine:  {arms_root}")
+        if is_unresolved_version(__version__):
+            print("⚠️  Warning: Could not resolve engine version (git, _version.py, and metadata all failed).")
+            print(f"   Falling back to: {__version__}")
         if is_yolo:
             print("⚡ Mode:    YOLO (Full Automation)")
 
