@@ -61,9 +61,10 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
-- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
-- Gemini AI config: `./.gemini/` (GEMINI.md, MEMORY.md, RULES.md)
-- Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
+- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md, ENGINE.md)
+- Project-owned Gemini instructions may live at `./GEMINI.md` or `./.gemini/GEMINI.md` and must be preserved if present
+- Mirrored assistant assets: `./.gemini/`
+- Local mirrored assets: `./.gemini/agents/` and `./.arms/workflow/` (mirrored for assistant and CLI context)
 
 ---
 
@@ -78,11 +79,11 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
 ```
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
-3. Create ./.gemini/agent-outputs/ and ./.gemini/reports/ directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist
+3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md` or `.gemini/GEMINI.md`.
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
 6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
-7. Scaffold `.arms/SESSION.md` and `.gemini/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
+7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
    - Existing project with missing or placeholder brand file: inspect repository signals and auto-generate a first-pass `BRAND.md`
    - New / empty project with missing brand file: create a question-driven `BRAND.md` that must be completed from user answers
 8. Detect execution mode → write to .arms/SESSION.md under ## Execution Mode
@@ -92,6 +93,21 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
    - **Persistence:** Update `SESSION.md` under `## Active Skills`. Never delete the roster during a task update.
 ```
+
+### Initialization Continuation Rule
+
+If initialization HALTS to collect Brand Context and initial tech stack answers for a new / empty project, the **next user reply containing those answers is not a fresh request**. It is the continuation signal for the same `init` flow.
+
+Resume from that point in this order:
+1. Update `.arms/BRAND.md` from the user's answers
+2. Generate `.arms/CONTEXT_SYNTHESIS.md` from the approved brand + stack answers
+3. Generate `.arms/GENERATED_PROMPTS.md` from that synthesis and refresh the startup recommendations
+4. Recommend one primary latest-stable tech stack and deployment target, with alternatives noted
+5. Update `.arms/ENGINE.md` with the chosen or proposed engine-side architecture direction
+6. Ensure the Strategic Task Table in `.arms/SESSION.md` is seeded or updated to reflect the startup path
+7. HALT only at the normal Planning Gate for task-table approval
+
+Do not ask the same Brand Context questions again unless the user's reply is incomplete or contradictory.
 
 ### SESSION.md Bootstrap Template
 
@@ -148,7 +164,7 @@ If the workspace is an existing project and `.arms/BRAND.md` is missing or still
 - mark anything not evidenced in the repo as `TBD`
 - include a note that the file was auto-generated and must be reviewed
 
-If the workspace is a new/empty project, create a question-driven brand brief instead of pretending the answers are known:
+If the workspace is a new/empty project, create a question-driven brand brief and surface the questions immediately in the CLI response instead of pretending the answers are known:
 
 # Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
@@ -189,13 +205,17 @@ If the workspace is a new/empty project, create a question-driven brand brief in
 - What makes it meaningfully different from alternatives?
 - Do you already have a logo, color palette, typography, or an existing site?
 - Should the visual direction default to light, dark, system, or something else?
+
+The initialization flow must then HALT and wait for the user's Brand Context answers.
+
+Immediately after Brand Context for a new/empty project, the CLI must also ask for the initial tech stack choice, deployment target, auth direction, and hard technical constraints before moving into MVP and architecture recommendations.
 ```
 
-**CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.gemini/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
+**CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
-Root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Once managed files exist in `./.arms/` or `./.gemini/`, do not read those root-level legacy files as current session authority during init orchestration.
+Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. A project-owned `GEMINI.md` may live at the root or at `./.gemini/GEMINI.md`: preserve it, read it when it helps explain the project, and do not overwrite it during `arms init`.
 
-When updating `.arms/SESSION.md`, preserve the full `## Environment` block, including:
+When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
 - `ARMS Root`
 - `Engine Version`
 - `Project Root`
@@ -203,7 +223,7 @@ When updating `.arms/SESSION.md`, preserve the full `## Environment` block, incl
 - `Execution Mode`
 - `YOLO Mode`
 
-Do not remove `Engine Version` during task-table, blocker, or status updates.
+Do not remove `Engine Version` during task-table or blocker updates.
 
 
 ---
@@ -216,7 +236,7 @@ Do not remove `Engine Version` during task-table, blocker, or status updates.
 [Speaking Agent]: <agent-name>
 [Active Skill]:   <skill folder name if SKILL.md was read, else "None">
 
-[State Updates]: <What was written to .arms/SESSION.md or .gemini/MEMORY.md? If nothing → "None">
+[State Updates]: <What was written to .arms/SESSION.md or .arms/MEMORY.md? If nothing -> "None">
 
 [Action / Code]: <Task execution, code generation, or task table>
 
@@ -228,7 +248,7 @@ Do not remove `Engine Version` during task-table, blocker, or status updates.
 ## Agent Roster
 
 > **Canonical source:** `$ARMS_ROOT/agents.yaml`
-> The roster below is a quick-reference summary. Authoritative role definitions, scoped rules, and skill bindings live in `agents.yaml`. If this summary and `agents.yaml` conflict, **`agents.yaml` wins**.
+> The roster below is a quick-reference summary. Authoritative role definitions and scoped rules live in `agents.yaml`. Explicit skill bindings in `agents.yaml` win, but `arms init` may infer bindings for newly discovered unbound skills when building the session roster.
 
 ```yaml
 arms-main-agent:     Session orchestrator. Owns SESSION.md, coordinates handoffs, enforces gates.
@@ -242,7 +262,7 @@ arms-qa-agent:       Unit + E2E tests, pre-flight validation.
 arms-security-agent: OWASP, auth validation, token security, dependency audits.
 ```
 
-On session start, `arms-main-agent` MUST read `$ARMS_ROOT/agents.yaml` to load the full agent definitions, including per-agent `rules` and `skills` bindings.
+On session start, `arms-main-agent` MUST read `$ARMS_ROOT/agents.yaml` to load the full agent definitions, including per-agent `rules` and explicit `skills` bindings. If a discovered skill is still unbound, init may attach it to the best-matching agent for the session roster without rewriting `agents.yaml`.
 
 ---
 
@@ -281,6 +301,10 @@ Pending → In Progress → Pre-Flight → Done
 ### Rules
 
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
+- **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` first; if none are declared there, use the skill already inferred into `.arms/SESSION.md` for that agent.
+- If an agent has exactly one available skill, use it automatically.
+- If an agent has multiple available skills, pick the most relevant skill for the task being delegated.
+- Use `—` only when that agent truly has no bound or inferred skill.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -363,7 +387,7 @@ arms-main-agent
   └─▶ Delegate to subagent (+ skill context if applicable)
 
     subagent
-      └─▶ Read SKILL.md from $ARMS_ROOT/arms_engine/skills/ if task falls within skill domain
+      └─▶ Read SKILL.md from .agents/skills/<skill-name>/SKILL.md if task falls within skill domain
       └─▶ Execute with strict response template
       └─▶ Report back to arms-main-agent (output + status recommendation)
 
@@ -399,10 +423,10 @@ Spawn all independent agents **in the same turn**. Never spawn with-skill runs f
 **Spawn template per agent:**
 ```
 Execute this task as <agent-name>:
-- Skill path: $ARMS_ROOT/skills/<skill-folder>/SKILL.md (read before executing)
+- Skill path: .agents/skills/<skill-folder>/SKILL.md (read before executing)
 - Task: <specific task from task table>
 - Session context: <paste relevant SESSION.md + MEMORY.md excerpt>
-- Save outputs to: ./.gemini/agent-outputs/<agent-name>/
+- Save outputs to: ./.arms/agent-outputs/<agent-name>/
 - Report back: output summary + any blockers
 ```
 
@@ -484,7 +508,7 @@ Round 2 — Aggregation (arms-main-agent synthesizes Round 1 outputs):
 
 ### Shared Rules (Both Modes)
 
-- **Persistence Mandate:** Environmental metadata (`## Environment`, including `Engine Version`, and `## Active Skills` in `SESSION.md`) and the entire content of `MEMORY.md` MUST be preserved during every update. **Never overwrite or discard existing project memory.** `MEMORY.md` is a continuous learning file; agents must append to it or update specific sections, but NEVER replace the entire file with a template.
+- **Persistence Mandate:** Environmental metadata (`## Environment` and `## Active Skills` in `SESSION.md`) and the entire content of `MEMORY.md` MUST be preserved during every update. **Never overwrite or discard existing project memory.** `MEMORY.md` is a continuous learning file; agents must append to it or update specific sections, but NEVER replace the entire file with a template.
 - Every agent call receives: its role definition + relevant SKILL.md content + current SESSION.md + MEMORY.md
 - Every agent response must use the strict response template — malformed responses are re-queued, not silently accepted
 - `arms-main-agent` owns aggregation — subagents never write directly to SESSION.md; they return structured output and the orchestrator writes
@@ -601,9 +625,9 @@ git add . && git commit -m "chore: checkpoint before [Task Name]"
 
 After significant technical work, `arms-main-agent` must ask:
 
-> "May I update `.gemini/MEMORY.md` with this bug fix / preference / architectural decision?" → **HALT**
+> "May I update `.arms/MEMORY.md` with this bug fix / preference / architectural decision?" -> **HALT**
 
-- All agents read `.gemini/MEMORY.md` at session start.
+- All agents read `.arms/MEMORY.md` at session start.
 - Adapt based on past decisions; never repeat known mistakes.
 
 ### Archival Criteria
@@ -662,19 +686,85 @@ The `.arms/SESSION_ARCHIVE.md` file is the **ultimate record of truth** for comp
 
 ---
 
-## `./.gemini/` Configuration Files
+## Workspace State and Configuration Files
 
-### `GEMINI.md`
-Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `BRAND.md` for all design decisions.
-
-### `RULES.md`
-Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
-
-### `MEMORY.md`
+### `./.arms/MEMORY.md`
 Initialized with the Bootstrap Template (see Session Bootstrap section). Persistent across sessions.
 
-### `SESSION.md`
+### `./.arms/SESSION.md`
 Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and completed work. Subject to archival criteria defined in Memory Management.
+
+### `./.arms/ENGINE.md`
+ARMS engine instructions for the workspace: architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local workflow, and references to `BRAND.md` for engine orchestration.
+
+### `./GEMINI.md`
+Optional project-owned instructions. If present, treat it as repository context and preserve it verbatim; do not overwrite it during `arms init`.
+
+### `./.arms/RULES.md`
+Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
+
+---
+
+## Media & Design Pipeline
+
+After brand context is confirmed (`.arms/BRAND.md` approved by user), `arms-main-agent` MUST trigger the following skill sequence **before** generating the Strategic Task Table. This ensures the project has real visual assets — not placeholders — from the very first task.
+
+### Trigger Condition
+
+Activate this pipeline when ALL of the following are true:
+- `.arms/BRAND.md` is populated and approved (not placeholder TBDs)
+- The project is new OR the Logo Status field is `Not yet created` / `TBD`
+- The chosen tech stack is [A], [B], or [C] (a structured framework project)
+
+### Pipeline Sequence
+
+```
+Step 1 — Logo Generation (arms-media-agent → logo-design skill)
+  Read: .agents/skills/logo-designer/SKILL.md
+  Input: Project name, brand personality, visual direction, color palette from BRAND.md
+  Action: Run Phase 1–7 of the logo-design skill
+  Output: HD PNG logo saved to ./.arms/agent-outputs/arms-media-agent/logo-<project-name>.png
+  → Confirm logo with user before proceeding → HALT
+
+Step 2 — Hero & UI Asset Generation (arms-media-agent → nano-banana-pro skill)
+  Read: .agents/skills/nano-banana-pro/SKILL.md
+  Input: Approved logo, brand palette, visual direction, project type from BRAND.md
+  Action: Generate at least five production-ready images for the landing page or app surface, including hero/supporting imagery plus showcase visuals that represent the project's best work or strongest outcomes
+  Output: Assets saved to ./.arms/agent-outputs/arms-media-agent/ with descriptive filenames
+  → Present generated assets and confirm before proceeding → HALT
+
+Step 3 — Frontend Design System Scaffold (arms-frontend-agent → frontend-design skill)
+  Read: .agents/skills/frontend-design/SKILL.md
+  Input: Approved logo, approved hero/UI assets, BRAND.md visual identity, chosen tech stack
+  Action: Define aesthetic direction, design tokens (colors, typography, spacing), and
+          produce the initial landing page or app shell component using the generated assets
+  Output: Code scaffold saved to the project's primary source directory
+  → Present design scaffold for approval → HALT
+```
+
+### Rules
+
+- **Never skip this pipeline** for new projects with an unresolved Logo Status.
+- **Assets are inputs to code** — nano-banana-pro runs before frontend-design, never after.
+- **Logo is the anchor** — all downstream design decisions (color palette, typography weight,
+  spatial mood) must be consistent with the approved logo.
+- **YOLO mode:** All three steps execute sequentially without individual HALTs. The user
+  sees a single aggregated output at the end. Log all auto-accepted actions in SESSION.md
+  with `[YOLO Auto-Accepted]`.
+- **Existing projects:** If a logo already exists (Logo Status = `Existing asset detected`),
+  skip Step 1. Use the existing logo as a `--reference` input for Step 2.
+
+### Skill Paths (synced by `arms init` to `.agents/skills/`)
+
+> These paths are resolved from the local project's `.agents/skills/` directory, which is
+> automatically populated by `arms init`. Both Gemini CLI and Copilot CLI discover skills
+> from this folder without any additional configuration.
+
+| Skill | Path | Agent |
+|---|---|---|
+| logo-design | `.agents/skills/logo-designer/SKILL.md` | arms-media-agent |
+| nano-banana-pro | `.agents/skills/nano-banana-pro/SKILL.md` | arms-media-agent |
+| frontend-design | `.agents/skills/frontend-design/SKILL.md` | arms-frontend-agent |
 
 ---
 
@@ -682,9 +772,9 @@ Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and co
 
 | Option | Stack | Deployment |
 |---|---|---|
-| **[A]** | Next.js + Supabase + shadcn | **[1]** Vercel |
-| **[B]** | Nuxt 4 + Firebase + Nuxt UI | **[2]** Docker / VPS |
-| **[C]** | Astro + DaisyUI | **[3]** AWS / GCP |
+| **[A]** | Next.js + Supabase + shadcn/ui (latest stable) | **[1]** Vercel |
+| **[B]** | Nuxt + Firebase + Nuxt UI (latest stable) | **[2]** Docker / VPS |
+| **[C]** | Astro + Tailwind CSS + DaisyUI (latest stable) | **[3]** AWS / GCP |
 | **[D]** | Custom | — |
 
 When recommending a stack, provide ONE primary recommendation with full justification and list all viable alternatives.
@@ -715,6 +805,9 @@ All reference files live in `references/`. Load only when the task requires it �
 | `git-workflow.md` | Commits, branching, PRs, release tagging, hotfix flow, `.gitignore` validation |
 | `error-recovery-playbook.md` | Any agent failure, partial pipeline failure, deploy rollback, state recovery |
 | `performance-seo-checklist.md` | `run review` SEO pass, Core Web Vitals, meta tags, schema markup, sitemap |
+| `.agents/skills/logo-designer/SKILL.md` | Generating project logos — read by arms-media-agent during the Media & Design Pipeline |
+| `.agents/skills/nano-banana-pro/SKILL.md` | Generating hero images and UI assets — read by arms-media-agent after logo is approved |
+| `.agents/skills/frontend-design/SKILL.md` | Scaffolding UI with generated assets — read by arms-frontend-agent as Step 3 of the Media & Design Pipeline |
 
 ---
 

@@ -71,7 +71,7 @@ Scan:
 3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md` under `## Active Skills`.
 4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
 5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
-6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. During `arms init`, use them only to migrate state into `./.arms/` or `./.gemini/`; do not treat them as the live session source of truth once the managed folders exist.
+6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. A project-owned `GEMINI.md` may live at the root or at `./.gemini/GEMINI.md`: preserve it, read it when it helps explain the project, and do not overwrite it during `arms init`.
 
 ### Step 4: Execute Initialization Flow
 
@@ -80,8 +80,9 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 ### Step 5: Enforce Workspace Isolation
 
 - All global logic is read from `$ARMS_ROOT/arms_engine/`
-- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, MEMORY.md, ARCHIVE)
-- Gemini AI config is written to `./.gemini/` (GEMINI.md, RULES.md)
+- ARMS project state is written to `./.arms/` (SESSION.md, BRAND.md, MEMORY.md, RULES.md, ENGINE.md, ARCHIVE)
+- Project-owned Gemini instructions may live at `./GEMINI.md` or `./.gemini/GEMINI.md` and must be preserved if already present
+- Mirrored assistant assets are written to `./.gemini/`
 - Agent definitions for Copilot CLI are synced to `./.github/agents/`
 - Never write project state to `$ARMS_ROOT/`
 - Never read session state from anywhere other than `./.arms/`

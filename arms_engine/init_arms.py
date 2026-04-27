@@ -114,6 +114,11 @@ GENERATED_PROMPTS_HEADER = """# ARMS Generated Prompts
 > Managed by ARMS Engine. Regenerated from `.arms/BRAND.md` during `arms init`.
 > Update the brand brief and re-run `arms init` to refresh these prompts.
 """
+CONTEXT_SYNTHESIS_HEADER = """# ARMS Context Synthesis
+
+> Managed by ARMS Engine. Regenerated from `.arms/BRAND.md` during `arms init`.
+> This file condenses the approved brand and stack answers into an AI-ready project brief.
+"""
 WATCH_POLL_INTERVAL_SECONDS = 2.0
 CURRENT_PROJECT_ROOT_MARKERS = (".git", ".arms", ".gemini", "package.json")
 LEGACY_PROJECT_ROOT_STRONG_MARKERS = (
@@ -512,6 +517,20 @@ def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catal
             normalized.append(normalize_row(line))
 
     return "\n".join(normalized)
+
+def active_tasks_table_has_rows(content):
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 6:
+            continue
+        first_cell = cells[0].replace(" ", "")
+        if cells[0] == "#" or set(first_cell) <= {"-"}:
+            continue
+        return True
+    return False
 
 def sync_agents(arms_root, project_root):
     print("🤖 Syncing Agents...")
@@ -1108,9 +1127,9 @@ NEW_PROJECT_BRAND_QUESTIONS = [
 
 NEW_PROJECT_TECH_STACK_QUESTIONS = [
     "11. Preferred tech stack:",
-    "    [A] Next.js + Supabase + shadcn (Latest)",
-    "    [B] Nuxt 4 + Firebase + Nuxt UI (Latest)",
-    "    [C] Astro + DaisyUI (Latest)",
+    "    [A] Next.js + Supabase + shadcn/ui (latest stable)",
+    "    [B] Nuxt + Firebase + Nuxt UI (latest stable)",
+    "    [C] Astro + Tailwind CSS + DaisyUI (latest stable)",
     "    [D] Custom",
     "12. Preferred deployment target:",
     "    [1] Vercel",
@@ -1265,6 +1284,65 @@ PROJECT_PRESETS = {
     },
 }
 
+QUESTION_VALUE_ALIASES = {
+    "Preferred Tech Stack": {
+        "a": "Next.js + Supabase + shadcn/ui (latest stable)",
+        "b": "Nuxt + Firebase + Nuxt UI (latest stable)",
+        "c": "Astro + Tailwind CSS + DaisyUI (latest stable)",
+        "d": "Custom",
+    },
+    "Deployment Target": {
+        "1": "Vercel",
+        "2": "Docker / VPS",
+        "3": "AWS / GCP",
+    },
+}
+
+STACK_RECOMMENDATIONS = {
+    "nextjs": {
+        "label": "Next.js + Supabase + shadcn/ui",
+        "framework": "Next.js (latest stable)",
+        "ui_system": "shadcn/ui",
+        "default_data_layer": "Supabase",
+        "default_deployment": "Vercel",
+        "default_auth": "Email/password or OAuth via Supabase Auth",
+        "default_icon_system": "lucide-react",
+        "best_for": "SaaS products, dashboards, ecommerce, and authenticated application flows",
+        "reason": (
+            "Best default for modern full-stack products that need strong application UI primitives, "
+            "flexible rendering, and a fast path from landing page to product surface."
+        ),
+    },
+    "nuxt": {
+        "label": "Nuxt + Firebase + Nuxt UI",
+        "framework": "Nuxt (latest stable)",
+        "ui_system": "Nuxt UI",
+        "default_data_layer": "Firebase",
+        "default_deployment": "AWS / GCP",
+        "default_auth": "OAuth, email/password, or magic link via Firebase Auth",
+        "default_icon_system": "Nuxt Icon",
+        "best_for": "mobile-first experiences, content-plus-app hybrids, and teams that prefer the Nuxt ecosystem",
+        "reason": (
+            "Strong fit for teams that want Vue/Nuxt ergonomics, a polished first-party UI system, "
+            "and a backend that scales quickly with managed services."
+        ),
+    },
+    "astro": {
+        "label": "Astro + Tailwind CSS + DaisyUI",
+        "framework": "Astro (latest stable)",
+        "ui_system": "DaisyUI",
+        "default_data_layer": "Astro content collections or a lightweight CMS/API",
+        "default_deployment": "Vercel",
+        "default_auth": "None by default unless the product needs gated content",
+        "default_icon_system": "Font Awesome",
+        "best_for": "marketing sites, local-service websites, editorial experiences, and portfolio projects",
+        "reason": (
+            "Best recommendation for content-heavy or marketing-led builds where performance, clarity, "
+            "and fast static delivery matter more than complex application state."
+        ),
+    },
+}
+
 def read_text_file(path, max_chars=40000):
     if not os.path.exists(path):
         return ""
@@ -1311,6 +1389,21 @@ def build_answer_field_aliases():
         }
     )
     return aliases
+
+def normalize_structured_answer(field_name, value):
+    normalized_value = " ".join(value.split()).strip()
+    if not normalized_value:
+        return normalized_value
+
+    aliases = QUESTION_VALUE_ALIASES.get(field_name, {})
+    lowered = re.sub(r"^option\s+", "", normalized_value.lower()).strip()
+    choice_match = re.match(r"^\[?([a-z0-9])\]?(?:\s*(?:[-:.)]|$).*)?$", lowered)
+    if choice_match:
+        choice_key = choice_match.group(1)
+        if choice_key in aliases:
+            return aliases[choice_key]
+
+    return normalized_value
 
 def update_brand_field(content, field_name, value, overwrite=False):
     pattern = rf"(?m)^- \*\*{re.escape(field_name)}:\*\* .*$"
@@ -1395,6 +1488,363 @@ def infer_build_surface(context):
         return "landing page"
     return "initial product experience"
 
+def infer_explicit_stack_key(value):
+    normalized = value.strip().lower()
+    if not normalized:
+        return ""
+    if "next" in normalized or "shadcn" in normalized:
+        return "nextjs"
+    if "nuxt" in normalized:
+        return "nuxt"
+    if "astro" in normalized or "daisyui" in normalized:
+        return "astro"
+    return ""
+
+def infer_stack_recommendation_key(context):
+    preferred_stack = context.get("Preferred Tech Stack", "")
+    explicit_key = infer_explicit_stack_key(preferred_stack)
+    if explicit_key and "custom" not in preferred_stack.lower():
+        return explicit_key, False
+
+    combined = " ".join(
+        [
+            context.get("Primary Use Case", ""),
+            context.get("Project Type", ""),
+            context.get("Experience Type", ""),
+            context.get("Technical Constraints", ""),
+            context.get("Required Website Sections", ""),
+            context.get("SEO Focus", ""),
+            context.get("Backend / Data Layer", ""),
+        ]
+    ).lower()
+
+    if any(token in combined for token in ("nuxt", "vue", "firebase", "mobile-first", "mobile first")):
+        return "nuxt", True
+    if any(
+        token in combined
+        for token in (
+            "content",
+            "marketing",
+            "editorial",
+            "portfolio",
+            "local service",
+            "local-service",
+            "seo",
+            "blog",
+            "newsletter",
+        )
+    ):
+        return "astro", True
+    return "nextjs", True
+
+def resolve_stack_recommendation(context):
+    stack_key, inferred = infer_stack_recommendation_key(context)
+    profile = dict(STACK_RECOMMENDATIONS[stack_key])
+    requested_stack = context.get("Preferred Tech Stack", "").strip()
+    deployment_target = normalize_brand_value(
+        context.get("Deployment Target", ""),
+        profile["default_deployment"],
+    )
+    data_layer = normalize_brand_value(
+        context.get("Backend / Data Layer", ""),
+        profile["default_data_layer"],
+    )
+    auth_requirement = normalize_brand_value(
+        context.get("Authentication Requirement", ""),
+        profile["default_auth"],
+    )
+
+    if requested_stack and not brand_field_is_unanswered(requested_stack) and not inferred:
+        source = "User-selected stack"
+        selection_note = (
+            f"Requested stack aligns with the current ARMS recommendation: {profile['label']} using "
+            f"{profile['framework']} and {profile['ui_system']}."
+        )
+    else:
+        requested_label = requested_stack if requested_stack else "Not specified"
+        source = "ARMS recommendation"
+        selection_note = (
+            f"Requested stack was {requested_label}, so ARMS recommends {profile['label']} for this project type."
+        )
+
+    profile.update(
+        {
+            "key": stack_key,
+            "requested_stack": requested_stack or "Not specified",
+            "deployment_target": deployment_target,
+            "data_layer": data_layer,
+            "auth_requirement": auth_requirement,
+            "summary": f"{profile['framework']} + {data_layer} + {profile['ui_system']}",
+            "source": source,
+            "selection_note": selection_note,
+            "inferred": inferred,
+        }
+    )
+    return profile
+
+def project_needs_backend_foundation(context, stack_profile):
+    auth_requirement = context.get("Authentication Requirement", "")
+    if auth_requirement and not brand_field_is_unanswered(auth_requirement) and not brand_field_is_not_applicable(auth_requirement):
+        if "none" not in auth_requirement.lower():
+            return True
+
+    combined = " ".join(
+        [
+            context.get("Primary Use Case", ""),
+            context.get("Project Type", ""),
+            context.get("Experience Type", ""),
+            context.get("Core Features", ""),
+        ]
+    ).lower()
+    if any(
+        token in combined
+        for token in (
+            "saas",
+            "app",
+            "dashboard",
+            "workspace",
+            "portal",
+            "ecommerce",
+            "mobile-first",
+            "mobile first",
+        )
+    ):
+        return True
+
+    return stack_profile["key"] in {"nextjs", "nuxt"} and not any(
+        token in combined for token in ("marketing", "editorial", "portfolio", "local service")
+    )
+
+def render_markdown_bullets(items, empty_message):
+    if not items:
+        return f"- {empty_message}"
+    return "\n".join(f"- {item}" for item in items)
+
+def build_startup_tasks(data):
+    rows = []
+
+    def add(task, agent, dependencies="—"):
+        rows.append(
+            {
+                "task": task,
+                "agent": agent,
+                "dependencies": dependencies,
+            }
+        )
+
+    add("Create a concise product charter, scope summary, and success metrics", "arms-product-agent")
+    add(
+        f"Scaffold the {data['stack_profile']['framework']} foundation with {data['stack_profile']['ui_system']}",
+        "arms-devops-agent",
+        "#1",
+    )
+    add(
+        f"Design the first {data['build_surface']} and shared UI system",
+        "arms-frontend-agent",
+        "#1, #2",
+    )
+
+    backend_needed = project_needs_backend_foundation(data["context"], data["stack_profile"])
+    if backend_needed:
+        add("Design the initial data model, schema boundaries, and access patterns", "arms-data-agent", "#2")
+        add("Implement authentication and core backend integration points", "arms-backend-agent", "#2, #4")
+        add("Review auth, data access, and secrets handling assumptions", "arms-security-agent", "#4, #5")
+
+    add("Generate the first brand asset kit and Nano Banana landing-page imagery", "arms-media-agent", "#1")
+    add("Create the SEO brief, metadata direction, and content hierarchy", "arms-seo-agent", "#1, #3")
+
+    qa_dependencies = "#3, #5"
+    if backend_needed:
+        qa_dependencies = "#3, #5, #6, #8"
+    add("Run QA pre-flight on the scaffold and kickoff flows", "arms-qa-agent", qa_dependencies)
+    return rows
+
+def render_startup_tasks_content(data):
+    rows = build_startup_tasks(data)
+    lines = [
+        "### Priority 1",
+        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+        "|---|------|----------------|--------------|--------------|--------|",
+    ]
+    for index, row in enumerate(rows, start=1):
+        lines.append(
+            f"| {index} | {row['task']} | {row['agent']} | — | {row['dependencies']} | Pending |"
+        )
+    return "\n".join(lines)
+
+def build_context_synthesis_data(project_root):
+    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+    brand_content = read_text_file(brand_path)
+    if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
+        return None
+
+    context = collect_brand_context(brand_content, project_root)
+    stack_profile = resolve_stack_recommendation(context)
+    project_name = normalize_brand_value(context.get("Project Name", ""), "Project")
+    mission = normalize_brand_value(context.get("Mission", ""), "Clarify the project's primary purpose.")
+    vision = normalize_brand_value(context.get("Vision", ""), "Clarify the long-term direction.")
+    personality = normalize_brand_value(context.get("Personality", ""), "Distinctive and cohesive")
+    voice_tone = normalize_brand_value(context.get("Voice & Tone", ""), "Clear, confident, and audience-appropriate")
+    primary_audience = normalize_brand_value(context.get("Primary Audience", ""), "Target audience not yet specified")
+    differentiation = normalize_brand_value(
+        context.get("Differentiation", ""),
+        "Differentiate clearly from adjacent alternatives",
+    )
+    visual_direction = normalize_brand_value(context.get("Visual Direction", ""), "Undecided")
+    project_type = normalize_brand_value(context.get("Project Type", ""), "Project type not yet specified")
+    design_priority = normalize_brand_value(
+        context.get("Design Priority", ""),
+        "Clear hierarchy and execution quality",
+    )
+    primary_use_case = normalize_brand_value(context.get("Primary Use Case", ""), "Primary use case not yet captured")
+    core_features = normalize_brand_value(context.get("Core Features", ""), "Core features not yet captured")
+    monetization_model = normalize_brand_value(
+        context.get("Goal / Monetization Model", ""),
+        "Goal / monetization model not yet captured",
+    )
+    reference_brand = normalize_brand_value(
+        context.get("Reference Brand", ""),
+        "No explicit reference brand provided",
+    )
+    brand_comparison = normalize_brand_value(
+        context.get("Brand Comparison", ""),
+        "No explicit brand comparison provided",
+    )
+    existing_brand_assets = normalize_brand_value(
+        context.get("Existing Brand Assets", ""),
+        "No explicit asset inventory provided",
+    )
+    logo_status = normalize_brand_value(context.get("Logo Status", ""), "Pending / unspecified")
+    experience_type = normalize_brand_value(context.get("Experience Type", ""), "N/A")
+    business_niche = normalize_brand_value(
+        context.get("Industry / Business Niche", ""),
+        "Industry not yet specified",
+    )
+    service_area = normalize_brand_value(
+        context.get("Service Area / Local SEO Target", ""),
+        "No explicit service area captured",
+    )
+    required_sections = normalize_brand_value(
+        context.get("Required Website Sections", ""),
+        "Use the most suitable structure for the project type",
+    )
+    primary_ctas = normalize_brand_value(
+        context.get("Primary Calls to Action", ""),
+        "Define the primary conversion actions",
+    )
+    image_requirements = normalize_brand_value(
+        context.get("Image Requirements", ""),
+        "Create the minimum viable supporting image set",
+    )
+    seo_focus = normalize_brand_value(
+        context.get("SEO Focus", ""),
+        "Use semantic HTML, metadata, and descriptive copy",
+    )
+    technical_constraints = normalize_brand_value(
+        context.get("Technical Constraints", ""),
+        "No hard constraints captured",
+    )
+    content_non_negotiables = normalize_brand_value(
+        context.get("Content / Visual Non-Negotiables", ""),
+        "No additional content or visual non-negotiables captured",
+    )
+
+    icon_system_value = context.get("Icon System", "")
+    if brand_field_is_unanswered(icon_system_value):
+        icon_system = stack_profile["default_icon_system"]
+    else:
+        icon_system = icon_system_value.strip()
+
+    build_surface = infer_build_surface(context)
+    confirmed = []
+    needs_attention = []
+
+    if stack_profile["inferred"]:
+        needs_attention.append(stack_profile["selection_note"])
+    else:
+        confirmed.append(stack_profile["selection_note"])
+
+    if not brand_field_is_unanswered(context.get("Personality", "")):
+        confirmed.append(f"Brand personality is defined as {personality}.")
+    else:
+        needs_attention.append("Brand personality is still vague; tighten the tone before visual polish work.")
+
+    if not brand_field_is_unanswered(context.get("Core Features", "")):
+        confirmed.append(f"Core features are captured: {core_features}.")
+    else:
+        needs_attention.append("Core features are still open-ended; product scope should tighten them first.")
+
+    if not brand_field_is_unanswered(context.get("Deployment Target", "")):
+        confirmed.append(f"Deployment target is explicit: {stack_profile['deployment_target']}.")
+    else:
+        needs_attention.append(
+            f"Deployment target was not specified, so ARMS defaulted to {stack_profile['deployment_target']}."
+        )
+
+    if brand_field_is_unanswered(context.get("Existing Brand Assets", "")):
+        needs_attention.append("Existing brand assets were not provided; media work should treat logo and imagery as net-new.")
+    else:
+        confirmed.append(f"Existing brand assets are documented: {existing_brand_assets}.")
+
+    if brand_field_is_unanswered(context.get("Authentication Requirement", "")):
+        needs_attention.append(
+            f"Authentication was not specified, so the recommendation falls back to {stack_profile['auth_requirement']}."
+        )
+    else:
+        confirmed.append(f"Authentication requirement is captured: {stack_profile['auth_requirement']}.")
+
+    data = {
+        "context": context,
+        "stack_profile": stack_profile,
+        "project_name": project_name,
+        "mission": mission,
+        "vision": vision,
+        "personality": personality,
+        "voice_tone": voice_tone,
+        "primary_audience": primary_audience,
+        "differentiation": differentiation,
+        "visual_direction": visual_direction,
+        "project_type": project_type,
+        "design_priority": design_priority,
+        "primary_use_case": primary_use_case,
+        "core_features": core_features,
+        "monetization_model": monetization_model,
+        "reference_brand": reference_brand,
+        "brand_comparison": brand_comparison,
+        "existing_brand_assets": existing_brand_assets,
+        "logo_status": logo_status,
+        "experience_type": experience_type,
+        "business_niche": business_niche,
+        "service_area": service_area,
+        "required_sections": required_sections,
+        "primary_ctas": primary_ctas,
+        "image_requirements": image_requirements,
+        "seo_focus": seo_focus,
+        "technical_constraints": technical_constraints,
+        "content_non_negotiables": content_non_negotiables,
+        "icon_system": icon_system,
+        "build_surface": build_surface,
+        "confirmed_signals": confirmed,
+        "needs_attention_signals": needs_attention,
+    }
+    data["startup_tasks"] = build_startup_tasks(data)
+    return data
+
+def build_media_asset_brief(data):
+    surface = data["build_surface"]
+    showcase_focus = (
+        "Include at least two images that showcase their best work, strongest outcomes, or most impressive finished results."
+    )
+    return textwrap.dedent(
+        f"""\
+        Use nano-banana-pro for image generation.
+        Generate at least five production-ready images that directly support the first {surface}.
+        Cover the hero, supporting content sections, and proof/showcase areas so the frontend can place assets immediately.
+        {showcase_focus}
+        Keep the set visually consistent and tailored to {data['business_niche']} rather than relying on generic stock-photo patterns.
+        """
+    ).strip()
+
 def format_available_presets():
     return ", ".join(sorted(PROJECT_PRESETS))
 
@@ -1446,7 +1896,7 @@ def parse_structured_answers(text):
     def commit_answer(field_name, value):
         if not field_name or not value:
             return
-        answers[field_name] = value.strip()
+        answers[field_name] = normalize_structured_answer(field_name, value)
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -1565,274 +2015,267 @@ def apply_answers_to_brand_content(content, answers):
 
     return content, {"fields": changed_fields, "notes": changed_notes}
 
-def render_generated_prompts(project_root):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
-    brand_content = read_text_file(brand_path)
-    if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
+def render_context_synthesis(project_root):
+    data = build_context_synthesis_data(project_root)
+    if data is None:
         return None
 
-    context = collect_brand_context(brand_content, project_root)
-    project_name = normalize_brand_value(context.get("Project Name", ""), "Project")
-    mission = normalize_brand_value(context.get("Mission", ""), "Clarify the project's primary purpose.")
-    vision = normalize_brand_value(context.get("Vision", ""), "Clarify the long-term direction.")
-    personality = normalize_brand_value(context.get("Personality", ""), "Distinctive and cohesive")
-    voice_tone = normalize_brand_value(context.get("Voice & Tone", ""), "Clear, confident, and audience-appropriate")
-    primary_audience = normalize_brand_value(context.get("Primary Audience", ""), "Target audience not yet specified")
-    core_values = normalize_brand_value(context.get("Core Values", ""), "Trust, clarity, and quality")
-    differentiation = normalize_brand_value(context.get("Differentiation", ""), "Differentiate clearly from adjacent alternatives")
-    color_palette = normalize_brand_value(context.get("Color Palette", ""), "Define from the approved brand direction")
-    typography = normalize_brand_value(context.get("Typography", ""), "Choose typography that matches the approved brand")
-    logo_status = normalize_brand_value(context.get("Logo Status", ""), "Pending / unspecified")
-    visual_direction = normalize_brand_value(context.get("Visual Direction", ""), "Undecided")
-    project_type = normalize_brand_value(context.get("Project Type", ""), "Project type not yet specified")
-    design_priority = normalize_brand_value(context.get("Design Priority", ""), "Clear hierarchy and execution quality")
-    tech_stack = normalize_brand_value(context.get("Preferred Tech Stack", ""), "Choose the most appropriate stack from the approved options")
-    deployment_target = normalize_brand_value(context.get("Deployment Target", ""), "Deployment target not yet specified")
-    data_layer = normalize_brand_value(context.get("Backend / Data Layer", ""), "Data layer not yet specified")
-    auth_requirement = normalize_brand_value(context.get("Authentication Requirement", ""), "No explicit auth requirement yet")
-    technical_constraints = normalize_brand_value(context.get("Technical Constraints", ""), "No hard constraints captured")
-    primary_use_case = normalize_brand_value(context.get("Primary Use Case", ""), "Primary use case not yet captured")
-    core_features = normalize_brand_value(context.get("Core Features", ""), "Core features not yet captured")
-    monetization_model = normalize_brand_value(context.get("Goal / Monetization Model", ""), "Goal / monetization model not yet captured")
-    reference_brand = normalize_brand_value(context.get("Reference Brand", ""), "No explicit reference brand provided")
-    brand_comparison = normalize_brand_value(context.get("Brand Comparison", ""), "No explicit brand comparison provided")
-    existing_brand_assets = normalize_brand_value(context.get("Existing Brand Assets", ""), "No explicit asset inventory provided")
-    experience_type = normalize_brand_value(context.get("Experience Type", ""), "N/A")
-    business_niche = normalize_brand_value(context.get("Industry / Business Niche", ""), "Industry not yet specified")
-    service_area = normalize_brand_value(context.get("Service Area / Local SEO Target", ""), "No explicit service area captured")
-    required_sections = normalize_brand_value(context.get("Required Website Sections", ""), "Use the most suitable structure for the project type")
-    primary_ctas = normalize_brand_value(context.get("Primary Calls to Action", ""), "Define the primary conversion actions")
-    image_requirements = normalize_brand_value(context.get("Image Requirements", ""), "Create the minimum viable supporting image set")
-    seo_focus = normalize_brand_value(context.get("SEO Focus", ""), "Use semantic HTML, metadata, and descriptive copy")
-    content_non_negotiables = normalize_brand_value(
-        context.get("Content / Visual Non-Negotiables", ""),
-        "No additional content or visual non-negotiables captured",
-    )
-    icon_system_value = context.get("Icon System", "")
-    if brand_field_is_unanswered(icon_system_value):
-        icon_system = "Font Awesome" if not brand_field_is_not_applicable(experience_type) else "Use the icon system that best fits the stack"
-    else:
-        icon_system = icon_system_value.strip()
-
-    build_surface = infer_build_surface(context)
-    local_seo_guidance = (
-        f"Prioritize local SEO for {service_area}."
-        if not brand_field_is_not_applicable(service_area) and service_area.lower() != "no explicit service area captured"
-        else "Prioritize the strongest discoverability strategy for the stated audience."
+    stack_profile = data["stack_profile"]
+    kickoff_summary = "\n".join(
+        f"{index}. **{row['agent']}** — {row['task']}"
+        for index, row in enumerate(data["startup_tasks"], start=1)
     )
 
-    source_context = textwrap.dedent(
+    return (
+        CONTEXT_SYNTHESIS_HEADER.strip()
+        + "\n\n## Project Overview\n"
+        + textwrap.dedent(
+            f"""\
+            - **Project Name:** {data['project_name']}
+            - **Mission:** {data['mission']}
+            - **Vision:** {data['vision']}
+            - **Primary Use Case:** {data['primary_use_case']}
+            - **Primary Audience:** {data['primary_audience']}
+            - **Project Type:** {data['project_type']}
+            - **Build Surface:** {data['build_surface']}
+            """
+        ).strip()
+        + "\n\n## Recommended Build Profile\n"
+        + textwrap.dedent(
+            f"""\
+            - **Requested Stack:** {stack_profile['requested_stack']}
+            - **Recommended Stack:** {stack_profile['label']}
+            - **Framework:** {stack_profile['framework']}
+            - **UI System:** {stack_profile['ui_system']}
+            - **Backend / Data Layer:** {stack_profile['data_layer']}
+            - **Deployment Target:** {stack_profile['deployment_target']}
+            - **Authentication:** {stack_profile['auth_requirement']}
+            - **Best Fit:** {stack_profile['best_for']}
+            - **Why This Recommendation:** {stack_profile['reason']}
+            - **Recommendation Source:** {stack_profile['source']}
+            """
+        ).strip()
+        + "\n\n## Brand & Experience Direction\n"
+        + textwrap.dedent(
+            f"""\
+            - **Personality:** {data['personality']}
+            - **Voice & Tone:** {data['voice_tone']}
+            - **Differentiation:** {data['differentiation']}
+            - **Visual Direction:** {data['visual_direction']}
+            - **Reference Brand:** {data['reference_brand']}
+            - **Brand Comparison:** {data['brand_comparison']}
+            - **Logo Status:** {data['logo_status']}
+            - **Existing Brand Assets:** {data['existing_brand_assets']}
+            """
+        ).strip()
+        + "\n\n## Delivery Priorities\n"
+        + textwrap.dedent(
+            f"""\
+            - **Core Features:** {data['core_features']}
+            - **Goal / Monetization Model:** {data['monetization_model']}
+            - **Required Sections:** {data['required_sections']}
+            - **Primary CTAs:** {data['primary_ctas']}
+            - **SEO Focus:** {data['seo_focus']}
+            - **Technical Constraints:** {data['technical_constraints']}
+            - **Image Requirements:** {data['image_requirements']}
+            - **Content / Visual Non-Negotiables:** {data['content_non_negotiables']}
+            - **Icon System:** {data['icon_system']}
+            """
+        ).strip()
+        + "\n\n## Confidence Signals\n### Confirmed\n"
+        + render_markdown_bullets(data["confirmed_signals"], "Core project signals still need confirmation.")
+        + "\n\n### Needs Attention\n"
+        + render_markdown_bullets(data["needs_attention_signals"], "No major gaps detected.")
+        + "\n\n## Agent Kickoff Summary\n"
+        + kickoff_summary
+        + "\n"
+    )
+
+def sync_context_synthesis(project_root):
+    synthesis_path = os.path.join(project_root, ".arms/CONTEXT_SYNTHESIS.md")
+    synthesis_content = render_context_synthesis(project_root)
+
+    if synthesis_content is None:
+        if os.path.exists(synthesis_path):
+            os.remove(synthesis_path)
+            print("🧹 Removed stale .arms/CONTEXT_SYNTHESIS.md because the brand brief is incomplete.")
+        return False
+
+    with open(synthesis_path, "w", encoding="utf-8") as f:
+        f.write(synthesis_content)
+    print("📋 Generated .arms/CONTEXT_SYNTHESIS.md from the approved brand and stack context.")
+    return True
+
+def render_generated_prompts(project_root):
+    data = build_context_synthesis_data(project_root)
+    if data is None:
+        return None
+
+    stack_profile = data["stack_profile"]
+    backend_needed = project_needs_backend_foundation(data["context"], stack_profile)
+    media_asset_brief = build_media_asset_brief(data)
+
+    quick_reference = textwrap.dedent(
         f"""\
-        ## Source Context
-        - **Project Name:** {project_name}
-        - **Mission:** {mission}
-        - **Vision:** {vision}
-        - **Personality:** {personality}
-        - **Voice & Tone:** {voice_tone}
-        - **Primary Audience:** {primary_audience}
-        - **Core Values:** {core_values}
-        - **Differentiation:** {differentiation}
-        - **Color Palette:** {color_palette}
-        - **Typography:** {typography}
-        - **Logo Status:** {logo_status}
-        - **Visual Direction:** {visual_direction}
-        - **Project Type:** {project_type}
-        - **Design Priority:** {design_priority}
-        - **Preferred Tech Stack:** {tech_stack}
-        - **Deployment Target:** {deployment_target}
-        - **Backend / Data Layer:** {data_layer}
-        - **Authentication Requirement:** {auth_requirement}
-        - **Technical Constraints:** {technical_constraints}
-        - **Primary Use Case:** {primary_use_case}
-        - **Core Features:** {core_features}
-        - **Goal / Monetization Model:** {monetization_model}
-        - **Reference Brand:** {reference_brand}
-        - **Brand Comparison:** {brand_comparison}
-        - **Existing Brand Assets:** {existing_brand_assets}
-        - **Experience Type:** {experience_type}
-        - **Industry / Business Niche:** {business_niche}
-        - **Service Area / Local SEO Target:** {service_area}
-        - **Required Website Sections:** {required_sections}
-        - **Primary Calls to Action:** {primary_ctas}
-        - **Icon System:** {icon_system}
-        - **Image Requirements:** {image_requirements}
-        - **SEO Focus:** {seo_focus}
-        - **Content / Visual Non-Negotiables:** {content_non_negotiables}
+        ## Quick Reference
+        - **Project Name:** {data['project_name']}
+        - **Recommended Stack:** {stack_profile['label']}
+        - **Framework:** {stack_profile['framework']}
+        - **UI System:** {stack_profile['ui_system']}
+        - **Backend / Data Layer:** {stack_profile['data_layer']}
+        - **Deployment Target:** {stack_profile['deployment_target']}
+        - **Authentication:** {stack_profile['auth_requirement']}
+        - **Build Surface:** {data['build_surface']}
+        - **Core Features:** {data['core_features']}
+        - **Reference:** Read `.arms/CONTEXT_SYNTHESIS.md` before executing any of the prompts below.
         """
     ).strip()
 
     master_prompt = textwrap.dedent(
         f"""\
-        Using the approved ARMS brand brief, create the first production-quality {build_surface.lower()} for {project_name}.
+        Read `.arms/CONTEXT_SYNTHESIS.md` first, then create the first production-quality {data['build_surface']} for {data['project_name']}.
 
-        Brand direction:
-        - Mission: {mission}
-        - Vision: {vision}
-        - Personality: {personality}
-        - Voice and tone: {voice_tone}
-        - Core values: {core_values}
-        - Differentiation: {differentiation}
-        - Visual direction: {visual_direction}
-        - Typography guidance: {typography}
-        - Color guidance: {color_palette}
+        Use {stack_profile['framework']} with {stack_profile['ui_system']} and keep all package choices on the latest stable ecosystem release unless the repository already pins something else.
+        Match this brand direction: {data['personality']} personality, {data['voice_tone']} voice, {data['visual_direction']} visual direction.
+        Build for {data['primary_audience']} and keep the experience centered on {data['core_features']}.
+        Honor these non-negotiables: {data['technical_constraints']} / {data['content_non_negotiables']}.
+        """
+    ).strip()
 
-        Audience and market:
-        - Primary audience: {primary_audience}
-        - Primary use case: {primary_use_case}
-        - Industry / niche: {business_niche}
-        - Service area / SEO target: {service_area}
-        - SEO focus: {seo_focus}
-        - Core features: {core_features}
-        - Goal / monetization model: {monetization_model}
-        - Reference brand: {reference_brand}
-        - Brand comparison: {brand_comparison}
+    product_prompt = textwrap.dedent(
+        f"""\
+        Read `.arms/CONTEXT_SYNTHESIS.md` and turn it into a concise project charter for {data['project_name']}.
 
-        Product and build context:
-        - Project type: {project_type}
-        - Design priority: {design_priority}
-        - Preferred tech stack: {tech_stack}
-        - Deployment target: {deployment_target}
-        - Backend / data layer: {data_layer}
-        - Authentication requirement: {auth_requirement}
-        - Technical constraints: {technical_constraints}
-
-        Experience requirements:
-        - Experience type: {experience_type}
-        - Required sections: {required_sections}
-        - Primary calls to action: {primary_ctas}
-        - Icon system: {icon_system}
-        - Image requirements: {image_requirements}
-        - Logo status: {logo_status}
-        - Existing brand assets: {existing_brand_assets}
-        - Content / visual non-negotiables: {content_non_negotiables}
-
-        Execution expectations:
-        - Match the brand precisely; avoid generic defaults.
-        - Make the experience responsive, production-quality, and believable for a real business or product.
-        - {local_seo_guidance}
-        - Keep the information architecture aligned with the stated audience and goals.
-        - If this is a marketing or local-service site, keep contact information and trust signals highly visible.
+        Deliverables:
+        - Refine the primary problem statement and success metrics
+        - Prioritize the initial feature set around {data['core_features']}
+        - Flag the highest-risk ambiguities before other agents begin implementation
+        Keep the output concise, decisive, and aligned to {data['monetization_model']}.
         """
     ).strip()
 
     devops_prompt = textwrap.dedent(
         f"""\
-        Scaffold the project foundation for {project_name} using {tech_stack}.
+        Scaffold {data['project_name']} using {stack_profile['framework']} with {stack_profile['ui_system']}.
 
         Requirements:
-        - Deployment target: {deployment_target}
-        - Backend / data layer: {data_layer}
-        - Authentication requirement: {auth_requirement}
-        - Technical constraints: {technical_constraints}
-        - Project type: {project_type}
+        - Backend / data layer: {stack_profile['data_layer']}
+        - Deployment target: {stack_profile['deployment_target']}
+        - Authentication: {stack_profile['auth_requirement']}
+        - Technical constraints: {data['technical_constraints']}
+        - Recommendation note: {stack_profile['selection_note']}
 
-        Deliver an initial project setup that matches the chosen stack, keeps the repository production-ready, and leaves clear extension points for frontend, content, and asset workflows.
+        Choose the current best-practice setup for this stack and leave the repo ready for frontend, backend, and QA work.
         """
     ).strip()
 
     frontend_prompt = textwrap.dedent(
         f"""\
-        Create the initial responsive {build_surface.lower()} for {project_name} using {tech_stack}.
+        Create the first responsive {data['build_surface']} for {data['project_name']}.
 
-        Design and UX direction:
-        - Personality: {personality}
-        - Voice and tone: {voice_tone}
-        - Visual direction: {visual_direction}
-        - Typography: {typography}
-        - Color palette: {color_palette}
-        - Design priority: {design_priority}
-        - Differentiation: {differentiation}
-
-        Content and structure:
-        - Primary audience: {primary_audience}
-        - Primary use case: {primary_use_case}
-        - Industry / niche: {business_niche}
-        - Required sections: {required_sections}
-        - Primary CTAs: {primary_ctas}
-        - Core features: {core_features}
-        - Keep the content hierarchy aligned to: {mission}
-
-        Implementation constraints:
-        - Deployment target: {deployment_target}
-        - Backend / data layer: {data_layer}
-        - Authentication requirement: {auth_requirement}
-        - Technical constraints: {technical_constraints}
-        - Use {icon_system} for icons and do not use emoji unless explicitly requested later.
-        - Design around this image coverage: {image_requirements}
+        Use {stack_profile['ui_system']} as the component foundation ({stack_profile['framework']} stack).
+        Align the UI to this direction: {data['personality']} personality, {data['voice_tone']} tone, {data['visual_direction']} visual direction.
+        Structure the experience around: {data['required_sections']}.
+        Optimize the flow for these CTAs: {data['primary_ctas']}.
+        Use {data['icon_system']} for icons and avoid emoji unless later requested.
         """
     ).strip()
 
     media_prompt = textwrap.dedent(
         f"""\
-        Generate the initial visual asset set for {project_name}.
+        Generate the first visual asset set for {data['project_name']}.
 
-        Brand inputs:
-        - Personality: {personality}
-        - Voice and tone: {voice_tone}
-        - Visual direction: {visual_direction}
-        - Typography cues: {typography}
-        - Color palette: {color_palette}
-        - Differentiation: {differentiation}
-        - Logo status: {logo_status}
+        Inputs:
+        - Personality: {data['personality']}
+        - Differentiation: {data['differentiation']}
+        - Visual direction: {data['visual_direction']}
+        - Existing brand assets: {data['existing_brand_assets']}
+        - Logo status: {data['logo_status']}
+        - Image requirements: {data['image_requirements']}
 
-        Asset requirements:
-        - Experience type: {experience_type}
-        - Industry / niche: {business_niche}
-        - Required sections: {required_sections}
-        - Image requirements: {image_requirements}
-        - Existing brand assets: {existing_brand_assets}
-        - Ensure the asset set supports the primary CTAs: {primary_ctas}
+        Asset generation instructions:
+        - {media_asset_brief}
 
-        Generate assets that feel tailored to the niche, support the intended layout, and can be dropped directly into the first frontend pass.
+        Produce assets that support the first frontend pass without falling back to generic visuals.
         """
     ).strip()
 
     seo_prompt = textwrap.dedent(
         f"""\
-        Create the initial SEO and content brief for {project_name}.
+        Create the initial SEO and content brief for {data['project_name']}.
 
-        Search intent and audience:
-        - Primary audience: {primary_audience}
-        - Industry / niche: {business_niche}
-        - Service area / local SEO target: {service_area}
-        - Mission: {mission}
-        - SEO focus: {seo_focus}
+        Prioritize:
+        - Audience: {data['primary_audience']}
+        - Niche: {data['business_niche']}
+        - Service area: {data['service_area']}
+        - SEO focus: {data['seo_focus']}
+        - Required sections: {data['required_sections']}
+        - CTAs: {data['primary_ctas']}
 
-        Content requirements:
-        - Required sections: {required_sections}
-        - Primary CTAs: {primary_ctas}
-        - Voice and tone: {voice_tone}
-        - Core values: {core_values}
-        - Differentiation: {differentiation}
-        - Primary use case: {primary_use_case}
-        - Core features: {core_features}
-        - Goal / monetization model: {monetization_model}
-
-        SEO expectations:
-        - Recommend title and meta description direction.
-        - Preserve semantic heading structure.
-        - Ensure visible conversion paths and contact information where relevant.
-        - Provide structured, crawlable copy and descriptive image alt-text guidance.
-        - {local_seo_guidance}
+        Keep the information architecture crawlable, conversion-aware, and aligned to the brand tone.
         """
     ).strip()
 
-    return (
-        GENERATED_PROMPTS_HEADER.strip()
-        + "\n\n"
-        + source_context
-        + "\n\n## Master Build Prompt\n```text\n"
-        + master_prompt
-        + "\n```\n\n## DevOps Scaffold Prompt\n```text\n"
-        + devops_prompt
-        + "\n```\n\n## Frontend Prompt\n```text\n"
-        + frontend_prompt
-        + "\n```\n\n## Media Prompt\n```text\n"
-        + media_prompt
-        + "\n```\n\n## SEO / Content Prompt\n```text\n"
-        + seo_prompt
-        + "\n```\n"
+    sections = [
+        GENERATED_PROMPTS_HEADER.strip(),
+        quick_reference,
+        "## Master Build Prompt\n```text\n" + master_prompt + "\n```",
+        "## Product Kickoff Prompt\n```text\n" + product_prompt + "\n```",
+        "## DevOps Scaffold Prompt\n```text\n" + devops_prompt + "\n```",
+        "## Frontend Prompt\n```text\n" + frontend_prompt + "\n```",
+    ]
+
+    if backend_needed:
+        data_prompt = textwrap.dedent(
+            f"""\
+            Read `.arms/CONTEXT_SYNTHESIS.md` and design the initial data model for {data['project_name']}.
+
+            Start from {stack_profile['data_layer']} and shape the schema around {data['core_features']}.
+            Preserve explicit access boundaries, future migrations, and the minimum entities required for the first milestone.
+            """
+        ).strip()
+        backend_prompt = textwrap.dedent(
+            f"""\
+            Implement the first backend foundation for {data['project_name']}.
+
+            Use {stack_profile['data_layer']} with this auth shape: {stack_profile['auth_requirement']}.
+            Focus on the minimum secure path needed to support the first UI and product flows from `.arms/CONTEXT_SYNTHESIS.md`.
+            """
+        ).strip()
+        security_prompt = textwrap.dedent(
+            f"""\
+            Review the planned auth and data setup for {data['project_name']} before it hardens.
+
+            Check the recommendation stack ({stack_profile['label']}), the chosen auth model ({stack_profile['auth_requirement']}), and the planned data layer ({stack_profile['data_layer']}).
+            Flag OWASP-relevant issues, access-control gaps, and secret-handling risks early.
+            """
+        ).strip()
+        sections.extend(
+            [
+                "## Data Prompt\n```text\n" + data_prompt + "\n```",
+                "## Backend Prompt\n```text\n" + backend_prompt + "\n```",
+                "## Security Prompt\n```text\n" + security_prompt + "\n```",
+            ]
+        )
+
+    qa_prompt = textwrap.dedent(
+        f"""\
+        Prepare the pre-flight validation plan for {data['project_name']}.
+
+        Validate the scaffold, the primary {data['build_surface']}, and the core flows tied to {data['core_features']}.
+        Keep the test plan realistic for the selected stack ({stack_profile['label']}) and the deployment target ({stack_profile['deployment_target']}).
+        """
+    ).strip()
+
+    sections.extend(
+        [
+            "## Media Prompt\n```text\n" + media_prompt + "\n```",
+            "## SEO / Content Prompt\n```text\n" + seo_prompt + "\n```",
+            "## QA Prompt\n```text\n" + qa_prompt + "\n```",
+        ]
     )
+
+    return "\n\n".join(sections) + "\n"
 
 def sync_generated_prompts(project_root):
     prompts_path = os.path.join(project_root, ".arms/GENERATED_PROMPTS.md")
@@ -2526,7 +2969,7 @@ def enforce_engine_version_guard(project_root, arms_root, allow_engine_downgrade
     print("     arms init --allow-engine-downgrade")
     sys.exit(1)
 
-def update_session(project_root, arms_root, skills_list, agents_list, yolo=False):
+def update_session(project_root, arms_root, skills_list, agents_list, yolo=False, startup_tasks_content=""):
     print("📄 Updating session log...")
     session_path = os.path.join(project_root, ".arms/SESSION.md")
     
@@ -2573,6 +3016,13 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
         skill["name"]: skill
         for skill in skill_catalog
     }
+    normalized_startup_tasks_content = startup_tasks_content
+    if startup_tasks_content:
+        normalized_startup_tasks_content = normalize_active_tasks_table(
+            startup_tasks_content,
+            agent_skill_bindings=agent_skill_bindings,
+            skill_catalog_by_name=skill_catalog_by_name,
+        )
 
     # Extract tasks section to preserve it
     tasks_match = re.search(r'(## Active Tasks.*)', existing_content, re.DOTALL)
@@ -2594,11 +3044,17 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
                             agent_skill_bindings=agent_skill_bindings,
                             skill_catalog_by_name=skill_catalog_by_name,
                         )
+                        if normalized_startup_tasks_content and not active_tasks_table_has_rows(content):
+                            content = normalized_startup_tasks_content
                     new_tasks_content.append(f"## {header}\n{content}")
                 else:
                     # Provide default content for empty sections
                     if header == "Active Tasks":
-                        new_tasks_content.append(f"## {header}\n| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n|---|------|----------------|--------------|--------------|--------|")
+                        active_tasks_content = normalized_startup_tasks_content or (
+                            "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                            "|---|------|----------------|--------------|--------------|--------|"
+                        )
+                        new_tasks_content.append(f"## {header}\n{active_tasks_content}")
                     elif header == "Completed Tasks":
                         new_tasks_content.append(f"## {header}\n- None")
                     elif header == "Blockers":
@@ -2609,7 +3065,11 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
         for req in ["Active Tasks", "Completed Tasks", "Blockers"]:
             if req not in seen_headers:
                 if req == "Active Tasks":
-                    new_tasks_content.append(f"## {req}\n| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n|---|------|----------------|--------------|--------------|--------|")
+                    active_tasks_content = normalized_startup_tasks_content or (
+                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                        "|---|------|----------------|--------------|--------------|--------|"
+                    )
+                    new_tasks_content.append(f"## {req}\n{active_tasks_content}")
                 elif req == "Completed Tasks":
                     new_tasks_content.append(f"## {req}\n- None")
                 elif req == "Blockers":
@@ -2618,9 +3078,10 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
         tasks_content = "\n\n".join(new_tasks_content)
     else:
         # Default fresh task table
-        tasks_content = """## Active Tasks
-| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|------|----------------|--------------|--------------|--------|
+        active_tasks_content = normalized_startup_tasks_content or """| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|"""
+        tasks_content = f"""## Active Tasks
+{active_tasks_content}
 
 ## Completed Tasks
 - None
@@ -2689,15 +3150,29 @@ def run_init_once(project_root, arms_root, full_command, is_yolo, preset_name=""
         )
         if inputs_applied:
             brand_context_state = initialize_brand_context(project_root)
+    context_synthesis_ready = False
     generated_prompts_ready = False
     if brand_context_state and brand_context_state.get("status") == "questions_required":
+        sync_context_synthesis(project_root)
         sync_generated_prompts(project_root)
     else:
+        context_synthesis_ready = sync_context_synthesis(project_root)
         generated_prompts_ready = sync_generated_prompts(project_root)
     
     skills_list = discover_skills(arms_root)
     agents_list = discover_agents_and_skills(arms_root)
-    update_session(project_root, arms_root, skills_list, agents_list, yolo=is_yolo)
+    synthesis_data = build_context_synthesis_data(project_root)
+    startup_tasks_content = ""
+    if synthesis_data is not None:
+        startup_tasks_content = render_startup_tasks_content(synthesis_data)
+    update_session(
+        project_root,
+        arms_root,
+        skills_list,
+        agents_list,
+        yolo=is_yolo,
+        startup_tasks_content=startup_tasks_content,
+    )
     
     sync_engine_instructions(arms_root, project_root)
 
@@ -2719,10 +3194,14 @@ def run_init_once(project_root, arms_root, full_command, is_yolo, preset_name=""
             "brand_signature": brand_signature,
         }
     elif is_yolo:
+        if context_synthesis_ready:
+            print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
         print("\n✅ ARMS Engine ready. Fleet mode activated.")
     else:
+        if context_synthesis_ready:
+            print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
         print("\n✅ ARMS Engine sequence complete. → HALT")

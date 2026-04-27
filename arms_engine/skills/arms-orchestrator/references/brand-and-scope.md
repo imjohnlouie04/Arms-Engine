@@ -46,9 +46,9 @@ After Brand Context, ask for the initial tech stack in the same flow:
 
 ```
 11. Preferred tech stack:
-    [A] Next.js + Supabase + shadcn (Latest)
-    [B] Nuxt 4 + Firebase + Nuxt UI (Latest)
-    [C] Astro + DaisyUI (Latest)
+    [A] Next.js + Supabase + shadcn/ui (latest stable)
+    [B] Nuxt + Firebase + Nuxt UI (latest stable)
+    [C] Astro + Tailwind CSS + DaisyUI (latest stable)
     [D] Custom
 12. Preferred deployment target:
     [1] Vercel
@@ -87,14 +87,15 @@ If the new project is a website, landing page, or local-business marketing build
 
 After receiving answers for a new project, or after reviewing repository signals for an existing project:
 1. Generate `.arms/BRAND.md` using the canonical ARMS brand schema (see template below).
-2. Generate `.arms/GENERATED_PROMPTS.md` from the approved brand brief so the gathered context becomes reusable build prompts.
-3. Recommend one primary tech stack with clear justification, then list viable alternatives.
-4. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
-5. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
+2. Generate `.arms/CONTEXT_SYNTHESIS.md` so the approved brand brief becomes a concise AI-ready project summary.
+3. Generate `.arms/GENERATED_PROMPTS.md` from that synthesis so the gathered context becomes reusable build prompts.
+4. Recommend one primary latest-stable stack with clear justification, then list viable alternatives.
+5. Select 3–5 relevant supplemental business prompts (see bank below). → **HALT**
+6. Once BRAND.md is approved by the user, **trigger the Media & Design Pipeline** defined in the `arms-orchestrator` SKILL.md:
    - **Step 1 — Logo** (`arms-media-agent` → `.agents/skills/logo-designer/SKILL.md`): Generate HD PNG logo from brand identity
-   - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `.agents/skills/nano-banana-pro/SKILL.md`): Generate hero images, textures, or UI illustrations using the approved logo as reference
+   - **Step 2 — Hero & UI Assets** (`arms-media-agent` → `.agents/skills/nano-banana-pro/SKILL.md`): Generate at least five production-ready images for the landing page or app surface, including hero/supporting imagery plus showcase visuals that represent the project's best work
    - **Step 3 — Frontend Scaffold** (`arms-frontend-agent` → `.agents/skills/frontend-design/SKILL.md`): Build the initial UI shell using approved assets and design tokens
-6. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table → **HALT**
+7. After the pipeline completes and all assets are approved, proceed to the Strategic Task Table or confirm the seeded startup tasks in `.arms/SESSION.md`. → **HALT**
 
 If these answers were provided as a follow-up to a previous `init` HALT, treat them as the continuation of the same initialization flow. Do not restart from the beginning or repeat the same question block unless critical information is still missing.
 

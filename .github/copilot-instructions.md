@@ -28,8 +28,8 @@ git tag v1.1.0 && git push origin v1.1.0
 ```
 
 ### Testing & Validation
-- **No formal test suite exists yet** – focus on manual validation during development
-- Validate by running `arms init` in a test project and verifying output structure (`.gemini/` files created correctly)
+- Minimal regression suite: `python -m unittest discover -s tests -p "test_*.py"`
+- Validate `arms init` changes with the regression suite first, then use a real temp project for manual confirmation when behavior spans multiple CLI surfaces
 
 ### Linting
 - **No lint configuration** – use Python conventions (PEP 8)
@@ -42,7 +42,8 @@ git tag v1.1.0 && git push origin v1.1.0
 ARMS operates with a strict separation of global engine logic from project-specific state:
 
 - **Global Engine** (`arms_engine/` when installed): The "brain" containing agent definitions, skills, and workflows that never change per-project
-- **Local Project Instance** (`.gemini/` in each project): The execution environment containing session state, memory, and task tables that are project-specific
+- **Local Project State** (`.arms/` in each project): The managed execution state containing session history, brand context, memory, rules, engine instructions, and generated planning artifacts
+- **Local Assistant Mirrors** (`.gemini/`, `.agents/`, `.github/agents/`): Synced helper assets for agent discovery, skill discovery, and CLI integration
 
 ### Key Components
 
@@ -54,23 +55,24 @@ ARMS operates with a strict separation of global engine logic from project-speci
 #### 2. **Skill System** (`arms_engine/skills/`)
 - **Structure**: Each skill is a directory with a required `SKILL.md` + optional `references/` (checklists, best practices) and `scripts/` (utility scripts)
 - **Metadata Headers**: Each `SKILL.md` has frontmatter with `name`, `description`, and optional metadata (same format as agents)
-- **Discovery**: Valid skills must contain `SKILL.md` (validated in `init_arms.py:sync_skills()`)
+- **Discovery**: Valid skills must contain `SKILL.md` and are registered during init sync
 - **Copilot CLI Sync**: All valid `SKILL.md` files are synced to `.agents/skills/` for Copilot CLI discovery
-- **Current Skills**: arms-orchestrator, backend-system-architect, frontend-design, logo-designer, nano-banana-pro, qa-automation-testing, security-code-review, seo-web-performance-expert, arms-docs-generator
+- **Current Skills**: arms-orchestrator, backend-system-architect, frontend-design, devops-orchestrator, logo-design, nano-banana-pro, qa-automation-testing, security-code-review, seo-web-performance-expert, arms-docs-generator, caveman-compressor
 - **Skill Adoption**: Skills are adopted by agents to gain domain-specific capabilities for specialized tasks
 
 #### 3. **Workflow Protocols** (`arms_engine/workflow/`)
 - Standardized procedures for CI/CD, code review, issue resolution, deployment
-- Synced to `.gemini/workflow/` during `arms init` for project-specific reference
+- Synced to `.arms/workflow/` during `arms init` for project-specific reference
 
 #### 4. **Initialization Pipeline** (`init_arms.py`)
 The main entry point orchestrates:
-1. **Folder Setup** – Creates `.gemini/` structure (agents, skills, workflow, reports, agent-outputs)
+1. **Folder Setup** – Creates `.arms/`, `.gemini/agents/`, `.agents/skills/`, and supporting report/output directories
 2. **Agent Sync** – Copies agent .md files to `.gemini/agents/` and `.github/agents/` (for Copilot CLI `/agent` discovery)
-3. **Skill Sync** – Copies skill directories (with `SKILL.md`) to `.gemini/skills/` and `.agents/skills/` (for Copilot CLI skill discovery)
-4. **Workflow Sync** – Copies protocol files to `.gemini/workflow/`
-5. **Copilot Instructions** – Syncs AGENTS.md to project root (Copilot instruction loading)
-6. **Agent + Skill Discovery** – Scans `agents.yaml` and `skills/` directory, logs them to console output
+3. **Skill Sync** – Copies valid skill directories (with `SKILL.md`) to `.agents/skills/` and regenerates the local skill registry/index
+4. **Workflow Sync** – Copies protocol files to `.arms/workflow/`
+5. **Instruction Sync** – Deploys `.arms/ENGINE.md` and root `AGENTS.md`
+6. **Context Synthesis** – Generates `.arms/CONTEXT_SYNTHESIS.md` and `.arms/GENERATED_PROMPTS.md` when intake is complete
+7. **Session Refresh** – Updates `.arms/SESSION.md` and seeds the startup task table when appropriate
 
 ---
 
@@ -87,14 +89,15 @@ Resolve ARMS engine location in this order:
 Never assume a path. If not found, halt immediately and request setup.
 
 ### 2. **Session Bootstrap Files (Never Overwrite)**
-The `./.gemini/` directory contains project-specific state that persists across sessions:
-- **`SESSION.md`**: Active task table, execution mode, active skills. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
-- **`MEMORY.md`**: Continuous learning file. **CRITICAL:** APPEND only; NEVER overwrite with template.
-- **`BRAND.md`**: Visual identity & positioning (referenced by Frontend, SEO, Media agents).
-- **`GEMINI.md`**: Architectural overview, tech stack, deployment target, standards.
-- **`RULES.md`**: Folder structure, naming conventions, TypeScript strict mode, testing standards.
+The managed ARMS workspace persists across sessions:
+- **`./.arms/SESSION.md`**: Active task table, execution mode, active skills. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
+- **`./.arms/MEMORY.md`**: Continuous learning file. **CRITICAL:** APPEND only; NEVER overwrite with template.
+- **`./.arms/BRAND.md`**: Visual identity & positioning (referenced by Frontend, SEO, Media agents).
+- **`./.arms/ENGINE.md`**: ARMS engine instructions, architecture direction, deployment target, and standards for the engine workflow.
+- **`./.arms/RULES.md`**: Folder structure, naming conventions, TypeScript strict mode, testing standards.
+- **`./GEMINI.md` or `./.gemini/GEMINI.md`**: Optional project-owned instructions. Preserve them if they already exist; read them as project context instead of overwriting them.
 
-**Golden Rule:** If `./.gemini/` exists with populated files, READ them — NEVER overwrite. Overwriting project memory is a **protocol violation**.
+**Golden Rule:** If `./.arms/` or `./.gemini/` exists with populated files, READ them — NEVER overwrite managed state or memory with a template. Overwriting project memory is a **protocol violation**.
 
 ### 3. **Task Table Schema (Standardized)**
 Every task delegation uses this schema:
@@ -202,7 +205,7 @@ When agents produce contradictory outputs:
 ### 9. **Memory Management & Archival**
 After significant technical work, ask user approval before updating `MEMORY.md`:
 
-> "May I update `./.gemini/MEMORY.md` with this bug fix / preference / architectural decision?"
+> "May I update `./.arms/MEMORY.md` with this bug fix / preference / architectural decision?"
 
 **Archival Triggers:**
 - Task completion (Done/Cancelled) → append to SESSION_ARCHIVE.md + remove from SESSION.md
@@ -322,15 +325,17 @@ Three files support skill discovery:
 
 Reference any skill in `.agents/skills/`:
 
-- **`arms-orchestrator.md`** – Full-stack project orchestration, multi-agent workflows, approval gates
-- **`backend-system-architect.md`** – Backend architecture, API design, database schemas
-- **`frontend-design.md`** – Production-grade UI components with distinctive aesthetics
-- **`security-code-review.md`** – OWASP audits, auth validation, RLS configuration, secret scanning
-- **`qa-automation-testing.md`** – Unit/E2E test generation, stable QA strategy, Cypress-first with Playwright when required
-- **`seo-web-performance-expert.md`** – Meta tags, semantic HTML, Core Web Vitals, schema markup
-- **`logo-designer.md`** – Logo creation and asset design
-- **`nano-banana-pro.md`** – Specialized image generation and media handling
-- **`arms-docs-generator.md`** – Automatic documentation generation and updates
+- **`arms-orchestrator/SKILL.md`** – Full-stack project orchestration, multi-agent workflows, approval gates
+- **`backend-system-architect/SKILL.md`** – Backend architecture, API design, database schemas
+- **`frontend-design/SKILL.md`** – Production-grade UI components with distinctive aesthetics
+- **`devops-orchestrator/SKILL.md`** – CI/CD, deployment automation, and zero-drift infrastructure workflows
+- **`security-code-review/SKILL.md`** – OWASP audits, auth validation, RLS configuration, secret scanning
+- **`qa-automation-testing/SKILL.md`** – Unit/E2E test generation, stable QA strategy, Cypress-first with Playwright when required
+- **`seo-web-performance-expert/SKILL.md`** – Meta tags, semantic HTML, Core Web Vitals, schema markup
+- **`logo-designer/SKILL.md`** – Logo creation and asset design
+- **`nano-banana-pro/SKILL.md`** – Specialized image generation and media handling
+- **`arms-docs-generator/SKILL.md`** – Automatic documentation generation and updates
+- **`caveman-compressor/SKILL.md`** – Session and memory compression for token efficiency
 
 ### How to Use Skills
 
@@ -342,7 +347,7 @@ Reference any skill in `.agents/skills/`:
 
 **Method 2: File reference in conversation:**
 ```
-@skills/frontend-design.md
+@skills/frontend-design/SKILL.md
 Build me a hero section with a bold brutalist aesthetic
 ```
 

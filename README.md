@@ -8,7 +8,8 @@ The engine is optimized for **structured execution**, not just one-off prompting
 - it creates a persistent task board in `.arms/SESSION.md`
 - it separates project state from global engine logic
 - it captures brand, stack, and product context in `.arms/BRAND.md`
-- it generates reusable implementation prompts once intake is complete
+- it synthesizes intake into a concise AI-ready brief in `.arms/CONTEXT_SYNTHESIS.md`
+- it generates reusable implementation prompts and seeds startup tasks once intake is complete
 
 ---
 
@@ -20,16 +21,17 @@ At a high level, `arms init` turns a folder into an ARMS-managed workspace:
 flowchart TD
     A[Run arms init] --> B[Create .arms .gemini .agents and .github/agents]
     B --> C[Migrate legacy session and brand files if found]
-    C --> D[Sync agents, skills, workflow, GEMINI.md, AGENTS.md]
+    C --> D[Sync agents, skills, workflow, ENGINE.md, AGENTS.md]
     D --> E{Brand context complete?}
     E -- No --> F[Create or reuse .arms/BRAND.md questionnaire]
     F --> G[User answers via file, inline text, or manual edits]
     G --> H[Re-run arms init]
-    E -- Yes --> I[Generate .arms/GENERATED_PROMPTS.md]
-    I --> J[Refresh .arms/SESSION.md with environment, agents, skills, tasks]
-    J --> K{YOLO mode?}
-    K -- No --> L[Ready and halt for approval]
-    K -- Yes --> M[Ready in fleet mode]
+    E -- Yes --> I[Generate .arms/CONTEXT_SYNTHESIS.md]
+    I --> J[Generate .arms/GENERATED_PROMPTS.md]
+    J --> K[Refresh .arms/SESSION.md with environment, agents, skills, and seeded startup tasks]
+    K --> L{YOLO mode?}
+    L -- No --> M[Ready and halt for approval]
+    L -- Yes --> N[Ready in fleet mode]
 ```
 
 ---
@@ -55,11 +57,12 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.arms/SESSION.md` | Live orchestration board | Stores environment, active agents, active skills, task table, blockers |
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
+| `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers and records ARMS' current stack recommendation |
 | `.arms/MEMORY.md` | Persistent project memory | Created if missing, migrated from legacy `.gemini/MEMORY.md`, and append-only by convention |
-| `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete |
-| `.gemini/RULES.md` | Project rules and guardrails | Created if missing |
-| `.gemini/GEMINI.md` | Managed Gemini config mirror | Re-synced from the engine |
-| `GEMINI.md` | Project-root Gemini CLI instruction file | Re-synced from the engine so Gemini loads current ARMS init behavior |
+| `.arms/ENGINE.md` | Managed ARMS engine instructions | Re-synced from the engine on every `arms init` |
+| `.arms/RULES.md` | Project rules and guardrails | Created if missing and migrated from legacy rule files |
+| `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; references `.arms/CONTEXT_SYNTHESIS.md` |
+| `GEMINI.md` or `.gemini/GEMINI.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans both locations and does not overwrite either |
 | `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
 | `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced from `arms_engine/agents.yaml` |
 | `.arms/workflow/` | Local mirror of workflow docs | Copied from the engine for cross-CLI use |
@@ -96,6 +99,12 @@ cd Arms-Engine
 pip install -e .
 ```
 
+### Regression tests
+
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
+
 ### Requirements
 
 - Python `>= 3.8`
@@ -123,16 +132,17 @@ The package exposes two entry points:
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
 3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, and `.github/agents/`.
-4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `GEMINI.md`, and `agents.yaml`.
-5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.gemini/RULES.md`, and `.arms/SESSION_ARCHIVE.md`.
+4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md`.
+5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`.
 6. Removes the legacy `.gemini/skills/` mirror to avoid duplicate skill discovery.
-7. Syncs agents, skills, workflow docs, `.gemini/GEMINI.md`, root `GEMINI.md`, and root `AGENTS.md`.
+7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
-10. Generates `.arms/GENERATED_PROMPTS.md` when the intake is complete.
-11. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. Explicit agent skill bindings come from `agents.yaml`; unbound discovered skills are auto-attached to the best-matching agent for session visibility.
-12. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard.
-13. Ends in either standard halt mode or YOLO-ready mode.
+10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
+11. Generates `.arms/GENERATED_PROMPTS.md` from that synthesized brief.
+12. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Explicit agent skill bindings come from `agents.yaml`; unbound discovered skills are auto-attached to the best-matching agent for session visibility.
+13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard.
+14. Ends in either standard halt mode or YOLO-ready mode.
 
 ### Standard mode
 
@@ -284,6 +294,19 @@ Preferred Tech Stack: Next.js + Supabase
 3. Core features: Landing pages, quote forms, SEO pages
 ```
 
+It also supports the questionnaire shortcuts directly:
+
+```text
+11. A
+12. 1
+```
+
+Where the current built-in stack shortcuts are:
+- `A` -> `Next.js + Supabase + shadcn/ui (latest stable)`
+- `B` -> `Nuxt + Firebase + Nuxt UI (latest stable)`
+- `C` -> `Astro + Tailwind CSS + DaisyUI (latest stable)`
+- `D` -> `Custom`
+
 The parser can also map friendly aliases such as:
 - `working title` -> `Project Name`
 - `voice and tone` -> `Voice & Tone`
@@ -298,6 +321,24 @@ Structured answers can also help fill related brand fields when they are still e
 - a brand comparison can fill `Differentiation`
 - existing asset notes can infer `Logo Status`
 - non-negotiables can populate `Technical Constraints`
+
+### 6. Latest stack recommendation behavior
+
+ARMS now treats the stack answer as both a preference and an input to a recommendation pass.
+
+- If the user explicitly selects a supported stack, ARMS records that selection and keeps the recommendation aligned to it.
+- If the user leaves the stack vague, marks it custom, or provides incomplete technical direction, ARMS recommends the best-fit stack for the project shape.
+- Recommendations stay phrased as **latest stable** instead of hardcoding framework versions into the generated brief.
+
+Current default mappings:
+
+| Stack profile | Recommended UI system | Best default use cases |
+|---|---|---|
+| Next.js + Supabase | `shadcn/ui` | SaaS, dashboards, ecommerce, authenticated app flows |
+| Nuxt + Firebase | `Nuxt UI` | mobile-first products, Nuxt/Vue teams, content-plus-app hybrids |
+| Astro + Tailwind CSS | `DaisyUI` | marketing sites, local-service websites, editorial projects, portfolios |
+
+The selected or inferred stack profile is written into `.arms/CONTEXT_SYNTHESIS.md` so downstream agents can build from the same recommendation.
 
 ---
 
@@ -325,15 +366,27 @@ If the questionnaire is incomplete, ARMS reuses it on later `init` runs instead 
 Once `.arms/BRAND.md` is complete enough to be actionable, ARMS generates:
 
 ```text
+.arms/CONTEXT_SYNTHESIS.md
 .arms/GENERATED_PROMPTS.md
 ```
 
-This file contains:
+`.arms/CONTEXT_SYNTHESIS.md` condenses the intake into an AI-ready brief. It includes:
+- the approved project and brand summary
+- the current ARMS stack recommendation
+- the chosen UI system for the selected stack
+- confidence signals for confirmed vs still-vague inputs
+- an agent kickoff summary
+
+`.arms/GENERATED_PROMPTS.md` then uses that synthesis to produce agent-ready prompts. It contains:
 - a master build prompt
+- a product kickoff prompt
 - a DevOps scaffold prompt
 - a frontend prompt
 - a media prompt
 - an SEO / content prompt
+- and, when the project needs backend foundation work, data / backend / security prompts plus a QA prompt
+
+The media prompt explicitly directs the media workflow to use `nano-banana-pro` for landing-page imagery, generate at least five production-ready images, and include showcase visuals that represent the project's best work or strongest outcomes.
 
 If the brand brief becomes incomplete again, ARMS removes stale generated prompts rather than leaving outdated prompt output behind.
 
@@ -356,10 +409,15 @@ ARMS is intentionally **non-destructive** when you re-run `arms init`.
 - synced agent files
 - synced skills and skill registry
 - workflow mirrors
-- `GEMINI.md`
+- `.arms/ENGINE.md`
+- `.arms/CONTEXT_SYNTHESIS.md`
 - root `AGENTS.md`
 - environment metadata in `.arms/SESSION.md`
 - active agent and active skill listings
+
+### Project `GEMINI.md` ownership
+
+If a project already has `GEMINI.md` at the root or `.gemini/GEMINI.md`, ARMS treats it as **project-owned** documentation. It is preserved as-is and can be read as repository context during brand and project inference, but it is not used as the engine-managed instruction target.
 
 ### Task table normalization
 
@@ -369,6 +427,10 @@ If ARMS finds an older `SESSION.md` task table shape, it upgrades it to the curr
 |---|---|---|---|---|---|
 
 On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound or inferred skill, `arms init` backfills the correct skill automatically.
+
+### Startup task seeding
+
+When a new project finishes intake and the active task table is still empty, ARMS seeds an initial startup sequence in `.arms/SESSION.md`. This typically includes product, devops, frontend, media, SEO, and QA work, and adds data/backend/security tasks when the project shape implies app or auth foundations.
 
 ### Context mismatch protection
 
@@ -411,8 +473,8 @@ arms init --answers-text "Mission: Build a conversion-focused portfolio site"
 
 1. Run `arms init`.
 2. If ARMS asks for brand context, answer the generated questionnaire or use the intake flags.
-3. Re-run `arms init` until `.arms/GENERATED_PROMPTS.md` is produced.
-4. Review `.arms/SESSION.md` for environment, agents, skills, and task structure.
+3. Re-run `arms init` until `.arms/CONTEXT_SYNTHESIS.md` and `.arms/GENERATED_PROMPTS.md` are produced.
+4. Review `.arms/SESSION.md` for environment, agents, skills, and the seeded startup task structure.
 5. Use the synced agents, skills, and generated prompts in your AI workflow.
 
 ---

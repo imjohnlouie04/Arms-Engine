@@ -61,8 +61,9 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
-- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md)
-- Gemini AI config: `./.gemini/` (GEMINI.md, RULES.md)
+- ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md, ENGINE.md)
+- Project-owned Gemini instructions may live at `./GEMINI.md` or `./.gemini/GEMINI.md` and must be preserved if present
+- Mirrored assistant assets: `./.gemini/`
 - Local mirrored assets: `./.gemini/agents/` and `./.arms/workflow/` (mirrored for assistant and CLI context)
 
 ---
@@ -79,7 +80,7 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md` or `.gemini/GEMINI.md`.
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
 6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
 7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
@@ -99,11 +100,12 @@ If initialization HALTS to collect Brand Context and initial tech stack answers 
 
 Resume from that point in this order:
 1. Update `.arms/BRAND.md` from the user's answers
-2. Recommend one primary tech stack and deployment target, with alternatives noted
-3. Update `.gemini/GEMINI.md` with the chosen or proposed architecture direction
-4. **Trigger the Media & Design Pipeline** (see `## Media & Design Pipeline` below) — generate logo and hero assets before scaffolding begins
-5. Generate or update the Strategic Task Table in `.arms/SESSION.md`
-6. HALT only at the normal Planning Gate for task-table approval
+2. Generate `.arms/CONTEXT_SYNTHESIS.md` from the approved brand + stack answers
+3. Generate `.arms/GENERATED_PROMPTS.md` from that synthesis and refresh the startup recommendations
+4. Recommend one primary latest-stable tech stack and deployment target, with alternatives noted
+5. Update `.arms/ENGINE.md` with the chosen or proposed engine-side architecture direction
+6. Ensure the Strategic Task Table in `.arms/SESSION.md` is seeded or updated to reflect the startup path
+7. HALT only at the normal Planning Gate for task-table approval
 
 Do not ask the same Brand Context questions again unless the user's reply is incomplete or contradictory.
 
@@ -211,7 +213,7 @@ Immediately after Brand Context for a new/empty project, the CLI must also ask f
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
-Root-level legacy files such as `SESSION.md`, `session.md`, `GEMINI.md`, `gemini.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Once managed files exist in `./.arms/` or `./.gemini/`, do not read those root-level legacy files as current session authority during init orchestration.
+Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. A project-owned `GEMINI.md` may live at the root or at `./.gemini/GEMINI.md`: preserve it, read it when it helps explain the project, and do not overwrite it during `arms init`.
 
 When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
 - `ARMS Root`
@@ -692,10 +694,13 @@ Initialized with the Bootstrap Template (see Session Bootstrap section). Persist
 ### `./.arms/SESSION.md`
 Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and completed work. Subject to archival criteria defined in Memory Management.
 
-### `GEMINI.md`
-Architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local Supabase workflow, reference to `BRAND.md` for all design decisions.
+### `./.arms/ENGINE.md`
+ARMS engine instructions for the workspace: architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local workflow, and references to `BRAND.md` for engine orchestration.
 
-### `RULES.md`
+### `./GEMINI.md`
+Optional project-owned instructions. If present, treat it as repository context and preserve it verbatim; do not overwrite it during `arms init`.
+
+### `./.arms/RULES.md`
 Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
 
 ---
@@ -724,7 +729,7 @@ Step 1 — Logo Generation (arms-media-agent → logo-design skill)
 Step 2 — Hero & UI Asset Generation (arms-media-agent → nano-banana-pro skill)
   Read: .agents/skills/nano-banana-pro/SKILL.md
   Input: Approved logo, brand palette, visual direction, project type from BRAND.md
-  Action: Generate hero image, background textures, or UI illustrations as required
+  Action: Generate at least five production-ready images for the landing page or app surface, including hero/supporting imagery plus showcase visuals that represent the project's best work or strongest outcomes
   Output: Assets saved to ./.arms/agent-outputs/arms-media-agent/ with descriptive filenames
   → Present generated assets and confirm before proceeding → HALT
 
@@ -767,9 +772,9 @@ Step 3 — Frontend Design System Scaffold (arms-frontend-agent → frontend-des
 
 | Option | Stack | Deployment |
 |---|---|---|
-| **[A]** | Next.js + Supabase + shadcn (Latest) | **[1]** Vercel |
-| **[B]** | Nuxt 4 + Firebase + Nuxt UI (Latest) | **[2]** Docker / VPS |
-| **[C]** | Astro + DaisyUI (Latest) | **[3]** AWS / GCP |
+| **[A]** | Next.js + Supabase + shadcn/ui (latest stable) | **[1]** Vercel |
+| **[B]** | Nuxt + Firebase + Nuxt UI (latest stable) | **[2]** Docker / VPS |
+| **[C]** | Astro + Tailwind CSS + DaisyUI (latest stable) | **[3]** AWS / GCP |
 | **[D]** | Custom | — |
 
 When recommending a stack, provide ONE primary recommendation with full justification and list all viable alternatives.

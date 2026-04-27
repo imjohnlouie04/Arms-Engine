@@ -15,7 +15,7 @@ This protocol dictates the execution phase following a code review. It enforces 
    > *"Task plan generated and logged. Shall I begin executing these fixes?"* -> **HALT**
 
 ## Phase 2: Execution & Defensive Coding (`arms-frontend-agent` / `arms-backend-agent`)
-Subagents must execute their assigned tasks while adhering to global standards and local `./.gemini/RULES.md`.
+Subagents must execute their assigned tasks while adhering to global standards and local `./.arms/RULES.md`.
 
 * **Execution Template:** Every response during this phase MUST follow the strict execution template (`[Speaking Agent] -> [State Updates] -> [Action/Code] -> [Next Step/Blocker]`).
 * **Architecture Guardrails:** You are strictly forbidden from modifying "Gatekeeper" authentication flows or "Holiday Pay" logic modules unless the user issues a direct, explicit override.

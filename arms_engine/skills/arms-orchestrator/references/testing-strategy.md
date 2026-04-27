@@ -10,7 +10,7 @@
 | Project Type | Unit/Integration | E2E |
 |---|---|---|
 | Next.js | Vitest + React Testing Library | Cypress (default) / Playwright when required |
-| Nuxt 4 | Vitest + @nuxt/test-utils | Cypress (default) / Playwright when required |
+| Nuxt | Vitest + @nuxt/test-utils | Cypress (default) / Playwright when required |
 | Astro | Vitest | Cypress (default) / Playwright when required |
 
 ---

@@ -15,7 +15,9 @@ Brand bootstrap behavior during `init`:
 - New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, including the initial tech stack fields plus a website / landing-page brief for content, marketing, and local-business projects, prints the questionnaire in the CLI, and halts for the user's answers.
 - After the user fills in `.arms/BRAND.md`, re-run `init` to resume from that checkpoint. Incomplete questionnaires stay active instead of being treated as finished state.
 - `init --watch` keeps the process alive at that checkpoint and resumes automatically after `.arms/BRAND.md` changes.
-- When the brand brief is complete, `init` also refreshes `.arms/GENERATED_PROMPTS.md` so the gathered context becomes agent-ready implementation prompts automatically.
+- When the brand brief is complete, `init` generates `.arms/CONTEXT_SYNTHESIS.md`, refreshes `.arms/GENERATED_PROMPTS.md`, and seeds the startup task table if it is still empty.
+- Stack shortcuts use the current latest-stable recommendation set: `A` = Next.js + Supabase + shadcn/ui, `B` = Nuxt + Firebase + Nuxt UI, `C` = Astro + Tailwind CSS + DaisyUI, `D` = Custom.
+- Landing-page media guidance now routes through `nano-banana-pro` and expects at least five production-ready images, including showcase / best-work imagery where it makes sense.
 - `init` also accepts `--preset <name>` to prefill common defaults (`local-business`, `saas`, `portfolio`, `ecommerce`, `content-site`).
 - `init --answers-file path/to/answers.md` and `init --answers-text "Mission: ..."` apply structured answers directly into `.arms/BRAND.md`.
 
