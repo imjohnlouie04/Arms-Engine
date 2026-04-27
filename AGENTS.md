@@ -19,14 +19,16 @@ ARMS automatically manages the following specialized agents. Use `/agent <agent-
 
 ## Available Skills
 
-Skills are discovered from `.agents/skills/` and provide domain expertise to agents. Common skills include:
+Skills are mirrored from `arms_engine/skills/` into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`, while agent-to-skill bindings come from `arms_engine/agents.yaml`. Common skills include:
 
 - **arms-orchestrator** – Full-stack project orchestration, multi-agent workflows, approval gates
 - **backend-system-architect** – Backend architecture, API design, database schemas
 - **frontend-design** – Production-grade UI components with distinctive aesthetics
+- **ui-ux-pro-max** – Expanded UI/UX design system and review guidance
 - **devops-orchestrator** – Deployment automation and zero-drift infrastructure workflows
 - **security-code-review** – OWASP audits, auth validation, RLS configuration
 - **qa-automation-testing** – Unit/E2E test generation, Cypress-first E2E strategy
+- **Accessibility Auditor** – WCAG compliance, semantic HTML, and inclusive UX audits
 - **seo-web-performance-expert** – Meta tags, semantic HTML, Core Web Vitals optimization
 - **logo-design** – Logo creation and asset design
 - **nano-banana-pro** – Specialized image generation

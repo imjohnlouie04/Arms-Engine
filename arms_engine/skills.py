@@ -17,15 +17,12 @@ def clean_legacy_gemini_skill_mirror(project_root):
     removed_entries = False
     for entry in os.listdir(legacy_dir):
         entry_path = os.path.join(legacy_dir, entry)
-        if os.path.isdir(entry_path):
-            shutil.rmtree(entry_path)
-            removed_entries = True
-        elif os.path.isfile(entry_path) and entry.endswith(".md"):
+        if os.path.isfile(entry_path) and entry.endswith(".md"):
             os.remove(entry_path)
             removed_entries = True
 
     if removed_entries:
-        print("🧹 Removed legacy .gemini/skills mirror to prevent duplicate CLI skill discovery.")
+        print("🧹 Removed legacy flat skill files from .gemini/skills before rebuilding skill mirrors.")
 
 
 def sync_agents(arms_root, project_root):
@@ -54,7 +51,7 @@ def sync_agents(arms_root, project_root):
     yaml_dest = os.path.join(project_root, ".gemini/agents.yaml")
     if os.path.exists(yaml_src):
         print("📄 Syncing agents.yaml...")
-        shutil.copy(yaml_src, yaml_dest)
+        shutil.copy2(yaml_src, yaml_dest)
 
 
 def sync_agents_copilot(arms_root, project_root):
@@ -149,6 +146,12 @@ def parse_skill_metadata(skill_md_path, fallback_name):
                     normalized_key = str(key).strip().lower()
                     if isinstance(value, str):
                         metadata[normalized_key] = " ".join(value.split()).strip()
+                    elif isinstance(value, (list, tuple)):
+                        metadata[normalized_key] = [
+                            str(item).strip()
+                            for item in value
+                            if str(item).strip()
+                        ]
                     elif value is not None:
                         metadata[normalized_key] = str(value).strip()
 
@@ -180,6 +183,8 @@ def sync_skills_copilot(arms_root, project_root):
     skills_src = os.path.join(arms_root, "skills")
     target_dirs = [
         os.path.join(project_root, ".agents/skills"),
+        os.path.join(project_root, ".gemini/skills"),
+        os.path.join(project_root, ".github/skills"),
     ]
     for target_dir in target_dirs:
         os.makedirs(target_dir, exist_ok=True)
@@ -221,10 +226,26 @@ def sync_skills_copilot(arms_root, project_root):
 
 def create_skills_registry(arms_root, project_root):
     print("📋 Creating Skills Registry...")
-    skills_src = os.path.join(arms_root, "skills")
-    registry_dest = os.path.join(project_root, ".agents/skills.yaml")
-    index_dest = os.path.join(project_root, ".agents/skills-index.md")
+    skills_data = build_skills_data(arms_root)
+    write_skills_registry_files(
+        os.path.join(project_root, ".agents"),
+        ".agents/skills",
+        skills_data,
+    )
+    write_skills_registry_files(
+        os.path.join(project_root, ".gemini"),
+        ".gemini/skills",
+        skills_data,
+    )
+    write_skills_registry_files(
+        os.path.join(project_root, ".github"),
+        ".github/skills",
+        skills_data,
+    )
 
+
+def build_skills_data(arms_root):
+    skills_src = os.path.join(arms_root, "skills")
     skills_data = {}
     if os.path.exists(skills_src):
         for skill_name in sorted(os.listdir(skills_src)):
@@ -239,6 +260,12 @@ def create_skills_registry(arms_root, project_root):
                     "description": metadata["description"],
                     "source_directory": skill_name,
                 }
+    return skills_data
+
+
+def write_skills_registry_files(target_root, skill_mirror_path, skills_data):
+    registry_dest = os.path.join(target_root, "skills.yaml")
+    index_dest = os.path.join(target_root, "skills-index.md")
 
     with open(registry_dest, "w", encoding="utf-8") as f:
         f.write("# ARMS Skills Registry\n")
@@ -260,20 +287,20 @@ def create_skills_registry(arms_root, project_root):
             f.write(f"**{skill_info['name']}**\n\n")
             f.write(f"{skill_info['description']}\n\n")
             skill_file_dir = skill_info["source_directory"]
-            f.write(f"**File:** `.agents/skills/{skill_file_dir}/SKILL.md`\n\n")
+            f.write(f"**File:** `{skill_mirror_path}/{skill_file_dir}/SKILL.md`\n\n")
             if skill_info["source_directory"] != skill_name:
                 f.write(f"**Source Directory:** `arms_engine/skills/{skill_info['source_directory']}`\n\n")
 
         f.write("## Usage\n\n")
-        f.write("Reference a skill from the local `.agents/skills/` mirror:\n\n")
+        f.write("Reference a skill from the local skill mirror:\n\n")
         f.write("```\n")
-        f.write(".agents/skills/arms-orchestrator/SKILL.md\n")
+        f.write(f"{skill_mirror_path}/arms-orchestrator/SKILL.md\n")
         f.write("Describe your task here\n")
         f.write("```\n")
 
 
-def sync_copilot_instructions(arms_root, project_root):
-    print("📄 Syncing AGENTS.md (Copilot Instructions)...")
+def sync_root_agents_guide(arms_root, project_root):
+    print("📄 Syncing AGENTS.md (root agent guide)...")
     src = os.path.join(arms_root, "AGENTS.md")
     dest = os.path.join(project_root, "AGENTS.md")
     if os.path.exists(src):
@@ -436,9 +463,9 @@ def load_agents_registry(arms_root):
             continue
 
         if in_skills:
-            skill_match = re.match(r"^\s\s\s\s\s\s-\s([\w-]+)", line)
+            skill_match = re.match(r"^\s{6}-\s*(.+?)\s*$", line)
             if skill_match:
-                current_agent["skills"].append(skill_match.group(1))
+                current_agent["skills"].append(skill_match.group(1).strip().strip("'\""))
                 continue
             if line.strip() and not line.strip().startswith("-"):
                 in_skills = False
@@ -449,74 +476,10 @@ def load_agents_registry(arms_root):
     return agents
 
 
-def score_agent_skill_match(agent, skill):
-    skill_name = skill["name"].lower()
-    description = skill["description"].lower()
-    skill_text = f"{skill_name} {description}"
-    agent_name = agent["name"]
-    agent_text = f"{agent_name} {agent.get('role', '')} {agent.get('scope', '')}".lower()
-
-    score = 0
-    for hint in AGENT_SKILL_HINTS.get(agent_name, set()):
-        if hint in skill_name:
-            score += 4
-        elif hint in skill_text:
-            score += 2
-
-    agent_tokens = {token for token in re.findall(r"[a-z0-9]+", agent_text) if len(token) >= 3}
-    skill_name_tokens = {token for token in re.findall(r"[a-z0-9]+", skill_name) if len(token) >= 3}
-    skill_tokens = {token for token in re.findall(r"[a-z0-9]+", skill_text) if len(token) >= 4}
-
-    for token in skill_name_tokens & agent_tokens:
-        score += 3
-    for token in skill_tokens & agent_tokens:
-        score += 1
-
-    return score
-
-
-def infer_agent_skill_bindings(agents, skills):
-    bound_skills = {
-        skill_name
-        for agent in agents
-        for skill_name in agent.get("skills", [])
-    }
-    inferred_bindings = []
-
-    for skill in skills:
-        skill_name = skill["name"]
-        if skill_name in bound_skills:
-            continue
-
-        scored_agents = []
-        for agent in agents:
-            score = score_agent_skill_match(agent, skill)
-            if score > 0:
-                scored_agents.append((score, agent["name"], agent))
-
-        if not scored_agents:
-            continue
-
-        scored_agents.sort(key=lambda item: (-item[0], item[1]))
-        best_score, best_name, best_agent = scored_agents[0]
-        if len(scored_agents) > 1 and best_score == scored_agents[1][0]:
-            continue
-
-        best_agent.setdefault("skills", []).append(skill_name)
-        bound_skills.add(skill_name)
-        inferred_bindings.append((skill_name, best_name))
-
-    return inferred_bindings
-
-
 def resolve_agents_with_skills(arms_root, announce=False):
     agents = load_agents_registry(arms_root)
     skill_catalog = discover_skill_catalog(arms_root)
-    inferred_bindings = infer_agent_skill_bindings(agents, skill_catalog)
-    if announce:
-        for skill_name, agent_name in inferred_bindings:
-            print(f"🧩 Auto-assigned skill '{skill_name}' to {agent_name}.")
-    return agents, skill_catalog, inferred_bindings
+    return agents, skill_catalog, []
 
 
 def build_agent_skill_bindings(agents):

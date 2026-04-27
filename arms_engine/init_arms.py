@@ -9,7 +9,10 @@ tested independently. Keep this file as the stable import surface and
 from . import __version__
 from .brand import *  # noqa: F401,F403
 from .cli import *  # noqa: F401,F403
+from .compression import *  # noqa: F401,F403
+from .doctor import *  # noqa: F401,F403
 from .prompts import *  # noqa: F401,F403
+from .protocols import *  # noqa: F401,F403
 from .session import *  # noqa: F401,F403
 from .skills import *  # noqa: F401,F403
 from .versioning import *  # noqa: F401,F403

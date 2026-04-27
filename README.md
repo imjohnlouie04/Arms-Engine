@@ -62,9 +62,12 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.arms/ENGINE.md` | Managed ARMS engine instructions | Re-synced from the engine on every `arms init` |
 | `.arms/RULES.md` | Project rules and guardrails | Created if missing and migrated from legacy rule files |
 | `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; references `.arms/CONTEXT_SYNTHESIS.md` |
-| `GEMINI.md` or `.gemini/GEMINI.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans both locations and does not overwrite either |
+| `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans these locations for context and does not overwrite them |
 | `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
-| `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced from `arms_engine/agents.yaml` |
+| `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced directly from `arms_engine/agents.yaml` |
+| `.gemini/skills/` | Gemini skill mirror | Synced from valid `arms_engine/skills/*/SKILL.md` directories |
+| `.gemini/skills.yaml` | Gemini skill registry | Built from synced skill metadata |
+| `.gemini/skills-index.md` | Human-readable Gemini skill index | Generated quick reference |
 | `.arms/workflow/` | Local mirror of workflow docs | Copied from the engine for cross-CLI use |
 | `.arms/reports/` | Shared report output directory | Used by review, fix, and deploy protocols |
 | `.arms/agent-outputs/` | Shared generated asset/output directory | Used for agent-produced files such as media assets |
@@ -72,6 +75,9 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.agents/skills.yaml` | Generated skill registry | Built from synced skill metadata |
 | `.agents/skills-index.md` | Human-readable skill index | Generated quick reference |
 | `.github/agents/` | Copilot CLI agent discovery | Synced from engine agent files |
+| `.github/skills/` | Copilot skill mirror | Synced from valid `arms_engine/skills/*/SKILL.md` directories |
+| `.github/skills.yaml` | Generated Copilot skill registry | Built from synced skill metadata |
+| `.github/skills-index.md` | Human-readable Copilot skill index | Generated quick reference |
 | `AGENTS.md` | Copilot instruction file at project root | Re-synced from the engine |
 
 ---
@@ -118,7 +124,7 @@ The package exposes two entry points:
 
 | Command | What it does |
 |---|---|
-| `arms` | Main workspace bootstrap and orchestration initializer |
+| `arms` | Main workspace bootstrap CLI, diagnostics, and protocol runner (`init`, `start`, `doctor`, `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status`) |
 | `arms-docs` | Updates the README agent roster block from `agents.yaml` |
 
 `arms --version` and `arms-docs --version` are also supported.
@@ -133,7 +139,10 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 |---|---|
 | `arms_engine/cli.py` | CLI argument parsing, watch mode, confirmation prompts, and init orchestration |
 | `arms_engine/brand.py` | Brand inference, questionnaire rendering, structured-answer parsing, and brand updates |
+| `arms_engine/compression.py` | Native workspace compression for `arms init compress`, including session archiving, memory compaction, and history summaries |
+| `arms_engine/doctor.py` | Workspace diagnostics for `arms doctor`, including sync checks, ownership safety, and protocol readiness |
 | `arms_engine/prompts.py` | Context synthesis, generated prompts, and seeded startup tasks |
+| `arms_engine/protocols.py` | Protocol command dispatch, session/report updates, pipeline status summaries, and release-note scaffolding |
 | `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, and registry generation |
 | `arms_engine/session.py` | Legacy migration, version guard, task-table normalization, and atomic `SESSION.md` updates |
 | `arms_engine/init_arms.py` | Compatibility shim and stable script entrypoint |
@@ -146,18 +155,19 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
-3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, and `.github/agents/`.
+3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.gemini/skills/`, `.github/agents/`, and `.github/skills/`.
 4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md`.
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`.
-6. Removes the legacy `.gemini/skills/` mirror to avoid duplicate skill discovery.
+6. Cleans legacy flat skill files and rebuilds the skill mirrors under `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
 7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` from that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Explicit agent skill bindings come from `agents.yaml`; unbound discovered skills are auto-attached to the best-matching agent for session visibility.
+12. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
 13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
-14. Ends in either standard halt mode or YOLO-ready mode.
+14. If the command includes `compress`, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
+15. Ends in either standard halt mode or YOLO-ready mode.
 
 ### Standard mode
 
@@ -191,7 +201,14 @@ This enables the YOLO flag in the generated session state and changes the comple
 arms init compress
 ```
 
-This currently **acknowledges optimization mode** and prints that the caveman skill stub was activated. The actual compression flow is not yet executed by the Python entry point, so this should be treated as a documented hook rather than a fully implemented compression pass.
+This now runs a **native ARMS compression pass** after the normal init sync:
+
+- archives `Done` / `Cancelled` active-task rows into `.arms/SESSION_ARCHIVE.md`
+- clears bulky `Completed Tasks` noise from `.arms/SESSION.md`
+- rewrites `.arms/MEMORY.md` into dense caveman-style notes while preserving section headings
+- refreshes `.arms/HISTORY_SUMMARY.md` when archive history grows beyond the compression threshold
+
+It is designed to shrink long-lived workspace state without deleting pending or blocked work.
 
 ### Overriding the engine root
 
@@ -227,6 +244,25 @@ This is useful when you want to:
 - let ARMS resume automatically without manually rerunning the command
 
 Watch mode only auto-resumes the brand-intake checkpoint. Press `Ctrl+C` to stop watching.
+
+### Doctor mode
+
+```bash
+arms doctor
+```
+
+`arms doctor` inspects the current workspace and exits non-zero when it finds blocking problems.
+
+It checks:
+
+- required `.arms/`, `.agents/`, `.gemini/`, and `.github/agents/` files and directories
+- `.arms/SESSION.md` structure and engine-version compatibility
+- agent, skill, and workflow mirror sync
+- engine-managed file sync for `.arms/ENGINE.md` and root `AGENTS.md`
+- project-owned instruction file detection (`GEMINI.md`, `.gemini/GEMINI.md`, `.github/copilot-instructions.md`)
+- readiness for `run review`, `fix issues`, and `run deploy`
+
+Warnings do not fail the command, but blocking issues do.
 
 ---
 
@@ -432,13 +468,13 @@ ARMS is intentionally **non-destructive** when you re-run `arms init`.
 - environment metadata in `.arms/SESSION.md`
 - active agent and active skill listings
 
-### Project `GEMINI.md` ownership
+### Project-owned instruction file ownership
 
-If a project already has `GEMINI.md` at the root or `.gemini/GEMINI.md`, ARMS treats it as **project-owned** documentation. It is preserved as-is and can be read as repository context during brand and project inference, but it is not used as the engine-managed instruction target.
+If a project already has `GEMINI.md` at the root, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`, ARMS treats those files as **project-owned** documentation. They are preserved as-is and can be read as repository context during brand and project inference, but they are not used as engine-managed instruction targets.
 
 ### Why the engine source file is `ENGINE.md`
 
-The engine package now ships its managed instruction source as `arms_engine/ENGINE.md`. During `arms init`, ARMS deploys that engine-owned file into the project workspace as `.arms/ENGINE.md`, while any project-owned `GEMINI.md` remains separate and untouched.
+The engine package now ships its managed instruction source as `arms_engine/ENGINE.md`. During `arms init`, ARMS deploys that engine-owned file into the project workspace as `.arms/ENGINE.md`, while any project-owned `GEMINI.md` or `.github/copilot-instructions.md` remains separate and untouched.
 
 ### Task table normalization
 
@@ -447,7 +483,7 @@ If ARMS finds an older `SESSION.md` task table shape, it upgrades it to the curr
 | # | Task | Assigned Agent | Active Skill | Dependencies | Status |
 |---|---|---|---|---|---|
 
-On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound or inferred skill, `arms init` backfills the correct skill automatically.
+On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound skill in `arms_engine/agents.yaml`, `arms init` backfills the correct skill automatically.
 
 ### Startup task seeding
 
@@ -502,17 +538,15 @@ arms init --answers-text "Mission: Build a conversion-focused portfolio site"
 
 ## Orchestration Protocol Commands
 
-ARMS documentation and agent instructions reference commands such as:
+After initialization, the `arms` CLI also accepts protocol commands that work against the local `.arms/` workspace state:
 
-- `yolo`
-- `run status`
-- `run review`
-- `fix issues`
-- `run pipeline`
+- `arms run status` — reads `.arms/SESSION.md` and prints the current phase, active tasks, blockers, and last completed work
+- `arms run review` — stages review tasks in `.arms/SESSION.md` and scaffolds `./.arms/reports/review-<YYYY-MM-DD>.md`
+- `arms fix issues` — parses the latest review report's `## Actionable Issues` bullets into a fix plan and updates the task board
+- `arms run deploy` — stages deployment tasks and generates `./.arms/reports/release-notes-<YYYY-MM-DD>.md`
+- `arms run pipeline` — resets the protocol sequence to the Review phase and scaffolds the review report
 
-These are best understood as **orchestration protocol phrases used by ARMS-guided agent workflows after initialization**, not as separate package entry points declared in `pyproject.toml`.
-
-Today, the Python package exposes `arms` and `arms-docs`. The orchestration phrases live in the synced instructions and workflow conventions that ARMS installs into the project.
+These commands deliberately stop at approval gates. They update `SESSION.md` and create protocol artifacts in `.arms/reports/`, but they do **not** yet execute full autonomous subagent remediation or remote deployment from the Python CLI alone.
 
 ---
 

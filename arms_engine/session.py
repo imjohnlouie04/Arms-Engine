@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections import OrderedDict
 
 from . import __version__
 from .brand import infer_brand_context_from_project
@@ -64,6 +65,11 @@ def setup_folders(project_root):
     ]
     gemini_folders = [
         ".gemini/agents",
+        ".gemini/skills",
+    ]
+    github_folders = [
+        ".github/agents",
+        ".github/skills",
     ]
     arms_folders = [
         ".arms",
@@ -71,7 +77,7 @@ def setup_folders(project_root):
         ".arms/reports",
         ".arms/workflow",
     ]
-    for folder in agents_folders + gemini_folders + arms_folders:
+    for folder in agents_folders + gemini_folders + github_folders + arms_folders:
         path = os.path.join(project_root, folder)
         os.makedirs(path, exist_ok=True)
 
@@ -539,13 +545,52 @@ def write_text_atomic(path, content):
             os.remove(temp_path)
 
 
+def read_text_file(path):
+    with open(path, "r", encoding="utf-8", errors="ignore") as file_handle:
+        return file_handle.read()
+
+
+def parse_markdown_sections(content):
+    preamble_lines = []
+    sections = OrderedDict()
+    current_title = None
+    current_lines = []
+
+    for line in content.splitlines():
+        if line.startswith("## "):
+            if current_title is not None:
+                sections[current_title] = "\n".join(current_lines).strip()
+            current_title = line[3:].strip()
+            current_lines = []
+            continue
+        if current_title is None:
+            preamble_lines.append(line)
+        else:
+            current_lines.append(line)
+
+    if current_title is not None:
+        sections[current_title] = "\n".join(current_lines).strip()
+
+    return "\n".join(preamble_lines).strip(), sections
+
+
+def write_markdown_sections(path, preamble, sections):
+    parts = [preamble.strip()]
+    for title, body in sections.items():
+        normalized_body = (body or "").strip()
+        parts.append(f"## {title}")
+        if normalized_body:
+            parts.append(normalized_body)
+    content = "\n\n".join(part for part in parts if part).rstrip() + "\n"
+    write_text_atomic(path, content)
+
+
 def read_existing_session_context(session_path):
     existing_content = ""
     existing_root = None
     existing_name = None
     if os.path.exists(session_path):
-        with open(session_path, "r", encoding="utf-8", errors="ignore") as f:
-            existing_content = f.read()
+        existing_content = read_text_file(session_path)
         root_match = re.search(r"- Project Root: (.*)", existing_content)
         if root_match:
             existing_root = root_match.group(1).strip()

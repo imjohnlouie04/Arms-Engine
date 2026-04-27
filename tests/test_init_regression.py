@@ -1,5 +1,6 @@
 import io
 import os
+import shutil
 import sys
 import threading
 import time
@@ -94,6 +95,195 @@ class InitRegressionTests(unittest.TestCase):
             inferred = init_arms.infer_brand_context_from_project(str(project_root))
 
             self.assertEqual(inferred["mission"], "This system coordinates campus attendance workflows.")
+
+    def test_infer_brand_context_reads_project_copilot_instructions(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".github").mkdir()
+            (project_root / ".github" / "copilot-instructions.md").write_text(
+                "# Repository Notes\nThis platform helps clinics coordinate same-day patient scheduling.\n",
+                encoding="utf-8",
+            )
+
+            inferred = init_arms.infer_brand_context_from_project(str(project_root))
+
+            self.assertEqual(inferred["mission"], "This platform helps clinics coordinate same-day patient scheduling.")
+
+    def test_init_preserves_project_copilot_instructions(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".github").mkdir()
+            instructions_path = project_root / ".github" / "copilot-instructions.md"
+            instructions_path.write_text(
+                "# Project instructions\nKeep the existing deployment workflow.\n",
+                encoding="utf-8",
+            )
+            (project_root / "README.md").write_text(
+                "# Scheduler\nClinic scheduling platform.\n",
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(
+                instructions_path.read_text(encoding="utf-8"),
+                "# Project instructions\nKeep the existing deployment workflow.\n",
+            )
+            self.assertTrue((project_root / "AGENTS.md").exists())
+
+    def test_init_syncs_explicit_skill_binding_from_agents_yaml(self):
+        with TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            engine_root = temp_root / "engine"
+            project_root = temp_root / "project"
+            shutil.copytree(ARMS_ROOT, engine_root)
+            project_root.mkdir()
+
+            skill_dir = engine_root / "skills" / "supabase"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "name: supabase",
+                        "description: Use for Supabase database auth RLS schema changes and storage.",
+                        "---",
+                        "",
+                        "# Supabase",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            agents_yaml_path = engine_root / "agents.yaml"
+            agents_yaml_path.write_text(
+                agents_yaml_path.read_text(encoding="utf-8").replace(
+                    "  arms-data-agent:\n    role: Data Specialist\n    scope: Schema design, migrations, query optimization.\n",
+                    "  arms-data-agent:\n    role: Data Specialist\n    scope: Schema design, migrations, query optimization.\n    skills:\n      - supabase\n",
+                ),
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(engine_root))
+
+            registry = init_arms.load_agents_registry(str(project_root / ".gemini"))
+            registry_by_name = {agent["name"]: agent for agent in registry}
+            self.assertIn("supabase", registry_by_name["arms-data-agent"]["skills"])
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("- arms-data-agent (supabase)", session_content)
+            self.assertTrue((project_root / ".agents" / "skills" / "supabase" / "SKILL.md").exists())
+            self.assertTrue((project_root / ".gemini" / "skills" / "supabase" / "SKILL.md").exists())
+            self.assertTrue((project_root / ".github" / "skills" / "supabase" / "SKILL.md").exists())
+            self.assertIn("supabase:", (project_root / ".agents" / "skills.yaml").read_text(encoding="utf-8"))
+            self.assertIn("supabase:", (project_root / ".gemini" / "skills.yaml").read_text(encoding="utf-8"))
+            self.assertIn("supabase:", (project_root / ".github" / "skills.yaml").read_text(encoding="utf-8"))
+            self.assertIn(".gemini/skills/arms-orchestrator/SKILL.md", (project_root / ".gemini" / "skills-index.md").read_text(encoding="utf-8"))
+
+    def test_init_syncs_all_engine_skills_to_all_skill_mirrors(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nSkill mirror sync.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            expected_skills = {
+                path.name
+                for path in (ARMS_ROOT / "skills").iterdir()
+                if path.is_dir() and (path / "SKILL.md").exists()
+            }
+            for relative_root in (".agents/skills", ".gemini/skills", ".github/skills"):
+                mirror_root = project_root / relative_root
+                mirrored_skills = {path.name for path in mirror_root.iterdir() if path.is_dir()}
+                self.assertEqual(mirrored_skills, expected_skills)
+            for relative_file in (
+                ".agents/skills.yaml",
+                ".agents/skills-index.md",
+                ".gemini/skills.yaml",
+                ".gemini/skills-index.md",
+                ".github/skills.yaml",
+                ".github/skills-index.md",
+            ):
+                self.assertTrue((project_root / relative_file).exists())
+
+    def test_reinit_existing_project_refreshes_skill_mirrors_and_registries(self):
+        with TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            engine_root = temp_root / "engine"
+            project_root = temp_root / "project"
+            shutil.copytree(ARMS_ROOT, engine_root)
+            project_root.mkdir()
+            (project_root / "README.md").write_text("# Demo\nExisting project.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(engine_root))
+
+            skill_dir = engine_root / "skills" / "supabase"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "name: supabase",
+                        "description: Use for Supabase database auth RLS schema changes and storage.",
+                        "---",
+                        "",
+                        "# Supabase",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            agents_yaml_path = engine_root / "agents.yaml"
+            agents_yaml_path.write_text(
+                agents_yaml_path.read_text(encoding="utf-8").replace(
+                    "  arms-data-agent:\n    role: Data Specialist\n    scope: Schema design, migrations, query optimization.\n",
+                    "  arms-data-agent:\n    role: Data Specialist\n    scope: Schema design, migrations, query optimization.\n    skills:\n      - supabase\n",
+                ),
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(engine_root))
+
+            for relative_root in (".agents/skills", ".gemini/skills", ".github/skills"):
+                self.assertTrue((project_root / relative_root / "supabase" / "SKILL.md").exists())
+            for relative_file in (
+                ".agents/skills.yaml",
+                ".gemini/skills.yaml",
+                ".github/skills.yaml",
+                ".agents/skills-index.md",
+                ".gemini/skills-index.md",
+                ".github/skills-index.md",
+            ):
+                self.assertIn("supabase", (project_root / relative_file).read_text(encoding="utf-8"))
+
+    def test_resolve_agents_with_skills_uses_only_agents_yaml_bindings(self):
+        with TemporaryDirectory() as tmp:
+            engine_root = Path(tmp) / "engine"
+            shutil.copytree(ARMS_ROOT, engine_root)
+
+            skill_dir = engine_root / "skills" / "platform-ops"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "name: platform-ops",
+                        "description: Guidance for releases, environments, and cloud operations.",
+                        "agent: arms-devops-agent",
+                        "---",
+                        "",
+                        "# Platform Ops",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            agents, _, inferred = init_arms.resolve_agents_with_skills(str(engine_root), announce=False)
+            bindings = {agent["name"]: agent.get("skills", []) for agent in agents}
+
+            self.assertEqual(inferred, [])
+            self.assertNotIn("platform-ops", bindings["arms-devops-agent"])
 
     def test_run_init_once_restores_engine_version_in_session(self):
         with TemporaryDirectory() as tmp:

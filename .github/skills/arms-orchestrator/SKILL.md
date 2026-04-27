@@ -1,7 +1,7 @@
 ---
 name: arms-orchestrator
 description: >
-  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
+  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
 ---
 
 # ARMS — Architectural Runtime Management System
@@ -62,9 +62,9 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
 - ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md, ENGINE.md)
-- Project-owned Gemini instructions may live at `./GEMINI.md` or `./.gemini/GEMINI.md` and must be preserved if present
-- Mirrored assistant assets: `./.gemini/`
-- Local mirrored assets: `./.gemini/agents/` and `./.arms/workflow/` (mirrored for assistant and CLI context)
+- Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md` and must be preserved if present
+- Mirrored assistant assets: `./.gemini/`, including `.gemini/agents/` and `.gemini/skills/`
+- Local mirrored assets: `./.github/agents/`, `./.github/skills/`, and `./.arms/workflow/` (mirrored for CLI and engine context)
 
 ---
 
@@ -80,7 +80,7 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md` or `.gemini/GEMINI.md`.
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`.
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
 6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
 7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
@@ -91,7 +91,7 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
-   - **Persistence:** Update `SESSION.md` under `## Active Skills`. Never delete the roster during a task update.
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`. Never delete the roster during a task update.
 ```
 
 ### Initialization Continuation Rule
@@ -213,7 +213,7 @@ Immediately after Brand Context for a new/empty project, the CLI must also ask f
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
-Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. A project-owned `GEMINI.md` may live at the root or at `./.gemini/GEMINI.md`: preserve it, read it when it helps explain the project, and do not overwrite it during `arms init`.
+Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Project-owned instruction files may live at the root as `GEMINI.md`, under `./.gemini/GEMINI.md`, or under `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
 
 When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
 - `ARMS Root`
@@ -248,7 +248,7 @@ Do not remove `Engine Version` during task-table or blocker updates.
 ## Agent Roster
 
 > **Canonical source:** `$ARMS_ROOT/agents.yaml`
-> The roster below is a quick-reference summary. Authoritative role definitions and scoped rules live in `agents.yaml`. Explicit skill bindings in `agents.yaml` win, but `arms init` may infer bindings for newly discovered unbound skills when building the session roster.
+> The roster below is a quick-reference summary. Authoritative role definitions and scoped rules live in `agents.yaml`. Agent-to-skill bindings come from `agents.yaml`; skill directories under `$ARMS_ROOT/skills/` provide the mirrored skill content.
 
 ```yaml
 arms-main-agent:     Session orchestrator. Owns SESSION.md, coordinates handoffs, enforces gates.
@@ -262,7 +262,7 @@ arms-qa-agent:       Unit + E2E tests, pre-flight validation.
 arms-security-agent: OWASP, auth validation, token security, dependency audits.
 ```
 
-On session start, `arms-main-agent` MUST read `$ARMS_ROOT/agents.yaml` to load the full agent definitions, including per-agent `rules` and explicit `skills` bindings. If a discovered skill is still unbound, init may attach it to the best-matching agent for the session roster without rewriting `agents.yaml`.
+On session start, `arms-main-agent` MUST read `$ARMS_ROOT/agents.yaml` to load the full agent definitions, including per-agent `rules` and explicit `skills` bindings. If a skill exists under `$ARMS_ROOT/skills/` but is not bound in `agents.yaml`, init still mirrors the skill files but does not auto-attach that skill to any agent.
 
 ---
 
@@ -301,10 +301,10 @@ Pending → In Progress → Pre-Flight → Done
 ### Rules
 
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
-- **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` first; if none are declared there, use the skill already inferred into `.arms/SESSION.md` for that agent.
+- **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy.
 - If an agent has exactly one available skill, use it automatically.
 - If an agent has multiple available skills, pick the most relevant skill for the task being delegated.
-- Use `—` only when that agent truly has no bound or inferred skill.
+- Use `—` only when that agent truly has no bound skill.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -335,7 +335,8 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 |---|---|---|
 | `init` | Standard | Standard boot sequence. Halt for plan approval. |
 | `init yolo` | Automated | Full automation. Skip initial plan approval gate. |
-| `init compress`| Efficiency| Scaffold and then run caveman-compressor skill to shrink session/memory. |
+| `init compress`| Efficiency| Scaffold and then run the native ARMS compression pass to shrink session/memory. |
+| `doctor` | Inline | Audit workspace health, ownership safety, and protocol readiness. |
 | `yolo` | Override | Activate Fast-Track Execution for current plan. |
 | `run review` | REVIEW_PROTOCOL.md | Delegate audit to QA, Security, Frontend. → **HALT** |
 | `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review report, generate Task Table, delegate. → **HALT** |
@@ -697,8 +698,8 @@ Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and co
 ### `./.arms/ENGINE.md`
 ARMS engine instructions for the workspace: architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local workflow, and references to `BRAND.md` for engine orchestration.
 
-### `./GEMINI.md`
-Optional project-owned instructions. If present, treat it as repository context and preserve it verbatim; do not overwrite it during `arms init`.
+### Project-owned instruction files
+`./GEMINI.md`, `./.gemini/GEMINI.md`, and `./.github/copilot-instructions.md` are optional project-owned instructions. If present, treat them as repository context and preserve them verbatim; do not overwrite them during `arms init`.
 
 ### `./.arms/RULES.md`
 Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.

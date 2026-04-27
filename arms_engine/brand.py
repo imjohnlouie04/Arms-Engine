@@ -1092,6 +1092,7 @@ def infer_brand_context_from_project(project_root):
         "gemini.md",
         os.path.join(".gemini", "GEMINI.md"),
         os.path.join(".gemini", "gemini.md"),
+        os.path.join(".github", "copilot-instructions.md"),
     )
     for gemini_filename in project_instruction_candidates:
         gemini_path = os.path.join(project_root, gemini_filename)

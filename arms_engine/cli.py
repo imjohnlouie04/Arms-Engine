@@ -12,12 +12,15 @@ from .brand import (
     format_available_presets,
     initialize_brand_context,
 )
+from .compression import compress_workspace, format_compression_summary
+from .doctor import handle_doctor_command, identify_doctor_command
 from .prompts import (
     build_context_synthesis_data,
     render_startup_tasks_content,
     sync_context_synthesis,
     sync_generated_prompts,
 )
+from .protocols import handle_protocol_command, identify_protocol_command
 from .session import (
     SessionContextMismatchError,
     bootstrap_runtime_files,
@@ -33,8 +36,8 @@ from .skills import (
     discover_skills,
     sync_agents,
     sync_agents_copilot,
-    sync_copilot_instructions,
     sync_engine_instructions,
+    sync_root_agents_guide,
     sync_skills_copilot,
     sync_workflow,
 )
@@ -239,10 +242,14 @@ def run_init_once(
         }
 
     sync_engine_instructions(arms_root, project_root)
-    sync_copilot_instructions(arms_root, project_root)
+    sync_root_agents_guide(arms_root, project_root)
 
     if "compress" in full_command.lower():
-        print("🗜️  Optimization mode triggered. (Caveman skill stub activated)")
+        compression_summary = compress_workspace(project_root)
+        print(format_compression_summary(compression_summary))
+
+    if "compress" in full_command.lower():
+        print("🪨 Caveman compressor rules applied to the local ARMS workspace.")
 
     brand_signature = capture_file_signature(os.path.join(project_root, ".arms/BRAND.md"))
     if brand_context_state and brand_context_state.get("status") == "questions_required":
@@ -311,6 +318,14 @@ def main():
         raise SystemExit(1)
 
     arms_root = normalize_arms_root(args.root) if args.root else get_arms_root()
+    doctor_command = identify_doctor_command(args.command)
+    if doctor_command:
+        handle_doctor_command(project_root, arms_root)
+        return
+    protocol_command = identify_protocol_command(args.command)
+    if protocol_command:
+        handle_protocol_command(protocol_command, project_root, arms_root)
+        return
     if args.preset and args.preset not in PROJECT_PRESETS:
         print(f"❌ ERROR: Unknown preset '{args.preset}'.")
         print(f"   Available presets: {format_available_presets()}")
