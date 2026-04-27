@@ -81,8 +81,8 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
 4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`.
-5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to ./.gemini/agents/ and ensure tools: ["*"] is present.
-6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh`
+5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to `./.gemini/agents/` and `./.github/agents/`, ensure `tools: ["*"]` is present, and inject canonical per-agent runtime rules from `agents.yaml`.
+6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh` (this preserves the caller's `PYTHONPATH`, prepends the engine checkout, and executes `python3 -m arms_engine.init_arms`)
 7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
    - Existing project with missing or placeholder brand file: inspect repository signals and auto-generate a first-pass `BRAND.md`
    - New / empty project with missing brand file: create a question-driven `BRAND.md` that must be completed from user answers
@@ -91,7 +91,7 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
-   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`. Never delete the roster during a task update.
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`. Never delete the roster during a task update.
 ```
 
 ### Initialization Continuation Rule
@@ -336,7 +336,7 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 | `init` | Standard | Standard boot sequence. Halt for plan approval. |
 | `init yolo` | Automated | Full automation. Skip initial plan approval gate. |
 | `init compress`| Efficiency| Scaffold and then run the native ARMS compression pass to shrink session/memory. |
-| `doctor` | Inline | Audit workspace health, ownership safety, and protocol readiness. |
+| `doctor` | Inline | Audit workspace health, ownership safety, and protocol readiness. `doctor --fix` may safely resync engine-owned mirrors first. |
 | `yolo` | Override | Activate Fast-Track Execution for current plan. |
 | `run review` | REVIEW_PROTOCOL.md | Delegate audit to QA, Security, Frontend. → **HALT** |
 | `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review report, generate Task Table, delegate. → **HALT** |

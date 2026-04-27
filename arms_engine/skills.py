@@ -25,27 +25,83 @@ def clean_legacy_gemini_skill_mirror(project_root):
         print("🧹 Removed legacy flat skill files from .gemini/skills before rebuilding skill mirrors.")
 
 
+def ensure_agent_tools_frontmatter(content):
+    if "tools:" in content:
+        return content
+
+    parts = content.split("---", 2)
+    if len(parts) >= 3:
+        return "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
+    return content
+
+
+def split_agent_rules_text(rules_text):
+    collapsed = " ".join((rules_text or "").split()).strip()
+    if not collapsed:
+        return []
+    return [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+(?=[A-Z\"`])", collapsed)
+        if part.strip()
+    ]
+
+
+def inject_agent_runtime_rules(content, rules_text):
+    rule_lines = split_agent_rules_text(rules_text)
+    missing_rules = [rule for rule in rule_lines if rule not in content]
+    if not missing_rules:
+        return content
+
+    rendered_rules = "\n".join(f"- {rule}" for rule in missing_rules)
+    if "## Runtime Rules" in content:
+        return content.rstrip() + "\n" + rendered_rules + "\n"
+    return content.rstrip() + "\n\n## Runtime Rules\n" + rendered_rules + "\n"
+
+
+def build_agent_sync_content(content, agent_info):
+    content = ensure_agent_tools_frontmatter(content)
+    return inject_agent_runtime_rules(content, agent_info.get("rules", ""))
+
+
+def sync_agent_markdowns(arms_root, target_dir):
+    agents_dir = os.path.join(arms_root, "agents")
+    registry = {
+        agent["name"]: agent
+        for agent in load_agents_registry(arms_root)
+    }
+
+    if not os.path.exists(agents_dir):
+        return
+
+    os.makedirs(target_dir, exist_ok=True)
+    source_agent_files = {
+        filename
+        for filename in os.listdir(agents_dir)
+        if filename.endswith(".md")
+    }
+    for entry in os.listdir(target_dir):
+        entry_path = os.path.join(target_dir, entry)
+        if os.path.isfile(entry_path) and entry.endswith(".md") and entry not in source_agent_files:
+            os.remove(entry_path)
+
+    for filename in source_agent_files:
+        src = os.path.join(agents_dir, filename)
+        dest = os.path.join(target_dir, filename)
+        agent_name = os.path.splitext(filename)[0]
+
+        with open(src, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+
+        normalized_content = build_agent_sync_content(content, registry.get(agent_name, {}))
+
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(normalized_content)
+
+
 def sync_agents(arms_root, project_root):
     print("🤖 Syncing Agents...")
-    agents_dir = os.path.join(arms_root, "agents")
     target_dir = os.path.join(project_root, ".gemini/agents")
-
-    if os.path.exists(agents_dir):
-        for filename in os.listdir(agents_dir):
-            if filename.endswith(".md"):
-                src = os.path.join(agents_dir, filename)
-                dest = os.path.join(target_dir, filename)
-
-                with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-
-                if "tools:" not in content:
-                    parts = content.split("---", 2)
-                    if len(parts) >= 3:
-                        content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
-
-                with open(dest, "w", encoding="utf-8") as f:
-                    f.write(content)
+    sync_agent_markdowns(arms_root, target_dir)
 
     yaml_src = os.path.join(arms_root, "agents.yaml")
     yaml_dest = os.path.join(project_root, ".gemini/agents.yaml")
@@ -56,25 +112,9 @@ def sync_agents(arms_root, project_root):
 
 def sync_agents_copilot(arms_root, project_root):
     print("🤖 Syncing Agents for Copilot CLI...")
-    agents_dir = os.path.join(arms_root, "agents")
     target_dir = os.path.join(project_root, ".github/agents")
     os.makedirs(target_dir, exist_ok=True)
-
-    if os.path.exists(agents_dir):
-        for filename in os.listdir(agents_dir):
-            if filename.endswith(".md"):
-                src = os.path.join(agents_dir, filename)
-                dest = os.path.join(target_dir, filename)
-                with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-
-                if "tools:" not in content:
-                    parts = content.split("---", 2)
-                    if len(parts) >= 3:
-                        content = "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
-
-                with open(dest, "w", encoding="utf-8") as f:
-                    f.write(content)
+    sync_agent_markdowns(arms_root, target_dir)
 
 
 def infer_skill_description(content, skill_name):
@@ -421,6 +461,7 @@ def load_agents_registry(arms_root):
                         "role": str(info.get("role", "")).strip(),
                         "scope": str(info.get("scope", "")).strip(),
                         "skills": [str(skill).strip() for skill in raw_skills if str(skill).strip()],
+                        "rules": str(info.get("rules", "")).strip(),
                     }
                 )
             return agents
@@ -439,6 +480,7 @@ def load_agents_registry(arms_root):
                 "role": "",
                 "scope": "",
                 "skills": [],
+                "rules": "",
             }
             in_skills = False
             continue
@@ -455,6 +497,12 @@ def load_agents_registry(arms_root):
         scope_match = re.match(r"^\s\s\s\sscope:\s*(.*)$", line)
         if scope_match:
             current_agent["scope"] = scope_match.group(1).strip()
+            in_skills = False
+            continue
+
+        rules_match = re.match(r"^\s\s\s\srules:\s*(.*)$", line)
+        if rules_match:
+            current_agent["rules"] = rules_match.group(1).strip().strip("'\"")
             in_skills = False
             continue
 

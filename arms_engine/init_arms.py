@@ -28,3 +28,11 @@ def wait_for_brand_change(project_root, previous_signature):
         previous_signature,
         poll_interval=WATCH_POLL_INTERVAL_SECONDS,
     )
+
+
+def main():
+    return _cli.main()
+
+
+if __name__ == "__main__":
+    main()

@@ -5,8 +5,12 @@ ARMS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Check if python3 is available
 if command -v python3 >/dev/null 2>&1; then
-    export PYTHONPATH="$ARMS_ROOT"
-    python3 -m arms_engine.init_arms "$@"
+    if [ -n "${PYTHONPATH:-}" ]; then
+        export PYTHONPATH="$ARMS_ROOT:$PYTHONPATH"
+    else
+        export PYTHONPATH="$ARMS_ROOT"
+    fi
+    exec python3 -m arms_engine.init_arms "$@"
 else
     echo "⚠️ Python 3 not found. Falling back to legacy shell initialization..."
     # Legacy logic (simplified or preserved)

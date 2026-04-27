@@ -33,7 +33,7 @@ Brand bootstrap behavior during `init`:
 ## Power Features (Automatic)
 - **Flash Recovery:** YOLO mode will automatically try to fix minor lint/type errors **once** before stopping.
 - **Auto-Critique:** `arms-qa-agent` must verify every task before it is marked as `Done`.
-- **Global Linker:** Every `init` command automatically runs `init-arms.sh` to sync the Global Engine with your project.
+- **Global Linker:** Every `init` command automatically runs `init-arms.sh`, which preserves the caller's `PYTHONPATH` and hands off to `python3 -m arms_engine.init_arms` using the current engine checkout.
 
 ---
 *ARMS orchestrates. You decide.*

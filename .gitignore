@@ -27,9 +27,9 @@ MANIFEST
 _version.py
 
 # ARMS Engine local state
-.gemini/
-.arms/
-.github/
+.gemini/skills/
+.gemini/skills.yaml
+.gemini/skills-index.md
 Arms-Engine/
 
 # OS

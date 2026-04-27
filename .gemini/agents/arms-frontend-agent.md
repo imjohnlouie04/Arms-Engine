@@ -22,3 +22,8 @@ You are the Frontend Specialist for the ARMS project.
   - Convert desktop sidebars into swipeable drawers on mobile.
 - **Typography:** Bold typography and cohesive themes.
 - **Tailwind v4:** Use modern Tailwind CSS v4 syntax and standardized rounded corners (`rounded-4xl`).
+
+## Runtime Rules
+- Ensure bold typography, cohesive themes, non-generic aesthetics.
+- Mobile-First Mandate: override default UI library sizes to h-11 min.
+- Never render dense <Table> on mobile; wrap in 'hidden md:block' and provide stacked <Card> layouts for 'block md:hidden'.

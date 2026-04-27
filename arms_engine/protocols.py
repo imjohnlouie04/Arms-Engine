@@ -4,6 +4,7 @@ import re
 import subprocess
 from collections import OrderedDict
 
+from .compression import ARCHIVABLE_STATUSES, append_archive_entry
 from .session import (
     normalize_active_tasks_table,
     parse_markdown_sections,
@@ -468,6 +469,9 @@ def load_agent_skill_context(arms_root):
 
 
 def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_EXISTING):
+    active_rows, archived_rows = split_archivable_rows(active_rows)
+    if archived_rows:
+        append_archive_entry(project_root, archived_rows, [], context="Protocol task refresh")
     preamble, sections = load_session_sections(project_root)
     ordered_sections = OrderedDict(sections)
     ordered_sections["Active Tasks"] = render_task_table(active_rows, arms_root)
@@ -480,6 +484,17 @@ def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_
         ordered_sections["Blockers"] = blockers
     session_path = os.path.join(project_root, ".arms", "SESSION.md")
     write_markdown_sections(session_path, preamble, ordered_sections)
+
+
+def split_archivable_rows(rows):
+    archived_rows = []
+    remaining_rows = []
+    for row in rows:
+        if row.get("Status", "").strip().lower() in ARCHIVABLE_STATUSES:
+            archived_rows.append(row)
+            continue
+        remaining_rows.append(row)
+    return remaining_rows, archived_rows
 
 
 def load_session_sections(project_root):

@@ -1,11 +1,24 @@
+import io
 import os
 import re
 from collections import OrderedDict
+from contextlib import redirect_stdout
 
 from . import __version__
 from .protocols import collect_recent_commit_subjects, find_latest_report, parse_actionable_issues
 from .session import compare_versions, extract_session_engine_version, parse_markdown_sections, read_text_file
-from .skills import discover_skill_catalog
+from .skills import (
+    build_agent_sync_content,
+    create_skills_registry,
+    discover_skill_catalog,
+    load_agents_registry,
+    sync_agents,
+    sync_agents_copilot,
+    sync_engine_instructions,
+    sync_root_agents_guide,
+    sync_skills_copilot,
+    sync_workflow,
+)
 
 
 REQUIRED_SESSION_SECTIONS = (
@@ -64,8 +77,15 @@ def identify_doctor_command(command_parts):
     return normalized == ("doctor",)
 
 
-def handle_doctor_command(project_root, arms_root):
+def handle_doctor_command(project_root, arms_root, apply_fixes=False):
+    repairs = []
+    repair_notes = []
+    if apply_fixes:
+        repairs, repair_notes = apply_safe_doctor_repairs(project_root, arms_root)
     report = build_doctor_report(project_root, arms_root)
+    report["repair_mode"] = apply_fixes
+    report["repairs"] = repairs
+    report["repair_notes"] = repair_notes
     emit_doctor_response(report)
     if report["counts"]["fail"] > 0:
         raise SystemExit(1)
@@ -258,6 +278,16 @@ def build_doctor_report(project_root, arms_root):
         counts,
         "Rerun `arms init` to resync the engine-managed `AGENTS.md` guide.",
     )
+    validate_synced_file(
+        project_root,
+        os.path.join(arms_root, "agents.yaml"),
+        os.path.join(project_root, ".gemini", "agents.yaml"),
+        "Ownership Safety",
+        "Mirrored agent registry",
+        categories,
+        counts,
+        "Rerun `arms init` to resync `.gemini/agents.yaml` from the engine source.",
+    )
 
     detected_instruction_files = [
         relative_path
@@ -388,8 +418,46 @@ def build_doctor_report(project_root, arms_root):
     }
 
 
+def apply_safe_doctor_repairs(project_root, arms_root):
+    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    if not os.path.isfile(session_path):
+        return [], [
+            "Skipped automatic repair because `.arms/SESSION.md` is missing. Run `arms init` before using `arms doctor --fix`."
+        ]
+
+    session_content = read_text_file(session_path)
+    recorded_engine_version = extract_session_engine_version(session_content)
+    if recorded_engine_version and compare_versions(recorded_engine_version, __version__) > 0:
+        return [], [
+            "Skipped automatic repair because the workspace was last synced with newer engine version `{}` than the current engine `{}`.".format(
+                recorded_engine_version,
+                __version__,
+            )
+        ]
+
+    with redirect_stdout(io.StringIO()):
+        sync_agents(arms_root, project_root)
+        sync_agents_copilot(arms_root, project_root)
+        sync_skills_copilot(arms_root, project_root)
+        create_skills_registry(arms_root, project_root)
+        sync_workflow(arms_root, project_root)
+        sync_engine_instructions(arms_root, project_root)
+        sync_root_agents_guide(arms_root, project_root)
+
+    return [
+        "Resynced `.gemini/agents/` and `.gemini/agents.yaml` from the engine.",
+        "Resynced `.github/agents/` from the engine.",
+        "Rebuilt mirrored skill directories and generated skill registries.",
+        "Resynced `.arms/workflow/`, `.arms/ENGINE.md`, and the root `AGENTS.md` guide.",
+    ], []
+
+
 def validate_agent_mirrors(project_root, arms_root, categories, counts):
     source_agents_dir = os.path.join(arms_root, "agents")
+    agent_registry = {
+        agent["name"]: agent
+        for agent in load_agents_registry(arms_root)
+    }
     source_agent_files = sorted(
         name for name in os.listdir(source_agents_dir)
         if name.endswith(".md")
@@ -421,6 +489,26 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             if extra:
                 description.append("has extra {}".format(", ".join(f"`{name}`" for name in extra)))
             mismatches.append("; ".join(description))
+            continue
+
+        out_of_sync = []
+        for filename in mirrored_files:
+            source_path = os.path.join(source_agents_dir, filename)
+            mirrored_path = os.path.join(mirror_dir, filename)
+            agent_name = os.path.splitext(filename)[0]
+            expected_content = build_agent_sync_content(
+                read_text_file(source_path),
+                agent_registry.get(agent_name, {}),
+            )
+            if expected_content != read_text_file(mirrored_path):
+                out_of_sync.append(f"`{filename}`")
+        if out_of_sync:
+            mismatches.append(
+                "`{}` has stale content in {}".format(
+                    relative_dir,
+                    ", ".join(out_of_sync),
+                )
+            )
 
     if mismatches:
         add_check(
@@ -593,6 +681,18 @@ def emit_doctor_response(report):
         "",
     ]
 
+    if report.get("repair_mode"):
+        body_lines.append("### Repair Mode")
+        if report.get("repairs"):
+            for repair in report["repairs"]:
+                body_lines.append("- [FIXED] {}".format(repair))
+        if report.get("repair_notes"):
+            for note in report["repair_notes"]:
+                body_lines.append("- [SKIPPED] {}".format(note))
+        if not report.get("repairs") and not report.get("repair_notes"):
+            body_lines.append("- No automatic repairs were necessary.")
+        body_lines.append("")
+
     for category, checks in report["categories"].items():
         body_lines.append("### {}".format(category))
         for check in checks:
@@ -602,11 +702,19 @@ def emit_doctor_response(report):
         body_lines.append("")
 
     if counts["fail"]:
-        next_step = "Doctor found {} blocking issue(s). Fix the failing items and rerun `arms doctor`. → HALT".format(
-            counts["fail"]
-        )
+        if report.get("repair_mode") and report.get("repairs"):
+            next_step = "Doctor repaired what it could, but {} blocking issue(s) remain. Resolve the remaining failures and rerun `arms doctor --fix` or `arms doctor`. → HALT".format(
+                counts["fail"]
+            )
+        else:
+            next_step = "Doctor found {} blocking issue(s). Fix the failing items and rerun `arms doctor`. → HALT".format(
+                counts["fail"]
+            )
     else:
-        next_step = "Workspace health check complete. Address any warnings as needed before continuing. → HALT"
+        if report.get("repair_mode") and report.get("repairs"):
+            next_step = "Workspace health check complete. Safe automatic repairs were applied; address any warnings as needed before continuing. → HALT"
+        else:
+            next_step = "Workspace health check complete. Address any warnings as needed before continuing. → HALT"
 
     print("[Speaking Agent]: arms-main-agent")
     print("[Active Skill]:   arms-orchestrator")

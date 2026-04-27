@@ -304,6 +304,11 @@ def main():
         action="store_true",
         help="Watch .arms/BRAND.md and auto-rerun init while the project is waiting on brand context.",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="With `arms doctor`, safely resync engine-owned mirrored files before reporting remaining issues.",
+    )
     parser.add_argument("--version", action="version", version=f"ARMS Engine {__version__}")
     args = parser.parse_args()
 
@@ -319,8 +324,11 @@ def main():
 
     arms_root = normalize_arms_root(args.root) if args.root else get_arms_root()
     doctor_command = identify_doctor_command(args.command)
+    if args.fix and not doctor_command:
+        print("❌ ERROR: `--fix` is only supported with `arms doctor`.")
+        raise SystemExit(1)
     if doctor_command:
-        handle_doctor_command(project_root, arms_root)
+        handle_doctor_command(project_root, arms_root, apply_fixes=args.fix)
         return
     protocol_command = identify_protocol_command(args.command)
     if protocol_command:

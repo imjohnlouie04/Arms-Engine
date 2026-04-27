@@ -43,7 +43,7 @@ ARMS uses a **hub-and-spoke** model.
 ### 1. Global engine
 
 The installed package acts as the central engine:
-- `arms_engine/agents/` — agent instruction files
+- `arms_engine/agents/` — agent instruction files, mirrored into project agents with runtime rules sourced from `arms_engine/agents.yaml`
 - `arms_engine/skills/` — skill directories containing `SKILL.md`
 - `arms_engine/workflow/` — reusable workflow protocols
 - `arms_engine/agents.yaml` — canonical agent registry
@@ -58,7 +58,7 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
 | `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers and records ARMS' current stack recommendation |
-| `.arms/MEMORY.md` | Persistent project memory | Created if missing, migrated from legacy `.gemini/MEMORY.md`, and append-only by convention |
+| `.arms/MEMORY.md` | Persistent project memory | Created if missing, migrated from legacy `.gemini/MEMORY.md`, and updated only after explicit user approval; append-only by convention |
 | `.arms/ENGINE.md` | Managed ARMS engine instructions | Re-synced from the engine on every `arms init` |
 | `.arms/RULES.md` | Project rules and guardrails | Created if missing and migrated from legacy rule files |
 | `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; references `.arms/CONTEXT_SYNTHESIS.md` |
@@ -129,6 +129,8 @@ The package exposes two entry points:
 
 `arms --version` and `arms-docs --version` are also supported.
 
+The documented shell linker path, `bash init-arms.sh`, now preserves the caller's `PYTHONPATH`, prepends the engine checkout, and executes `python3 -m arms_engine.init_arms`, so it uses the current source tree directly.
+
 ---
 
 ## Internal Module Layout
@@ -143,9 +145,9 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 | `arms_engine/doctor.py` | Workspace diagnostics for `arms doctor`, including sync checks, ownership safety, and protocol readiness |
 | `arms_engine/prompts.py` | Context synthesis, generated prompts, and seeded startup tasks |
 | `arms_engine/protocols.py` | Protocol command dispatch, session/report updates, pipeline status summaries, and release-note scaffolding |
-| `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, and registry generation |
+| `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, mirrored runtime-rule injection, and registry generation |
 | `arms_engine/session.py` | Legacy migration, version guard, task-table normalization, and atomic `SESSION.md` updates |
-| `arms_engine/init_arms.py` | Compatibility shim and stable script entrypoint |
+| `arms_engine/init_arms.py` | Compatibility shim, stable script entrypoint, and executable module wrapper for `python -m arms_engine.init_arms` |
 
 ---
 
@@ -157,7 +159,7 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 2. Refuses to initialize the home directory as a safety guard.
 3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.gemini/skills/`, `.github/agents/`, and `.github/skills/`.
 4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md`.
-5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`.
+5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`, including the default memory approval gate in `.arms/RULES.md`.
 6. Cleans legacy flat skill files and rebuilds the skill mirrors under `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
 7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
@@ -226,6 +228,8 @@ arms init --allow-engine-downgrade
 
 ARMS now records the engine version in `.arms/SESSION.md`. If a project was last synced by a newer engine and you run `arms init` from an older install, init stops and tells you to upgrade instead of silently downgrading project state.
 
+If ARMS can also see a newer local git checkout of the engine, the downgrade warning includes an exact `PYTHONPATH=... python -m arms_engine.init_arms ...` rerun command so you can switch to that checkout immediately without guessing the invocation.
+
 When ARMS is running directly from a git checkout, the recorded version is derived from the current git tag/describe output instead of relying only on a generated `_version.py`, so tagged updates display the expected release version in local development too.
 
 Use `--allow-engine-downgrade` only when you intentionally want an older engine to re-sync the project.
@@ -249,9 +253,12 @@ Watch mode only auto-resumes the brand-intake checkpoint. Press `Ctrl+C` to stop
 
 ```bash
 arms doctor
+arms doctor --fix
 ```
 
 `arms doctor` inspects the current workspace and exits non-zero when it finds blocking problems.
+
+`arms doctor --fix` safely resyncs engine-owned mirrored files first (`.gemini/agents*`, mirrored skills and registries, `.arms/workflow/`, `.arms/ENGINE.md`, and root `AGENTS.md`) and then reports anything still unsafe or incomplete. It does not bootstrap a missing workspace and it does not overwrite project-owned instruction files.
 
 It checks:
 

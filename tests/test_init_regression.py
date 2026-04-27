@@ -1,6 +1,7 @@
 import io
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -130,6 +131,138 @@ class InitRegressionTests(unittest.TestCase):
                 "# Project instructions\nKeep the existing deployment workflow.\n",
             )
             self.assertTrue((project_root / "AGENTS.md").exists())
+
+    def test_python_module_entrypoint_runs_init(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nModule entrypoint.\n", encoding="utf-8")
+
+            env = os.environ.copy()
+            existing_pythonpath = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = (
+                str(REPO_ROOT)
+                if not existing_pythonpath
+                else f"{REPO_ROOT}{os.pathsep}{existing_pythonpath}"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "arms_engine.init_arms",
+                    "init",
+                    "yolo",
+                    "--root",
+                    str(ARMS_ROOT),
+                ],
+                cwd=project_root,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+            self.assertIn("Initializing ARMS Engine", result.stdout)
+            self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
+
+    def test_init_arms_shell_script_preserves_pythonpath_and_runs_init(self):
+        with TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            project_root = temp_root / "project"
+            helper_dir = temp_root / "pythonpath-helper"
+            marker_path = temp_root / "sitecustomize-loaded.txt"
+            project_root.mkdir()
+            helper_dir.mkdir()
+            (project_root / "README.md").write_text("# Demo\nShell linker.\n", encoding="utf-8")
+            (helper_dir / "sitecustomize.py").write_text(
+                "import os\n"
+                "marker = os.environ.get('ARMS_TEST_SITECUSTOMIZE_MARKER')\n"
+                "if marker:\n"
+                "    with open(marker, 'w', encoding='utf-8') as f:\n"
+                "        f.write('loaded')\n",
+                encoding="utf-8",
+            )
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(helper_dir)
+            env["ARMS_TEST_SITECUSTOMIZE_MARKER"] = str(marker_path)
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(REPO_ROOT / "init-arms.sh"),
+                    "init",
+                    "yolo",
+                    "--root",
+                    str(REPO_ROOT),
+                ],
+                cwd=project_root,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+            self.assertTrue(marker_path.exists(), msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
+            self.assertIn("Initializing ARMS Engine", result.stdout)
+            self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
+
+    def test_init_syncs_memory_approval_gate_into_gemini_agent_and_engine_instructions(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nMemory approval sync.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            gemini_agent = (project_root / ".gemini" / "agents" / "arms-main-agent.md").read_text(encoding="utf-8")
+            engine_instructions = (project_root / ".arms" / "ENGINE.md").read_text(encoding="utf-8")
+            rules = (project_root / ".arms" / "RULES.md").read_text(encoding="utf-8")
+
+            self.assertIn("Must ask for explicit user approval before updating `.arms/MEMORY.md`.", gemini_agent)
+            self.assertIn("Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly.", engine_instructions)
+            self.assertIn("Ask the user for approval before updating `.arms/MEMORY.md`", rules)
+
+    def test_init_injects_agents_yaml_rules_into_mirrored_agent_markdown(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nAgent rule sync.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            gemini_data_agent = (project_root / ".gemini" / "agents" / "arms-data-agent.md").read_text(encoding="utf-8")
+            github_data_agent = (project_root / ".github" / "agents" / "arms-data-agent.md").read_text(encoding="utf-8")
+
+            expected_rule = "Must use Supabase CLI (supabase init / supabase start) local environment for all schema tests before remote execution."
+            self.assertIn("## Runtime Rules", gemini_data_agent)
+            self.assertIn(expected_rule, gemini_data_agent)
+            self.assertIn(expected_rule, github_data_agent)
+
+    def test_reinit_prunes_stale_agent_mirror_files(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nAgent prune sync.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            stale_gemini = project_root / ".gemini" / "agents" / "stale-agent.md"
+            stale_github = project_root / ".github" / "agents" / "stale-agent.md"
+            stale_gemini.write_text("# stale\n", encoding="utf-8")
+            stale_github.write_text("# stale\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertFalse(stale_gemini.exists())
+            self.assertFalse(stale_github.exists())
 
     def test_init_syncs_explicit_skill_binding_from_agents_yaml(self):
         with TemporaryDirectory() as tmp:
@@ -680,6 +813,67 @@ None
 
         with mock.patch.object(session_module, "__version__", "abc1234"):
             self.assertTrue(init_arms.is_development_engine(str(ARMS_ROOT)))
+
+    def test_engine_version_guard_suggests_local_checkout_rerun_when_available(self):
+        with TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            project_root = temp_root / "project"
+            checkout_root = temp_root / "Arms-Engine"
+            checkout_package_dir = checkout_root / "arms_engine"
+            project_root.mkdir()
+            checkout_package_dir.mkdir(parents=True)
+            (checkout_root / ".git").mkdir()
+            (checkout_package_dir / "agents.yaml").write_text("agents:\n", encoding="utf-8")
+            (project_root / ".arms").mkdir()
+            (project_root / ".arms" / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.5.2+dirty
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with mock.patch.object(session_module, "__version__", "1.5.0"), mock.patch.object(
+                session_module,
+                "resolve_version",
+                return_value="1.5.2+dirty",
+            ), mock.patch.object(
+                sys,
+                "argv",
+                ["arms", "init", "--root", str(checkout_root)],
+            ), redirect_stdout(stdout):
+                with self.assertRaises(SystemExit):
+                    init_arms.enforce_engine_version_guard(str(project_root), str(checkout_package_dir))
+
+            output = stdout.getvalue()
+            self.assertIn("A newer local engine checkout is available:", output)
+            self.assertIn(str(checkout_root), output)
+            self.assertIn("PYTHONPATH=", output)
+            self.assertIn("-m arms_engine.init_arms init --root", output)
 
     def test_run_init_once_existing_project_generates_inferred_brand_and_prompts(self):
         with TemporaryDirectory() as tmp:

@@ -188,7 +188,7 @@ def maintain_archive_summary(project_root):
     return {"updated": True, "sections": len(summarized_sections)}
 
 
-def append_archive_entry(project_root, archived_rows, completed_notes):
+def append_archive_entry(project_root, archived_rows, completed_notes, context="Compression pass"):
     archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
     if os.path.exists(archive_path):
         archive_content = read_text_file(archive_path).rstrip()
@@ -198,7 +198,7 @@ def append_archive_entry(project_root, archived_rows, completed_notes):
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     block_lines = [
         "## Archive — {}".format(timestamp),
-        "### Context: Compression pass",
+        "### Context: {}".format(context),
     ]
     if archived_rows:
         block_lines.extend(

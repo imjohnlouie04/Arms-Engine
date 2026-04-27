@@ -9,7 +9,7 @@
 
 **Strict Init Rule:** If the command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** switch into generic planning, repo cleanup, linting, `git status`, or issue triage before the boot sequence. Resolve the ARMS engine path first, run the linker/bootstrap flow, migrate legacy state, and only then continue with normal orchestration.
 
-**Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, ownership safety, and protocol readiness. Print actionable diagnostics and exit non-zero when blocking issues are present.
+**Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, ownership safety, and protocol readiness. Print actionable diagnostics and exit non-zero when blocking issues are present. If the command is `arms doctor --fix`, first resync engine-owned mirrored files only, then report any remaining failures; do not bootstrap a missing workspace and do not overwrite project-owned instruction files.
 
 **Protocol Command Rule:** If the command is `arms run review`, `arms fix issues`, `arms run deploy`, `arms run pipeline`, or `arms run status`, do **not** fall back to generic planning text. Read or update `.arms/SESSION.md`, generate the expected protocol artifacts in `.arms/reports/`, and stop at the documented approval gate.
 
@@ -53,7 +53,7 @@ Re-run `init` or `start` once Arms-Engine is in place.
 Once `$ARMS_ROOT` is confirmed, immediately execute the global linker script to scaffold the project workspace and link the engine's skills:
 **Run:** `bash $ARMS_ROOT/init-arms.sh`
 
-This script ensures the local `./.github/`, `./.gemini/`, and `./.arms/` structures are present, migrates legacy project state into `./.arms/`, and registers all global ARMS agents and skills to the current project.
+This script preserves the caller's `PYTHONPATH`, prepends the engine checkout, and executes `python3 -m arms_engine.init_arms` so the current engine source drives init. It ensures the local `./.github/`, `./.gemini/`, and `./.arms/` structures are present, migrates legacy project state into `./.arms/`, and registers all global ARMS agents and skills to the current project.
 
 ### Step 2: Load Global Engine
 
@@ -72,7 +72,7 @@ Scan:
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
-3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md`, sync `agents.yaml` to `.gemini/agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
+3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md`, sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
 4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
 5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
@@ -179,6 +179,7 @@ To maintain performance in large projects, use the command **"arms init compress
 
 ### 6. Memory Integrity Protocol
 **A. Continuous Learning (`.arms/MEMORY.md`)**
+- **Approval Gate:** Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly. Use the form `May I update `.arms/MEMORY.md` with this bug fix / preference / architectural decision?` and halt unless the user has already approved memory updates or YOLO mode is active.
 - **Never overwrite** existing memory history.
 - **Never replace** the file with a template.
 - Agents must only append new insights, lessons, or preferences.

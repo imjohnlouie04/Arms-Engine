@@ -1,13 +1,16 @@
 import datetime
 import os
 import re
+import shlex
 import shutil
+import sys
 import tempfile
 from collections import OrderedDict
 
 from . import __version__
 from .brand import infer_brand_context_from_project
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
+from .versioning import resolve_version
 
 
 MEMORY_TEMPLATE = """# ARMS Project Memory
@@ -39,7 +42,7 @@ RULES_TEMPLATE = """# ARMS Project Rules
 
 ## Agent Protocol
 - Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before major changes.
-- Append new project knowledge to `.arms/MEMORY.md`; never overwrite it wholesale.
+- Ask the user for approval before updating `.arms/MEMORY.md`; only append after approval, and never overwrite it wholesale.
 - Keep `.arms/SESSION.md` synchronized with task progress and blockers.
 """
 SESSION_ARCHIVE_TEMPLATE = """# ARMS Session Archive
@@ -455,6 +458,85 @@ def is_development_engine(arms_root):
     )
 
 
+def normalize_engine_package_dir(path):
+    candidate = os.path.abspath(path)
+    if os.path.isfile(os.path.join(candidate, "agents.yaml")):
+        return candidate
+
+    package_dir = os.path.join(candidate, "arms_engine")
+    if os.path.isfile(os.path.join(package_dir, "agents.yaml")):
+        return package_dir
+    return ""
+
+
+def iter_local_engine_candidates(project_root, arms_root):
+    candidate_paths = [
+        arms_root,
+        os.path.join(os.path.expanduser("~"), ".gemini", "Arms-Engine"),
+        os.path.abspath(os.path.join(project_root, "..", "Arms-Engine")),
+        os.path.join(project_root, "Arms-Engine"),
+        project_root,
+    ]
+    seen = set()
+    for path in candidate_paths:
+        package_dir = normalize_engine_package_dir(path)
+        if not package_dir or package_dir in seen:
+            continue
+
+        repo_root = os.path.dirname(package_dir)
+        if not os.path.isdir(os.path.join(repo_root, ".git")):
+            continue
+
+        seen.add(package_dir)
+        yield package_dir
+
+
+def build_local_engine_rerun_command(project_root, arms_root, existing_engine_version):
+    local_package_dir = ""
+    local_version = ""
+    for package_dir in iter_local_engine_candidates(project_root, arms_root):
+        candidate_version = resolve_version(package_dir)
+        if compare_versions(candidate_version, __version__) <= 0:
+            continue
+        if compare_versions(candidate_version, existing_engine_version) < 0:
+            continue
+        local_package_dir = package_dir
+        local_version = candidate_version
+        break
+
+    if not local_package_dir:
+        return None
+
+    repo_root = os.path.dirname(local_package_dir)
+    rerun_args = []
+    raw_args = sys.argv[1:] or ["init"]
+    skip_next = False
+    for arg in raw_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--root":
+            skip_next = True
+            continue
+        if arg.startswith("--root="):
+            continue
+        rerun_args.append(arg)
+    rerun_args.extend(["--root", repo_root])
+
+    command_parts = [
+        f"PYTHONPATH={shlex.quote(repo_root)}",
+        shlex.quote(sys.executable),
+        "-m",
+        "arms_engine.init_arms",
+        *[shlex.quote(arg) for arg in rerun_args],
+    ]
+    return {
+        "repo_root": repo_root,
+        "version": local_version,
+        "command": " ".join(command_parts),
+    }
+
+
 def enforce_engine_version_guard(project_root, arms_root, allow_engine_downgrade=False):
     session_path = os.path.join(project_root, ".arms/SESSION.md")
     if not os.path.exists(session_path):
@@ -489,6 +571,14 @@ def enforce_engine_version_guard(project_root, arms_root, allow_engine_downgrade
     print(f"   Current engine version: {__version__}")
     print("   To avoid downgrading project state, update the engine and rerun `arms init`.")
     print()
+    local_checkout = build_local_engine_rerun_command(project_root, arms_root, existing_engine_version)
+    if local_checkout:
+        print("   A newer local engine checkout is available:")
+        print(f"     {local_checkout['repo_root']} (version {local_checkout['version']})")
+        print()
+        print("   To rerun init with that checkout's code instead of the older installed CLI:")
+        print(f"     {local_checkout['command']}")
+        print()
     print("   Standard install:")
     print("     pipx upgrade arms-engine")
     print()
