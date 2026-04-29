@@ -9,7 +9,7 @@ The engine is optimized for **structured execution**, not just one-off prompting
 - it separates project state from global engine logic
 - it captures brand, stack, and product context in `.arms/BRAND.md`
 - it synthesizes intake into a concise AI-ready brief in `.arms/CONTEXT_SYNTHESIS.md`
-- it generates reusable implementation prompts and seeds startup tasks once intake is complete
+- it generates thin reusable prompts and seeds startup tasks once intake is complete
 
 ---
 
@@ -54,14 +54,14 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 
 | Path | Purpose | Notes |
 |---|---|---|
-| `.arms/SESSION.md` | Live orchestration board | Stores environment, active agents, active skills, task table, blockers |
+| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, task table, blockers |
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
-| `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers and records ARMS' current stack recommendation |
+| `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers into a compact execution brief, including workspace mode and current stack recommendation |
 | `.arms/MEMORY.md` | Persistent project memory | Created if missing, migrated from legacy `.gemini/MEMORY.md`, and updated only after explicit user approval; append-only by convention |
 | `.arms/ENGINE.md` | Managed ARMS engine instructions | Re-synced from the engine on every `arms init` |
 | `.arms/RULES.md` | Project rules and guardrails | Created if missing and migrated from legacy rule files |
-| `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; references `.arms/CONTEXT_SYNTHESIS.md` |
+| `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; stays intentionally thin and references `.arms/CONTEXT_SYNTHESIS.md` as the dense context source |
 | `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans these locations for context and does not overwrite them |
 | `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
 | `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced directly from `arms_engine/agents.yaml` |
@@ -165,10 +165,10 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
-11. Generates `.arms/GENERATED_PROMPTS.md` from that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, including the engine version that last synced the project, plus the agent roster, skill roster, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
+11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
 13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
-14. If the command includes `compress`, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
+14. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
 15. Ends in either standard halt mode or YOLO-ready mode.
 
 ### Standard mode
@@ -211,6 +211,8 @@ This now runs a **native ARMS compression pass** after the normal init sync:
 - refreshes `.arms/HISTORY_SUMMARY.md` when archive history grows beyond the compression threshold
 
 It is designed to shrink long-lived workspace state without deleting pending or blocked work.
+
+ARMS also auto-compacts oversized workspace state during normal `arms init` runs when `.arms/SESSION.md`, `.arms/MEMORY.md`, or archive history grows beyond the built-in thresholds.
 
 ### Overriding the engine root
 
@@ -431,22 +433,23 @@ Once `.arms/BRAND.md` is complete enough to be actionable, ARMS generates:
 ```
 
 `.arms/CONTEXT_SYNTHESIS.md` condenses the intake into an AI-ready brief. It includes:
+- the workspace mode (`Existing Repository` vs `New Project`)
+- the compact execution policy ARMS is using for that mode
 - the approved project and brand summary
 - the current ARMS stack recommendation
-- the chosen UI system for the selected stack
 - confidence signals for confirmed vs still-vague inputs
-- an agent kickoff summary
+- a startup sequence summary
 
 `.arms/GENERATED_PROMPTS.md` then uses that synthesis to produce agent-ready prompts. It contains:
 - a master build prompt
 - a product kickoff prompt
-- a DevOps scaffold prompt
+- a DevOps prompt
 - a frontend prompt
-- a media prompt
-- an SEO / content prompt
-- and, when the project needs backend foundation work, data / backend / security prompts plus a QA prompt
+- a QA prompt
+- optional data / backend / security prompts when backend foundation work is needed
+- optional media and SEO/content prompts when the project mode and surface call for them
 
-The media prompt explicitly directs the media workflow to use `nano-banana-pro` for landing-page imagery, generate at least five production-ready images, and include showcase visuals that represent the project's best work or strongest outcomes.
+The prompt file is intentionally **thin**: it references `.arms/CONTEXT_SYNTHESIS.md` instead of repeating the full project brief in every prompt block.
 
 If the brand brief becomes incomplete again, ARMS removes stale generated prompts rather than leaving outdated prompt output behind.
 
@@ -473,7 +476,7 @@ ARMS is intentionally **non-destructive** when you re-run `arms init`.
 - `.arms/CONTEXT_SYNTHESIS.md`
 - root `AGENTS.md`
 - environment metadata in `.arms/SESSION.md`
-- active agent and active skill listings
+- compact active agent and active skill references
 
 ### Project-owned instruction file ownership
 
@@ -494,7 +497,7 @@ On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. 
 
 ### Startup task seeding
 
-When a new project finishes intake and the active task table is still empty, ARMS seeds an initial startup sequence in `.arms/SESSION.md`. This typically includes product, devops, frontend, media, SEO, and QA work, and adds data/backend/security tasks when the project shape implies app or auth foundations.
+When a new project finishes intake and the active task table is still empty, ARMS seeds an initial startup sequence in `.arms/SESSION.md`. Existing repositories get review-first startup tasks; new projects get scaffold-first startup tasks. Backend/security/media/SEO tasks are added only when the project shape calls for them.
 
 ### Context mismatch protection
 
@@ -538,8 +541,8 @@ arms init --answers-text "Mission: Build a conversion-focused portfolio site"
 1. Run `arms init`.
 2. If ARMS asks for brand context, answer the generated questionnaire or use the intake flags.
 3. Re-run `arms init` until `.arms/CONTEXT_SYNTHESIS.md` and `.arms/GENERATED_PROMPTS.md` are produced.
-4. Review `.arms/SESSION.md` for environment, agents, skills, and the seeded startup task structure.
-5. Use the synced agents, skills, and generated prompts in your AI workflow.
+4. Review `.arms/SESSION.md` for environment, compact agent/skill references, and the seeded startup task structure.
+5. Use the synced agents, skills, synthesis brief, and generated prompts in your AI workflow.
 
 ---
 

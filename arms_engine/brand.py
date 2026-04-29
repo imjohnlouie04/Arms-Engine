@@ -893,6 +893,14 @@ def detect_existing_project(project_root):
     return len(substantive_entries) >= 2
 
 
+def detect_workspace_mode(project_root, brand_content=""):
+    if brand_content and is_new_project_brand_questionnaire(brand_content):
+        return "new-project"
+    if detect_existing_project(project_root):
+        return "existing-project"
+    return "new-project"
+
+
 def detect_logo_status(project_root):
     candidate_dirs = (
         project_root,

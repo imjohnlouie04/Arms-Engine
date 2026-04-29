@@ -12,7 +12,7 @@ from .brand import (
     format_available_presets,
     initialize_brand_context,
 )
-from .compression import compress_workspace, format_compression_summary
+from .compression import compress_workspace, format_compression_summary, workspace_compression_reasons
 from .doctor import handle_doctor_command, identify_doctor_command
 from .prompts import (
     build_context_synthesis_data,
@@ -32,8 +32,6 @@ from .session import (
 from .skills import (
     clean_legacy_gemini_skill_mirror,
     create_skills_registry,
-    discover_agents_and_skills,
-    discover_skills,
     sync_agents,
     sync_agents_copilot,
     sync_engine_instructions,
@@ -220,8 +218,6 @@ def run_init_once(
         context_synthesis_ready = sync_context_synthesis(project_root)
         generated_prompts_ready = sync_generated_prompts(project_root)
 
-    skills_list = discover_skills(arms_root)
-    agents_list = discover_agents_and_skills(arms_root)
     synthesis_data = build_context_synthesis_data(project_root)
     startup_tasks_content = ""
     if synthesis_data is not None:
@@ -229,8 +225,6 @@ def run_init_once(
     session_updated = update_session(
         project_root,
         arms_root,
-        skills_list,
-        agents_list,
         yolo=is_yolo,
         startup_tasks_content=startup_tasks_content,
         context_overwrite=context_overwrite,
@@ -244,12 +238,23 @@ def run_init_once(
     sync_engine_instructions(arms_root, project_root)
     sync_root_agents_guide(arms_root, project_root)
 
-    if "compress" in full_command.lower():
+    manual_compress = "compress" in full_command.lower()
+    auto_compress_reasons = []
+    if not manual_compress:
+        auto_compress_reasons = workspace_compression_reasons(project_root)
+
+    if manual_compress or auto_compress_reasons:
         compression_summary = compress_workspace(project_root)
         print(format_compression_summary(compression_summary))
 
-    if "compress" in full_command.lower():
+    if manual_compress:
         print("🪨 Caveman compressor rules applied to the local ARMS workspace.")
+    elif auto_compress_reasons:
+        print(
+            "🪨 Auto-compacted oversized workspace state: {}.".format(
+                ", ".join(auto_compress_reasons)
+            )
+        )
 
     brand_signature = capture_file_signature(os.path.join(project_root, ".arms/BRAND.md"))
     if brand_context_state and brand_context_state.get("status") == "questions_required":

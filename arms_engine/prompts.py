@@ -5,6 +5,7 @@ from .brand import (
     brand_field_is_unanswered,
     brand_file_requires_bootstrap,
     collect_brand_context,
+    detect_workspace_mode,
     infer_build_surface,
     normalize_brand_value,
     project_needs_backend_foundation,
@@ -34,6 +35,14 @@ def render_markdown_bullets(items, empty_message):
 
 def build_startup_tasks(data):
     rows = []
+    workspace_mode = data["workspace_mode"]
+    project_type = data["project_type"].lower()
+    build_surface = data["build_surface"].lower()
+    is_existing_project = workspace_mode == "existing-project"
+    is_ui_project = any(
+        token in build_surface
+        for token in ("website", "landing page", "storefront", "portfolio", "experience")
+    ) or "web application" in project_type or "content / marketing site" in project_type
 
     def add(task, agent, dependencies="—"):
         rows.append(
@@ -43,6 +52,51 @@ def build_startup_tasks(data):
                 "dependencies": dependencies,
             }
         )
+
+    backend_needed = project_needs_backend_foundation(data["context"], data["stack_profile"])
+    if is_existing_project:
+        add("Audit the current product scope, repo signals, and immediate delivery goals", "arms-product-agent")
+        add(
+            f"Map the current {data['stack_profile']['framework']} architecture, tooling, and environment constraints",
+            "arms-devops-agent",
+            "#1",
+        )
+        if is_ui_project:
+            add(
+                f"Review the current {data['build_surface']} and prioritize the first high-impact UI improvements",
+                "arms-frontend-agent",
+                "#1, #2",
+            )
+        if backend_needed:
+            add("Review the current data model, schema boundaries, and migration risks", "arms-data-agent", "#2")
+            backend_dependencies = "#2, #4" if is_ui_project else "#2, #3"
+            add(
+                "Review authentication and core backend integration points for the existing implementation",
+                "arms-backend-agent",
+                backend_dependencies,
+            )
+            add(
+                "Audit auth, access control, and secret handling risks before new implementation work",
+                "arms-security-agent",
+                "#4, #5" if is_ui_project else "#3, #4",
+            )
+        if "content / marketing site" in project_type or "website" in build_surface or "landing page" in build_surface:
+            seo_dependencies = "#3" if is_ui_project else "#2"
+            add("Review metadata, content hierarchy, and SEO gaps in the current experience", "arms-seo-agent", seo_dependencies)
+
+        qa_dependencies = ["#2"]
+        if is_ui_project:
+            qa_dependencies.append("#3")
+        if backend_needed:
+            qa_dependencies.extend(["#4", "#5", "#6"] if is_ui_project else ["#3", "#4", "#5"])
+        elif "content / marketing site" in project_type or "website" in build_surface or "landing page" in build_surface:
+            qa_dependencies.append("#4" if is_ui_project else "#3")
+        add(
+            "Run QA pre-flight against the current flows and highest-risk regression areas",
+            "arms-qa-agent",
+            ", ".join(dict.fromkeys(qa_dependencies)),
+        )
+        return rows
 
     add("Create a concise product charter, scope summary, and success metrics", "arms-product-agent")
     add(
@@ -56,7 +110,6 @@ def build_startup_tasks(data):
         "#1, #2",
     )
 
-    backend_needed = project_needs_backend_foundation(data["context"], data["stack_profile"])
     if backend_needed:
         add("Design the initial data model, schema boundaries, and access patterns", "arms-data-agent", "#2")
         add("Implement authentication and core backend integration points", "arms-backend-agent", "#2, #4")
@@ -92,6 +145,7 @@ def build_context_synthesis_data(project_root):
     if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
         return None
 
+    workspace_mode = detect_workspace_mode(project_root, brand_content)
     context = collect_brand_context(brand_content, project_root)
     stack_profile = resolve_stack_recommendation(context)
     project_name = normalize_brand_value(context.get("Project Name", ""), "Project")
@@ -208,6 +262,17 @@ def build_context_synthesis_data(project_root):
         confirmed.append(f"Authentication requirement is captured: {stack_profile['auth_requirement']}.")
 
     data = {
+        "workspace_mode": workspace_mode,
+        "context_policy": (
+            "Infer from repository signals, preserve existing implementation context, and ask only for missing decisions."
+            if workspace_mode == "existing-project"
+            else "Use approved intake answers as source of truth and keep the starter context lean until implementation begins."
+        ),
+        "prompt_strategy": (
+            "Thin prompts that reference synthesis and focus on audits, deltas, and safe changes."
+            if workspace_mode == "existing-project"
+            else "Thin prompts that reference synthesis and focus on bootstrap work, scaffold quality, and first-pass implementation."
+        ),
         "context": context,
         "stack_profile": stack_profile,
         "project_name": project_name,
@@ -267,6 +332,7 @@ def render_context_synthesis(project_root):
         return None
 
     stack_profile = data["stack_profile"]
+    workspace_mode_label = "Existing Repository" if data["workspace_mode"] == "existing-project" else "New Project"
     kickoff_summary = "\n".join(
         f"{index}. **{row['agent']}** — {row['task']}"
         for index, row in enumerate(data["startup_tasks"], start=1)
@@ -274,19 +340,28 @@ def render_context_synthesis(project_root):
 
     return (
         CONTEXT_SYNTHESIS_HEADER.strip()
-        + "\n\n## Project Overview\n"
+        + "\n\n## Execution Profile\n"
+        + textwrap.dedent(
+            f"""\
+            - **Workspace Mode:** {workspace_mode_label}
+            - **Context Policy:** {data['context_policy']}
+            - **Prompt Strategy:** {data['prompt_strategy']}
+            - **Build Surface:** {data['build_surface']}
+            """
+        ).strip()
+        + "\n\n## Core Brief\n"
         + textwrap.dedent(
             f"""\
             - **Project Name:** {data['project_name']}
             - **Mission:** {data['mission']}
             - **Vision:** {data['vision']}
-            - **Primary Use Case:** {data['primary_use_case']}
             - **Primary Audience:** {data['primary_audience']}
-            - **Project Type:** {data['project_type']}
-            - **Build Surface:** {data['build_surface']}
+            - **Primary Use Case:** {data['primary_use_case']}
+            - **Core Features:** {data['core_features']}
+            - **Differentiation:** {data['differentiation']}
             """
         ).strip()
-        + "\n\n## Recommended Build Profile\n"
+        + "\n\n## Build Profile\n"
         + textwrap.dedent(
             f"""\
             - **Requested Stack:** {stack_profile['requested_stack']}
@@ -296,43 +371,33 @@ def render_context_synthesis(project_root):
             - **Backend / Data Layer:** {stack_profile['data_layer']}
             - **Deployment Target:** {stack_profile['deployment_target']}
             - **Authentication:** {stack_profile['auth_requirement']}
-            - **Best Fit:** {stack_profile['best_for']}
-            - **Why This Recommendation:** {stack_profile['reason']}
             - **Recommendation Source:** {stack_profile['source']}
+            - **Recommendation Note:** {stack_profile['selection_note']}
             """
         ).strip()
-        + "\n\n## Brand & Experience Direction\n"
+        + "\n\n## Experience & Delivery Signals\n"
         + textwrap.dedent(
             f"""\
+            - **Project Type:** {data['project_type']}
+            - **Experience Type:** {data['experience_type']}
             - **Personality:** {data['personality']}
             - **Voice & Tone:** {data['voice_tone']}
-            - **Differentiation:** {data['differentiation']}
             - **Visual Direction:** {data['visual_direction']}
-            - **Reference Brand:** {data['reference_brand']}
-            - **Brand Comparison:** {data['brand_comparison']}
-            - **Logo Status:** {data['logo_status']}
-            - **Existing Brand Assets:** {data['existing_brand_assets']}
-            """
-        ).strip()
-        + "\n\n## Delivery Priorities\n"
-        + textwrap.dedent(
-            f"""\
-            - **Core Features:** {data['core_features']}
-            - **Goal / Monetization Model:** {data['monetization_model']}
             - **Required Sections:** {data['required_sections']}
             - **Primary CTAs:** {data['primary_ctas']}
             - **SEO Focus:** {data['seo_focus']}
             - **Technical Constraints:** {data['technical_constraints']}
-            - **Image Requirements:** {data['image_requirements']}
             - **Content / Visual Non-Negotiables:** {data['content_non_negotiables']}
             - **Icon System:** {data['icon_system']}
+            - **Logo Status:** {data['logo_status']}
+            - **Existing Brand Assets:** {data['existing_brand_assets']}
             """
         ).strip()
         + "\n\n## Confidence Signals\n### Confirmed\n"
         + render_markdown_bullets(data["confirmed_signals"], "Core project signals still need confirmation.")
         + "\n\n### Needs Attention\n"
         + render_markdown_bullets(data["needs_attention_signals"], "No major gaps detected.")
-        + "\n\n## Agent Kickoff Summary\n"
+        + "\n\n## Startup Sequence\n"
         + kickoff_summary
         + "\n"
     )
@@ -360,141 +425,75 @@ def render_generated_prompts(project_root):
 
     stack_profile = data["stack_profile"]
     backend_needed = project_needs_backend_foundation(data["context"], stack_profile)
-    media_asset_brief = build_media_asset_brief(data)
-
-    quick_reference = textwrap.dedent(
-        f"""\
-        ## Quick Reference
-        - **Project Name:** {data['project_name']}
-        - **Recommended Stack:** {stack_profile['label']}
-        - **Framework:** {stack_profile['framework']}
-        - **UI System:** {stack_profile['ui_system']}
-        - **Backend / Data Layer:** {stack_profile['data_layer']}
-        - **Deployment Target:** {stack_profile['deployment_target']}
-        - **Authentication:** {stack_profile['auth_requirement']}
-        - **Build Surface:** {data['build_surface']}
-        - **Core Features:** {data['core_features']}
-        - **Reference:** Read `.arms/CONTEXT_SYNTHESIS.md` before executing any of the prompts below.
-        """
-    ).strip()
+    is_existing_project = data["workspace_mode"] == "existing-project"
+    build_action = "review the current implementation and ship the highest-impact next improvement" if is_existing_project else f"create the first production-quality {data['build_surface']}"
+    devops_action = "audit the existing stack, tooling, and deployment path before changing infrastructure" if is_existing_project else f"scaffold {data['project_name']} using {stack_profile['framework']} with {stack_profile['ui_system']}"
+    frontend_action = f"review the current {data['build_surface']} and improve the highest-impact user flow" if is_existing_project else f"create the first responsive {data['build_surface']}"
+    qa_action = "focus on regression risk and current production-critical flows" if is_existing_project else "focus on scaffold correctness and kickoff flows"
 
     master_prompt = textwrap.dedent(
         f"""\
-        Read `.arms/CONTEXT_SYNTHESIS.md` first, then create the first production-quality {data['build_surface']} for {data['project_name']}.
-
-        Use {stack_profile['framework']} with {stack_profile['ui_system']} and keep all package choices on the latest stable ecosystem release unless the repository already pins something else.
-        Match this brand direction: {data['personality']} personality, {data['voice_tone']} voice, {data['visual_direction']} visual direction.
-        Build for {data['primary_audience']} and keep the experience centered on {data['core_features']}.
-        Honor these non-negotiables: {data['technical_constraints']} / {data['content_non_negotiables']}.
+        Read `.arms/CONTEXT_SYNTHESIS.md` first.
+        For {data['project_name']}, {build_action}.
+        Use {stack_profile['framework']} + {stack_profile['ui_system']}.
+        Honor: {data['technical_constraints']} / {data['content_non_negotiables']}.
         """
     ).strip()
 
     product_prompt = textwrap.dedent(
         f"""\
-        Read `.arms/CONTEXT_SYNTHESIS.md` and turn it into a concise project charter for {data['project_name']}.
-
-        Deliverables:
-        - Refine the primary problem statement and success metrics
-        - Prioritize the initial feature set around {data['core_features']}
-        - Flag the highest-risk ambiguities before other agents begin implementation
-        Keep the output concise, decisive, and aligned to {data['monetization_model']}.
+        Read `.arms/CONTEXT_SYNTHESIS.md`.
+        Turn it into a concise charter for {data['project_name']}.
+        Prioritize around {data['core_features']} and flag the highest-risk ambiguities early.
         """
     ).strip()
 
     devops_prompt = textwrap.dedent(
         f"""\
-        Scaffold {data['project_name']} using {stack_profile['framework']} with {stack_profile['ui_system']}.
-
-        Requirements:
-        - Backend / data layer: {stack_profile['data_layer']}
-        - Deployment target: {stack_profile['deployment_target']}
-        - Authentication: {stack_profile['auth_requirement']}
-        - Technical constraints: {data['technical_constraints']}
-        - Recommendation note: {stack_profile['selection_note']}
-
-        Choose the current best-practice setup for this stack and leave the repo ready for frontend, backend, and QA work.
+        Read `.arms/CONTEXT_SYNTHESIS.md`.
+        {devops_action}.
+        Keep the recommendation anchored to {stack_profile['data_layer']}, {stack_profile['deployment_target']}, and {stack_profile['auth_requirement']}.
         """
     ).strip()
 
     frontend_prompt = textwrap.dedent(
         f"""\
-        Create the first responsive {data['build_surface']} for {data['project_name']}.
-
-        Use {stack_profile['ui_system']} as the component foundation ({stack_profile['framework']} stack).
-        Align the UI to this direction: {data['personality']} personality, {data['voice_tone']} tone, {data['visual_direction']} visual direction.
-        Structure the experience around: {data['required_sections']}.
-        Optimize the flow for these CTAs: {data['primary_ctas']}.
-        Use {data['icon_system']} for icons and avoid emoji unless later requested.
-        """
-    ).strip()
-
-    media_prompt = textwrap.dedent(
-        f"""\
-        Generate the first visual asset set for {data['project_name']}.
-
-        Inputs:
-        - Personality: {data['personality']}
-        - Differentiation: {data['differentiation']}
-        - Visual direction: {data['visual_direction']}
-        - Existing brand assets: {data['existing_brand_assets']}
-        - Logo status: {data['logo_status']}
-        - Image requirements: {data['image_requirements']}
-
-        Asset generation instructions:
-        - {media_asset_brief}
-
-        Produce assets that support the first frontend pass without falling back to generic visuals.
-        """
-    ).strip()
-
-    seo_prompt = textwrap.dedent(
-        f"""\
-        Create the initial SEO and content brief for {data['project_name']}.
-
-        Prioritize:
-        - Audience: {data['primary_audience']}
-        - Niche: {data['business_niche']}
-        - Service area: {data['service_area']}
-        - SEO focus: {data['seo_focus']}
-        - Required sections: {data['required_sections']}
-        - CTAs: {data['primary_ctas']}
-
-        Keep the information architecture crawlable, conversion-aware, and aligned to the brand tone.
+        Read `.arms/CONTEXT_SYNTHESIS.md`.
+        {frontend_action}.
+        Keep the UI aligned to {data['personality']} / {data['voice_tone']} / {data['visual_direction']}.
+        Structure around {data['required_sections']} and optimize for {data['primary_ctas']}.
         """
     ).strip()
 
     sections = [
         GENERATED_PROMPTS_HEADER.strip(),
-        quick_reference,
+        "## Usage\n- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n- These prompts stay intentionally thin so the synthesis file remains the single dense context source.",
         "## Master Build Prompt\n```text\n" + master_prompt + "\n```",
         "## Product Kickoff Prompt\n```text\n" + product_prompt + "\n```",
-        "## DevOps Scaffold Prompt\n```text\n" + devops_prompt + "\n```",
+        "## DevOps Prompt\n```text\n" + devops_prompt + "\n```",
         "## Frontend Prompt\n```text\n" + frontend_prompt + "\n```",
     ]
 
     if backend_needed:
         data_prompt = textwrap.dedent(
             f"""\
-            Read `.arms/CONTEXT_SYNTHESIS.md` and design the initial data model for {data['project_name']}.
-
-            Start from {stack_profile['data_layer']} and shape the schema around {data['core_features']}.
-            Preserve explicit access boundaries, future migrations, and the minimum entities required for the first milestone.
+            Read `.arms/CONTEXT_SYNTHESIS.md`.
+            {"Review the current data model and identify the safest next schema changes." if is_existing_project else f"Design the initial data model for {data['project_name']}."}
+            Shape the work around {data['core_features']} and preserve explicit access boundaries.
             """
         ).strip()
         backend_prompt = textwrap.dedent(
             f"""\
-            Implement the first backend foundation for {data['project_name']}.
-
-            Use {stack_profile['data_layer']} with this auth shape: {stack_profile['auth_requirement']}.
-            Focus on the minimum secure path needed to support the first UI and product flows from `.arms/CONTEXT_SYNTHESIS.md`.
+            Read `.arms/CONTEXT_SYNTHESIS.md`.
+            {"Review the current backend/auth implementation and patch the highest-risk gaps." if is_existing_project else f"Implement the first backend foundation for {data['project_name']}."}
+            Use {stack_profile['data_layer']} with auth shaped around {stack_profile['auth_requirement']}.
             """
         ).strip()
         security_prompt = textwrap.dedent(
             f"""\
-            Review the planned auth and data setup for {data['project_name']} before it hardens.
-
-            Check the recommendation stack ({stack_profile['label']}), the chosen auth model ({stack_profile['auth_requirement']}), and the planned data layer ({stack_profile['data_layer']}).
-            Flag OWASP-relevant issues, access-control gaps, and secret-handling risks early.
+            Read `.arms/CONTEXT_SYNTHESIS.md`.
+            Review auth, access control, and secret handling for {data['project_name']}.
+            Check {stack_profile['label']} / {stack_profile['auth_requirement']} / {stack_profile['data_layer']} and flag OWASP-relevant risks early.
             """
         ).strip()
         sections.extend(
@@ -505,22 +504,35 @@ def render_generated_prompts(project_root):
             ]
         )
 
+    if not is_existing_project:
+        media_prompt = textwrap.dedent(
+            f"""\
+            Read `.arms/CONTEXT_SYNTHESIS.md`.
+            Generate the first asset set for {data['project_name']}.
+            Use nano-banana-pro and {build_media_asset_brief(data)}
+            """
+        ).strip()
+        sections.append("## Media Prompt\n```text\n" + media_prompt + "\n```")
+
+    if "content / marketing site" in data["project_type"].lower() or "website" in data["build_surface"].lower() or "landing page" in data["build_surface"].lower():
+        seo_prompt = textwrap.dedent(
+            f"""\
+            Read `.arms/CONTEXT_SYNTHESIS.md`.
+            {"Review the current metadata, information hierarchy, and SEO gaps." if is_existing_project else "Create the initial SEO and content brief."}
+            Keep recommendations aligned to {data['primary_audience']}, {data['seo_focus']}, and {data['primary_ctas']}.
+            """
+        ).strip()
+        sections.append("## SEO / Content Prompt\n```text\n" + seo_prompt + "\n```")
+
     qa_prompt = textwrap.dedent(
         f"""\
+        Read `.arms/CONTEXT_SYNTHESIS.md`.
         Prepare the pre-flight validation plan for {data['project_name']}.
-
-        Validate the scaffold, the primary {data['build_surface']}, and the core flows tied to {data['core_features']}.
-        Keep the test plan realistic for the selected stack ({stack_profile['label']}) and the deployment target ({stack_profile['deployment_target']}).
+        Validate the primary {data['build_surface']} and core flows tied to {data['core_features']}; {qa_action}.
         """
     ).strip()
 
-    sections.extend(
-        [
-            "## Media Prompt\n```text\n" + media_prompt + "\n```",
-            "## SEO / Content Prompt\n```text\n" + seo_prompt + "\n```",
-            "## QA Prompt\n```text\n" + qa_prompt + "\n```",
-        ]
-    )
+    sections.append("## QA Prompt\n```text\n" + qa_prompt + "\n```")
 
     return "\n\n".join(sections) + "\n"
 

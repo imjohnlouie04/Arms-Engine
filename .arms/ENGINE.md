@@ -72,9 +72,9 @@ Scan:
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
-3. **Logging:** Sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
-4. **Hot Context Mandate:** The `## Active Agents` and `## Active Skills` sections in `.arms/SESSION.md` are hot-context summaries, not full registries. Keep only the agents and skills required for open work plus registry pointers. Full discovery remains in `.gemini/agents.yaml` and the generated `skills.yaml` files.
-5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and compact roster references) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
+3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md`, sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
+4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
+5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
 
 ### Step 4: Execute Initialization Flow
@@ -176,7 +176,6 @@ To maintain performance in large projects, use the command **"arms init compress
 - Reset bulky `Completed Tasks` noise in `.arms/SESSION.md` back to the lean active-state view.
 - Rewrite `.arms/MEMORY.md` into caveman-style dense notes while preserving section structure and key technical decisions.
 - If archive history grows too large, refresh `.arms/HISTORY_SUMMARY.md` while preserving `.arms/SESSION_ARCHIVE.md` as the full record of truth.
-- Normal `arms init` runs may auto-compact oversized workspace state using the same rules when session, memory, or archive files cross the built-in thresholds.
 
 ### 6. Memory Integrity Protocol
 **A. Continuous Learning (`.arms/MEMORY.md`)**

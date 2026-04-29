@@ -429,7 +429,8 @@ def discover_skills(arms_root):
     print("🔍 Discovering Skills...")
     skills = []
     for skill in discover_skill_catalog(arms_root):
-        skills.append(f"- {skill['name']} [Active]")
+        suffix = " [Active]" if skill["name"] == "arms-orchestrator" else ""
+        skills.append(f"- {skill['name']}{suffix}")
     return "\n".join(skills)
 
 

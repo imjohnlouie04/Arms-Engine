@@ -398,6 +398,69 @@ def active_tasks_table_has_rows(content):
     return False
 
 
+def parse_active_task_rows(content):
+    rows = []
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 6:
+            continue
+        first_cell = cells[0].replace(" ", "")
+        if cells[0] == "#" or set(first_cell) <= {"-"}:
+            continue
+        rows.append(
+            {
+                "task": cells[1],
+                "agent": cells[2],
+                "skill": cells[3],
+                "dependencies": cells[4],
+                "status": cells[5],
+            }
+        )
+    return rows
+
+
+def filter_hot_task_rows(rows):
+    return [
+        row
+        for row in rows
+        if row["status"].strip().lower() not in {"done", "cancelled", "canceled"}
+    ]
+
+
+def render_compact_agent_roster(task_rows):
+    seen = set()
+    lines = []
+    for row in task_rows:
+        agent = row["agent"].strip()
+        if not agent or agent in seen:
+            continue
+        seen.add(agent)
+        lines.append(f"- {agent}")
+    if not lines:
+        lines.append("- arms-main-agent")
+    lines.append("- Registry: .gemini/agents.yaml")
+    return "\n".join(lines)
+
+
+def render_compact_skill_roster(task_rows):
+    seen = set()
+    lines = []
+    for row in task_rows:
+        skill = row["skill"].strip()
+        if skill.lower() in {"", "-", "—", "none", "n/a", "na"} or skill in seen:
+            continue
+        seen.add(skill)
+        suffix = " [Active]" if skill == "arms-orchestrator" else ""
+        lines.append(f"- {skill}{suffix}")
+    if not lines:
+        lines.append("- arms-orchestrator [Active]")
+    lines.append("- Registry: .agents/skills.yaml")
+    return "\n".join(lines)
+
+
 def extract_session_engine_version(session_content):
     match = re.search(r"- Engine Version: (.*)", session_content)
     return match.group(1).strip() if match else ""
@@ -719,7 +782,7 @@ def extract_current_project_name(project_root, existing_name=""):
     return directory_name or "Project"
 
 
-def update_session(project_root, arms_root, skills_list, agents_list, yolo=False, startup_tasks_content="", context_overwrite=None):
+def update_session(project_root, arms_root, skills_list="", agents_list="", yolo=False, startup_tasks_content="", context_overwrite=None):
     print("📄 Updating session log...")
     session_path = os.path.join(project_root, ".arms/SESSION.md")
 
@@ -757,6 +820,7 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
         )
 
     tasks_match = re.search(r"(## Active Tasks.*)", existing_content, re.DOTALL)
+    active_tasks_content = ""
     if tasks_match:
         tasks_content_raw = tasks_match.group(1)
         header_pattern = r"## (Active Tasks|Completed Tasks|Blockers)"
@@ -776,6 +840,7 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
                         )
                         if normalized_startup_tasks_content and not active_tasks_table_has_rows(content):
                             content = normalized_startup_tasks_content
+                        active_tasks_content = content
                     new_tasks_content.append(f"## {header}\n{content}")
                 else:
                     if header == "Active Tasks":
@@ -816,6 +881,9 @@ def update_session(project_root, arms_root, skills_list, agents_list, yolo=False
 ## Blockers
 None"""
 
+    hot_task_rows = filter_hot_task_rows(parse_active_task_rows(active_tasks_content))
+    compact_agents_list = render_compact_agent_roster(hot_task_rows)
+    compact_skills_list = render_compact_skill_roster(hot_task_rows)
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
@@ -832,10 +900,10 @@ Generated: {now}
 - YOLO Mode: {yolo_status}
 
 ## Active Agents
-{agents_list}
+{compact_agents_list}
 
 ## Active Skills
-{skills_list}
+{compact_skills_list}
 
 {tasks_content}"""
 

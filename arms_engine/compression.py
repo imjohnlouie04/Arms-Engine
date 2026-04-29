@@ -13,6 +13,8 @@ from .session import (
 
 
 ARCHIVE_TOKEN_LIMIT = 20000
+AUTO_COMPACT_SESSION_CHAR_LIMIT = 12000
+AUTO_COMPACT_MEMORY_CHAR_LIMIT = 12000
 TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
 TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|--------------|--------|"
 ARCHIVABLE_STATUSES = {"done", "cancelled", "canceled"}
@@ -88,6 +90,25 @@ def format_compression_summary(summary):
             )
         )
     return "\n".join(lines)
+
+
+def workspace_compression_reasons(
+    project_root,
+    session_char_limit=AUTO_COMPACT_SESSION_CHAR_LIMIT,
+    memory_char_limit=AUTO_COMPACT_MEMORY_CHAR_LIMIT,
+):
+    reasons = []
+    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
+
+    if os.path.exists(session_path) and len(read_text_file(session_path)) > session_char_limit:
+        reasons.append(".arms/SESSION.md")
+    if os.path.exists(memory_path) and len(read_text_file(memory_path)) > memory_char_limit:
+        reasons.append(".arms/MEMORY.md")
+    if os.path.exists(archive_path) and count_tokens(read_text_file(archive_path)) > ARCHIVE_TOKEN_LIMIT:
+        reasons.append(".arms/SESSION_ARCHIVE.md")
+    return reasons
 
 
 def compress_session_state(project_root):

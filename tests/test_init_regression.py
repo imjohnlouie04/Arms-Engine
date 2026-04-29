@@ -304,7 +304,8 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("supabase", registry_by_name["arms-data-agent"]["skills"])
 
             session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            self.assertIn("- arms-data-agent (supabase)", session_content)
+            self.assertIn("- Registry: .gemini/agents.yaml", session_content)
+            self.assertIn("- Registry: .agents/skills.yaml", session_content)
             self.assertTrue((project_root / ".agents" / "skills" / "supabase" / "SKILL.md").exists())
             self.assertTrue((project_root / ".gemini" / "skills" / "supabase" / "SKILL.md").exists())
             self.assertTrue((project_root / ".github" / "skills" / "supabase" / "SKILL.md").exists())
@@ -901,7 +902,8 @@ description = "Automate operational approvals and audit workflows."
             self.assertEqual(result["status"], "complete")
             self.assertIn("- **Project Name:** orbitops", brand)
             self.assertIn("Automate operational approvals and audit workflows.", brand)
-            self.assertIn("## Project Overview", synthesis)
+            self.assertIn("## Execution Profile", synthesis)
+            self.assertIn("**Workspace Mode:** Existing Repository", synthesis)
             self.assertIn("## Master Build Prompt", prompts)
 
     def test_run_init_once_normalizes_repo_root_override_to_package_root(self):

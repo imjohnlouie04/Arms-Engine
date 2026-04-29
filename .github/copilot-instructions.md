@@ -78,8 +78,8 @@ The initialization flow orchestrates:
 3. **Skill Sync** – Copies valid skill directories (with `SKILL.md`) to `.agents/skills/` and regenerates the local skill registry/index
 4. **Workflow Sync** – Copies protocol files to `.arms/workflow/`
 5. **Instruction Sync** – Deploys `.arms/ENGINE.md` and root `AGENTS.md`
-6. **Context Synthesis** – Generates `.arms/CONTEXT_SYNTHESIS.md` and `.arms/GENERATED_PROMPTS.md` when intake is complete
-7. **Session Refresh** – Updates `.arms/SESSION.md` and seeds the startup task table when appropriate
+6. **Context Synthesis** – Generates `.arms/CONTEXT_SYNTHESIS.md` and a thin `.arms/GENERATED_PROMPTS.md` when intake is complete
+7. **Session Refresh** – Updates `.arms/SESSION.md` with compact hot-context agent/skill references and seeds the startup task table when appropriate
 
 ---
 
@@ -97,7 +97,7 @@ Never assume a path. If not found, halt immediately and request setup.
 
 ### 2. **Session Bootstrap Files (Never Overwrite)**
 The managed ARMS workspace persists across sessions:
-- **`./.arms/SESSION.md`**: Active task table, execution mode, active skills. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
+- **`./.arms/SESSION.md`**: Active task table, execution mode, and compact hot-context agent/skill references. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
 - **`./.arms/MEMORY.md`**: Continuous learning file. **CRITICAL:** APPEND only; NEVER overwrite with template.
 - **`./.arms/BRAND.md`**: Visual identity & positioning (referenced by Frontend, SEO, Media agents).
 - **`./.arms/ENGINE.md`**: ARMS engine instructions, architecture direction, deployment target, and standards for the engine workflow.
@@ -173,7 +173,7 @@ When users invoke commands, `arms-main-agent` reads the corresponding protocol:
 - Dependencies respected: independent agents first, dependent agents after
 
 **Shared Rules (Both Modes):**
-- NEVER overwrite `## Environment` or `## Active Skills` in SESSION.md
+- NEVER overwrite `## Environment` or remove the compact roster/reference sections in SESSION.md
 - NEVER remove `- Engine Version:` from the `## Environment` block when updating tasks, blockers, or execution state
 - NEVER overwrite MEMORY.md
 - Every agent receives: role definition + SKILL.md + SESSION.md + MEMORY.md
@@ -268,7 +268,7 @@ After significant technical work, ask user approval before updating `MEMORY.md`:
 ### 4. **Skill Discovery & Validation**
 - Only directories containing `SKILL.md` are registered as valid skills
 - Skills are discovered and logged during `arms init` for reference
-- `arms-orchestrator` is marked `[Active]` in skill listings (it's the primary orchestration skill)
+- `arms-orchestrator` remains the default `[Active]` skill marker in compact session views; full skill discovery lives in generated registries
 
 ### 5. **Documentation Automation**
 - **`arms-docs` command** auto-updates README.md agent roster from agents.yaml
