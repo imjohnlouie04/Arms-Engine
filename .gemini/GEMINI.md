@@ -66,9 +66,9 @@ Scan:
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
-3. **Logging:** Register all discovered agents and skills to `.arms/SESSION.md` under `## Active Skills`.
-4. **Complete Roster Mandate:** The `## Active Skills` section MUST remain an exhaustive list of ALL skills found in `$ARMS_ROOT/arms_engine/skills/`. NEVER prune or omit skills based on the current task's scope.
-5. **Persistence:** Environmental metadata (Root paths and Skills) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
+3. **Logging:** Register agent and skill hot-context summaries in `.arms/SESSION.md`, sync `.gemini/agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`.
+4. **Hot Context Mandate:** The `## Active Skills` section is a compact execution summary, not a full catalog. Keep only the skills required for open work plus registry pointers.
+5. **Persistence:** Environmental metadata (Root paths and compact roster references) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
 
 ### Step 4: Execute Initialization Flow
 

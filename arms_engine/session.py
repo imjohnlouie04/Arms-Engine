@@ -41,8 +41,10 @@ RULES_TEMPLATE = """# ARMS Project Rules
 - Run the relevant validation before marking work complete.
 
 ## Agent Protocol
-- Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before major changes.
+- Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before any task work.
+- Treat `## Memory Signals` in `.arms/SESSION.md` as hot context, then open `.arms/MEMORY.md` when the work touches prior lessons, preferences, or known bugs.
 - Ask the user for approval before updating `.arms/MEMORY.md`; only append after approval, and never overwrite it wholesale.
+- After significant work, draft a concise memory lesson candidate and ask for approval before appending it to `.arms/MEMORY.md`.
 - Keep `.arms/SESSION.md` synchronized with task progress and blockers.
 """
 SESSION_ARCHIVE_TEMPLATE = """# ARMS Session Archive
@@ -68,7 +70,6 @@ def setup_folders(project_root):
     ]
     gemini_folders = [
         ".gemini/agents",
-        ".gemini/skills",
     ]
     github_folders = [
         ".github/agents",
@@ -458,6 +459,53 @@ def render_compact_skill_roster(task_rows):
     if not lines:
         lines.append("- arms-orchestrator [Active]")
     lines.append("- Registry: .agents/skills.yaml")
+    return "\n".join(lines)
+
+
+def normalize_memory_signal(text, limit=180):
+    collapsed = " ".join((text or "").split()).strip()
+    collapsed = re.sub(r"^[-*]\s*", "", collapsed)
+    if not collapsed or collapsed.lower() in {"none", "n/a", "na", "tbd"}:
+        return ""
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
+
+
+def collect_memory_signals(project_root, limit=4):
+    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    if not os.path.isfile(memory_path):
+        return []
+
+    _, sections = parse_markdown_sections(read_text_file(memory_path))
+    signals = []
+    seen = set()
+    for title, body in sections.items():
+        section_title = " ".join((title or "").split()).strip()
+        for raw_line in (body or "").splitlines():
+            normalized = normalize_memory_signal(raw_line)
+            if not normalized:
+                continue
+            if normalized == section_title:
+                continue
+            candidate = f"{section_title}: {normalized}" if section_title else normalized
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            signals.append(candidate)
+            if len(signals) >= limit:
+                return signals
+    return signals
+
+
+def render_memory_signals(project_root):
+    lines = ["- Read `.arms/MEMORY.md` before task work."]
+    memory_signals = collect_memory_signals(project_root)
+    if memory_signals:
+        lines.extend(f"- {item}" for item in memory_signals)
+    else:
+        lines.append("- No approved memory lessons recorded yet.")
+    lines.append("- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`.")
     return "\n".join(lines)
 
 
@@ -884,6 +932,7 @@ None"""
     hot_task_rows = filter_hot_task_rows(parse_active_task_rows(active_tasks_content))
     compact_agents_list = render_compact_agent_roster(hot_task_rows)
     compact_skills_list = render_compact_skill_roster(hot_task_rows)
+    memory_signals = render_memory_signals(project_root)
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
@@ -904,6 +953,9 @@ Generated: {now}
 
 ## Active Skills
 {compact_skills_list}
+
+## Memory Signals
+{memory_signals}
 
 {tasks_content}"""
 

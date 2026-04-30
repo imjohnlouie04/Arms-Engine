@@ -44,7 +44,6 @@ REQUIRED_WORKSPACE_DIRECTORIES = (
     ".arms/workflow",
     ".agents/skills",
     ".gemini/agents",
-    ".gemini/skills",
     ".github/agents",
     ".github/skills",
 )
@@ -57,8 +56,6 @@ REQUIRED_WORKSPACE_FILES = (
     ".arms/ENGINE.md",
     ".agents/skills.yaml",
     ".agents/skills-index.md",
-    ".gemini/skills.yaml",
-    ".gemini/skills-index.md",
     ".github/skills.yaml",
     ".github/skills-index.md",
     ".gemini/agents.yaml",
@@ -447,7 +444,7 @@ def apply_safe_doctor_repairs(project_root, arms_root):
     return [
         "Resynced `.gemini/agents/` and `.gemini/agents.yaml` from the engine.",
         "Resynced `.github/agents/` from the engine.",
-        "Rebuilt mirrored skill directories and generated skill registries.",
+        "Rebuilt `.agents/skills/`, `.github/skills/`, and the generated skill registries.",
         "Resynced `.arms/workflow/`, `.arms/ENGINE.md`, and the root `AGENTS.md` guide.",
     ], []
 
@@ -533,7 +530,6 @@ def validate_skill_mirror(project_root, arms_root, categories, counts):
     source_skills = {skill["source_directory"] for skill in discover_skill_catalog(arms_root)}
     mirror_roots = (
         ".agents/skills",
-        ".gemini/skills",
         ".github/skills",
     )
     problems = []
@@ -568,7 +564,7 @@ def validate_skill_mirror(project_root, arms_root, categories, counts):
             "Workspace Health",
             "fail",
             "Skill mirrors are out of sync: {}.".format(" | ".join(problems)),
-            "Rerun `arms init` to rebuild `.agents/skills/`, `.gemini/skills/`, `.github/skills/`, and the generated skill registries.",
+            "Rerun `arms init` to rebuild `.agents/skills/`, `.github/skills/`, and the generated skill registries.",
         )
     else:
         add_check(

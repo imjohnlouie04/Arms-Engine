@@ -19,7 +19,7 @@ ARMS automatically manages the following specialized agents. Use `/agent <agent-
 
 ## Available Skills
 
-Skills are mirrored from `arms_engine/skills/` into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`, while agent-to-skill bindings come from `arms_engine/agents.yaml`. Common skills include:
+Skills are mirrored from `arms_engine/skills/` into `.agents/skills/` and `.github/skills/`, while agent-to-skill bindings come from `arms_engine/agents.yaml`. Common skills include:
 
 - **arms-orchestrator** – Full-stack project orchestration, multi-agent workflows, approval gates
 - **backend-system-architect** – Backend architecture, API design, database schemas

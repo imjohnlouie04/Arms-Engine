@@ -210,9 +210,13 @@ When agents produce contradictory outputs:
 - Escalate after 2 consecutive failures — present decomposition strategy → **HALT**
 
 ### 9. **Memory Management & Archival**
+Before task execution, read `SESSION.md`, consult the compact `## Memory Signals` digest, and open `MEMORY.md` when prior lessons, preferences, or known bugs are relevant.
+
 After significant technical work, ask user approval before updating `MEMORY.md`:
 
 > "May I update `./.arms/MEMORY.md` with this bug fix / preference / architectural decision?"
+
+Draft the lesson first in concise form so the append stays high-signal and prevents future context drift.
 
 **Archival Triggers:**
 - Task completion (Done/Cancelled) → append to SESSION_ARCHIVE.md + remove from SESSION.md

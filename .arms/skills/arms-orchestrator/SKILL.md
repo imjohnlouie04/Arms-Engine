@@ -63,7 +63,7 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
 - ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md)
 - Gemini AI config: `./.gemini/` (GEMINI.md, MEMORY.md, RULES.md)
-- Local mirrored assets: `./.gemini/agents/`, `./.gemini/skills/`, `./.gemini/workflow/` (mirrored for low-latency context)
+- Local mirrored assets: `./.gemini/agents/` and `./.arms/workflow/`
 
 ---
 
@@ -85,7 +85,7 @@ When `./.gemini/` does not exist or is missing required files, `arms-main-agent`
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
-   - **Persistence:** Update `SESSION.md` under `## Active Skills`. Never delete the roster during a task update.
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`. Never delete the roster during a task update.
 ```
 
 ### SESSION.md Bootstrap Template

@@ -9,20 +9,27 @@ except ImportError:
     yaml = None
 
 
-def clean_legacy_gemini_skill_mirror(project_root):
-    legacy_dir = os.path.join(project_root, ".gemini/skills")
-    if not os.path.isdir(legacy_dir):
-        return
+def remove_obsolete_gemini_skill_artifacts(project_root):
+    obsolete_paths = (
+        os.path.join(project_root, ".gemini/skills"),
+        os.path.join(project_root, ".gemini/skills.yaml"),
+        os.path.join(project_root, ".gemini/skills-index.md"),
+    )
+    removed_paths = []
+    for obsolete_path in obsolete_paths:
+        if os.path.isdir(obsolete_path):
+            shutil.rmtree(obsolete_path)
+            removed_paths.append(os.path.relpath(obsolete_path, project_root))
+        elif os.path.isfile(obsolete_path):
+            os.remove(obsolete_path)
+            removed_paths.append(os.path.relpath(obsolete_path, project_root))
 
-    removed_entries = False
-    for entry in os.listdir(legacy_dir):
-        entry_path = os.path.join(legacy_dir, entry)
-        if os.path.isfile(entry_path) and entry.endswith(".md"):
-            os.remove(entry_path)
-            removed_entries = True
-
-    if removed_entries:
-        print("🧹 Removed legacy flat skill files from .gemini/skills before rebuilding skill mirrors.")
+    if removed_paths:
+        print(
+            "🧹 Removed obsolete Gemini skill artifacts: {}.".format(
+                ", ".join(f"`{path}`" for path in removed_paths)
+            )
+        )
 
 
 def ensure_agent_tools_frontmatter(content):
@@ -221,9 +228,9 @@ def ensure_skill_frontmatter(content, skill_name):
 def sync_skills_copilot(arms_root, project_root):
     print("🔌 Syncing Skills for CLI discovery...")
     skills_src = os.path.join(arms_root, "skills")
+    remove_obsolete_gemini_skill_artifacts(project_root)
     target_dirs = [
         os.path.join(project_root, ".agents/skills"),
-        os.path.join(project_root, ".gemini/skills"),
         os.path.join(project_root, ".github/skills"),
     ]
     for target_dir in target_dirs:
@@ -267,14 +274,10 @@ def sync_skills_copilot(arms_root, project_root):
 def create_skills_registry(arms_root, project_root):
     print("📋 Creating Skills Registry...")
     skills_data = build_skills_data(arms_root)
+    remove_obsolete_gemini_skill_artifacts(project_root)
     write_skills_registry_files(
         os.path.join(project_root, ".agents"),
         ".agents/skills",
-        skills_data,
-    )
-    write_skills_registry_files(
-        os.path.join(project_root, ".gemini"),
-        ".gemini/skills",
         skills_data,
     )
     write_skills_registry_files(

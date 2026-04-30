@@ -227,10 +227,46 @@ class InitRegressionTests(unittest.TestCase):
             gemini_agent = (project_root / ".gemini" / "agents" / "arms-main-agent.md").read_text(encoding="utf-8")
             engine_instructions = (project_root / ".arms" / "ENGINE.md").read_text(encoding="utf-8")
             rules = (project_root / ".arms" / "RULES.md").read_text(encoding="utf-8")
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
 
             self.assertIn("Must ask for explicit user approval before updating `.arms/MEMORY.md`.", gemini_agent)
+            self.assertIn("Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work", gemini_agent)
             self.assertIn("Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly.", engine_instructions)
             self.assertIn("Ask the user for approval before updating `.arms/MEMORY.md`", rules)
+            self.assertIn("Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before any task work.", rules)
+            self.assertIn("## Memory Signals", session_content)
+            self.assertIn("Read `.arms/MEMORY.md` before task work.", session_content)
+
+    def test_session_surfaces_memory_signals_from_approved_memory(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nMemory signals.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            (project_root / ".arms" / "MEMORY.md").write_text(
+                "\n".join(
+                    [
+                        "# ARMS Project Memory",
+                        "",
+                        "## Developer Preferences",
+                        "- Prefer Cypress over Playwright for browser E2E.",
+                        "",
+                        "## Known Bugs & Fixes",
+                        "- Normalize active skills from agents.yaml instead of inferring from runtime screenshots.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(str(project_root), str(ARMS_ROOT), yolo=True)
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("## Memory Signals", session_content)
+            self.assertIn("Developer Preferences: Prefer Cypress over Playwright for browser E2E.", session_content)
+            self.assertIn(
+                "Known Bugs & Fixes: Normalize active skills from agents.yaml instead of inferring from runtime screenshots.",
+                session_content,
+            )
 
     def test_init_injects_agents_yaml_rules_into_mirrored_agent_markdown(self):
         with TemporaryDirectory() as tmp:
@@ -307,14 +343,15 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("- Registry: .gemini/agents.yaml", session_content)
             self.assertIn("- Registry: .agents/skills.yaml", session_content)
             self.assertTrue((project_root / ".agents" / "skills" / "supabase" / "SKILL.md").exists())
-            self.assertTrue((project_root / ".gemini" / "skills" / "supabase" / "SKILL.md").exists())
+            self.assertFalse((project_root / ".gemini" / "skills").exists())
             self.assertTrue((project_root / ".github" / "skills" / "supabase" / "SKILL.md").exists())
             self.assertIn("supabase:", (project_root / ".agents" / "skills.yaml").read_text(encoding="utf-8"))
-            self.assertIn("supabase:", (project_root / ".gemini" / "skills.yaml").read_text(encoding="utf-8"))
+            self.assertFalse((project_root / ".gemini" / "skills.yaml").exists())
+            self.assertFalse((project_root / ".gemini" / "skills-index.md").exists())
             self.assertIn("supabase:", (project_root / ".github" / "skills.yaml").read_text(encoding="utf-8"))
-            self.assertIn(".gemini/skills/arms-orchestrator/SKILL.md", (project_root / ".gemini" / "skills-index.md").read_text(encoding="utf-8"))
+            self.assertIn(".agents/skills/arms-orchestrator/SKILL.md", (project_root / ".agents" / "skills-index.md").read_text(encoding="utf-8"))
 
-    def test_init_syncs_all_engine_skills_to_all_skill_mirrors(self):
+    def test_init_syncs_all_engine_skills_to_cli_skill_mirrors(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
             (project_root / "README.md").write_text("# Demo\nSkill mirror sync.\n", encoding="utf-8")
@@ -326,19 +363,20 @@ class InitRegressionTests(unittest.TestCase):
                 for path in (ARMS_ROOT / "skills").iterdir()
                 if path.is_dir() and (path / "SKILL.md").exists()
             }
-            for relative_root in (".agents/skills", ".gemini/skills", ".github/skills"):
+            for relative_root in (".agents/skills", ".github/skills"):
                 mirror_root = project_root / relative_root
                 mirrored_skills = {path.name for path in mirror_root.iterdir() if path.is_dir()}
                 self.assertEqual(mirrored_skills, expected_skills)
             for relative_file in (
                 ".agents/skills.yaml",
                 ".agents/skills-index.md",
-                ".gemini/skills.yaml",
-                ".gemini/skills-index.md",
                 ".github/skills.yaml",
                 ".github/skills-index.md",
             ):
                 self.assertTrue((project_root / relative_file).exists())
+            self.assertFalse((project_root / ".gemini" / "skills").exists())
+            self.assertFalse((project_root / ".gemini" / "skills.yaml").exists())
+            self.assertFalse((project_root / ".gemini" / "skills-index.md").exists())
 
     def test_reinit_existing_project_refreshes_skill_mirrors_and_registries(self):
         with TemporaryDirectory() as tmp:
@@ -378,17 +416,18 @@ class InitRegressionTests(unittest.TestCase):
 
             self.invoke_cli(project_root, "init", "yolo", "--root", str(engine_root))
 
-            for relative_root in (".agents/skills", ".gemini/skills", ".github/skills"):
+            for relative_root in (".agents/skills", ".github/skills"):
                 self.assertTrue((project_root / relative_root / "supabase" / "SKILL.md").exists())
             for relative_file in (
                 ".agents/skills.yaml",
-                ".gemini/skills.yaml",
                 ".github/skills.yaml",
                 ".agents/skills-index.md",
-                ".gemini/skills-index.md",
                 ".github/skills-index.md",
             ):
                 self.assertIn("supabase", (project_root / relative_file).read_text(encoding="utf-8"))
+            self.assertFalse((project_root / ".gemini" / "skills").exists())
+            self.assertFalse((project_root / ".gemini" / "skills.yaml").exists())
+            self.assertFalse((project_root / ".gemini" / "skills-index.md").exists())
 
     def test_resolve_agents_with_skills_uses_only_agents_yaml_bindings(self):
         with TemporaryDirectory() as tmp:

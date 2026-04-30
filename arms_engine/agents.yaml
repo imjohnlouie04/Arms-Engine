@@ -9,7 +9,7 @@ agents:
       - arms-orchestrator
       - arms-docs-generator
       - caveman-compressor
-    rules: "Must present a markdown task table (Task | Assigned Agent | Dependencies | Status) and wait for explicit user approval before delegating. Must ask for explicit user approval before updating `.arms/MEMORY.md`. Must append blocker resolutions and project context to `.arms/MEMORY.md` only after approval."
+    rules: "Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work, using `## Memory Signals` in `.arms/SESSION.md` as the hot-context shortcut. Must present a markdown task table (Task | Assigned Agent | Dependencies | Status) and wait for explicit user approval before delegating. Must ask for explicit user approval before updating `.arms/MEMORY.md`. Must append blocker resolutions and project context to `.arms/MEMORY.md` only after approval. After significant work, must draft a concise memory lesson candidate and request approval before appending it."
   arms-product-agent:
     role: Product Manager
     scope: Requirements gathering, user stories, PRD generation, feature prioritization.

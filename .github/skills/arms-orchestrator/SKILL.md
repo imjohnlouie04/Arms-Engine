@@ -63,7 +63,7 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
 - ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md, ENGINE.md)
 - Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md` and must be preserved if present
-- Mirrored assistant assets: `./.gemini/`, including `.gemini/agents/` and `.gemini/skills/`
+- Mirrored assistant assets: `./.gemini/`, including `.gemini/agents/`
 - Local mirrored assets: `./.github/agents/`, `./.github/skills/`, and `./.arms/workflow/` (mirrored for CLI and engine context)
 
 ---
@@ -91,7 +91,7 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
-   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`. Never delete the roster during a task update.
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`. Never delete the roster during a task update.
 ```
 
 ### Initialization Continuation Rule

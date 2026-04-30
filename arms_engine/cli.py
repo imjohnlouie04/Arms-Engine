@@ -30,7 +30,7 @@ from .session import (
     update_session,
 )
 from .skills import (
-    clean_legacy_gemini_skill_mirror,
+    remove_obsolete_gemini_skill_artifacts,
     create_skills_registry,
     sync_agents,
     sync_agents_copilot,
@@ -194,7 +194,7 @@ def run_init_once(
         allow_engine_downgrade=allow_engine_downgrade,
     )
     bootstrap_runtime_files(project_root)
-    clean_legacy_gemini_skill_mirror(project_root)
+    remove_obsolete_gemini_skill_artifacts(project_root)
     sync_agents(arms_root, project_root)
     sync_agents_copilot(arms_root, project_root)
     sync_skills_copilot(arms_root, project_root)

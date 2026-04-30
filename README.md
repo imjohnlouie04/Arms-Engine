@@ -54,7 +54,7 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 
 | Path | Purpose | Notes |
 |---|---|---|
-| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, task table, blockers |
+| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, memory signals, task table, blockers |
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
 | `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers into a compact execution brief, including workspace mode and current stack recommendation |
@@ -65,9 +65,6 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans these locations for context and does not overwrite them |
 | `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
 | `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced directly from `arms_engine/agents.yaml` |
-| `.gemini/skills/` | Gemini skill mirror | Synced from valid `arms_engine/skills/*/SKILL.md` directories |
-| `.gemini/skills.yaml` | Gemini skill registry | Built from synced skill metadata |
-| `.gemini/skills-index.md` | Human-readable Gemini skill index | Generated quick reference |
 | `.arms/workflow/` | Local mirror of workflow docs | Copied from the engine for cross-CLI use |
 | `.arms/reports/` | Shared report output directory | Used by review, fix, and deploy protocols |
 | `.arms/agent-outputs/` | Shared generated asset/output directory | Used for agent-produced files such as media assets |
@@ -157,16 +154,16 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
-3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.gemini/skills/`, `.github/agents/`, and `.github/skills/`.
+3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.github/agents/`, and `.github/skills/`.
 4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md`.
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`, including the default memory approval gate in `.arms/RULES.md`.
-6. Cleans legacy flat skill files and rebuilds the skill mirrors under `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
+6. Removes obsolete Gemini-side skill mirrors and rebuilds the canonical skill mirrors under `.agents/skills/` and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
 7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/`, `.gemini/skills/`, and `.github/skills/`.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
 13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
 14. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
 15. Ends in either standard halt mode or YOLO-ready mode.
