@@ -25,6 +25,7 @@ Skills are mirrored from `arms_engine/skills/` into `.agents/skills/` and `.gith
 - **backend-system-architect** – Backend architecture, API design, database schemas
 - **frontend-design** – Production-grade UI components with distinctive aesthetics
 - **ui-ux-pro-max** – Expanded UI/UX design system and review guidance
+- **3d-web-experience** – Three.js, React Three Fiber, Spline, and immersive 3D web experience guidance
 - **devops-orchestrator** – Deployment automation and zero-drift infrastructure workflows
 - **security-code-review** – OWASP audits, auth validation, RLS configuration
 - **qa-automation-testing** – Unit/E2E test generation, Cypress-first E2E strategy

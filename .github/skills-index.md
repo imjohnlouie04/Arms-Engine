@@ -4,6 +4,13 @@
 
 ## Available Skills
 
+### `3d-web-experience/SKILL.md`
+**3d-web-experience**
+
+Expert in building 3D experiences for the web - Three.js, React Three Fiber, Spline, WebGL, and interactive 3D scenes. Covers product configurators, 3D portfolios, immersive websites, and bringing depth to web experiences. Use when: 3D website, three.js, WebGL, react three fiber, 3D experience.
+
+**File:** `.github/skills/3d-web-experience/SKILL.md`
+
 ### `Accessibility Auditor/SKILL.md`
 **Accessibility Auditor**
 
@@ -23,7 +30,7 @@ Technical Documentation & Architecture Visualization Specialist
 ### `arms-orchestrator/SKILL.md`
 **arms-orchestrator**
 
-Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
+Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
 
 **File:** `.github/skills/arms-orchestrator/SKILL.md`
 
