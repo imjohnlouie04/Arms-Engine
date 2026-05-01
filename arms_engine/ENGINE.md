@@ -5,11 +5,13 @@
 
 ---
 
-**Activation Command:** When the user types exactly `arms init` or `arms start`, immediately invoke the global orchestration engine. When the user types `arms init yolo` or `arms start yolo`, invoke the engine in **Full Automation Mode** (skipping the planning gate halt). When the user types `arms doctor`, run workspace health diagnostics against the local ARMS state. When the user types `arms run review`, `arms fix issues`, `arms run deploy`, `arms run pipeline`, or `arms run status`, treat them as real ARMS protocol commands that operate on the local `.arms/` workspace state. Do not output generic greetings or conversational filler — let the explicit boot sequence or protocol dictate your response.
+**Activation Command:** When the user types exactly `arms init` or `arms start`, immediately invoke the global orchestration engine. When the user types `arms init yolo` or `arms start yolo`, invoke the engine in **Full Automation Mode** (skipping the planning gate halt). When the user types `arms doctor`, run workspace health diagnostics against the local ARMS state. When the user types `arms release check`, run the read-only pre-release validation gate against the local ARMS state. When the user types `arms run review`, `arms fix issues`, `arms run deploy`, `arms run pipeline`, or `arms run status`, treat them as real ARMS protocol commands that operate on the local `.arms/` workspace state. Do not output generic greetings or conversational filler — let the explicit boot sequence or protocol dictate your response.
 
 **Strict Init Rule:** If the command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** switch into generic planning, repo cleanup, linting, `git status`, or issue triage before the boot sequence. Resolve the ARMS engine path first, run the linker/bootstrap flow, migrate legacy state, and only then continue with normal orchestration.
 
-**Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, ownership safety, and protocol readiness. Print actionable diagnostics and exit non-zero when blocking issues are present. If the command is `arms doctor --fix`, first resync engine-owned mirrored files only, then report any remaining failures; do not bootstrap a missing workspace and do not overwrite project-owned instruction files.
+**Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, context budgets, version diagnostics, ownership safety, and protocol readiness. Print actionable diagnostics, end with a compact final triage summary, and exit non-zero when blocking issues are present. If the command is `arms doctor --fix`, first resync engine-owned mirrored files only, report any obsolete managed artifacts removed during cleanup, then report any remaining failures; do not bootstrap a missing workspace and do not overwrite project-owned instruction files.
+
+**Release Validation Rule:** If the command is `arms release check`, reuse the doctor diagnostics as a read-only pre-release gate. Print a shipping summary that shows blocking categories, warning categories, ready categories, a compact version snapshot, and the recommended next command. Exit non-zero when blocking issues are present, but do not mutate workspace state and do not support repair mode under this command.
 
 **Protocol Command Rule:** If the command is `arms run review`, `arms fix issues`, `arms run deploy`, `arms run pipeline`, or `arms run status`, do **not** fall back to generic planning text. Read or update `.arms/SESSION.md`, generate the expected protocol artifacts in `.arms/reports/`, and stop at the documented approval gate.
 
@@ -75,9 +77,10 @@ Scan:
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
 3. **Logging:** Sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`.
-4. **Hot Context Mandate:** The `## Active Agents` and `## Active Skills` sections in `.arms/SESSION.md` are hot-context summaries, not full registries. Keep only the agents and skills required for open work plus registry pointers. Full discovery remains in `.gemini/agents.yaml` and the generated `skills.yaml` files.
-5. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and compact roster references) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
-6. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
+4. **Hot Context Mandate:** The `## Active Agents` and `## Active Skills` sections in `.arms/SESSION.md` are hot-context summaries, not full registries. Keep only the agents and skills required for open work plus registry pointers, but also surface bound-but-inactive skills so users can see available capabilities without expanding the full registry. Full discovery remains in `.gemini/agents.yaml` and the generated `skills.yaml` files.
+5. **Budget Guardrails:** Keep `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` inside their built-in token budgets. When generation nears or exceeds those limits, tighten duplicated context instead of accepting prompt sprawl.
+6. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and compact roster references) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
+7. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
 
 ### Step 4: Execute Initialization Flow
 
@@ -134,11 +137,16 @@ To invoke a specialized ARMS agent in Copilot CLI, use the `/agent` slash comman
 
 The System Architect is an **orchestrator**, not a code generator. You must never execute multi-step tasks without first establishing a plan.
 
+**Delegation Integrity Rule:** Specialist implementation must be attributed to the specialist agent that owns the task. `arms-main-agent` may plan, aggregate, and update `SESSION.md`, but must not present frontend/backend/QA/security implementation output under `[Speaking Agent]: arms-main-agent`. In simulated mode, render the specialist turn explicitly using that agent's name.
+
 ### 1. The Planning Gate
 If initialization is currently waiting for Brand Context / tech stack answers, the user's next answer block must be treated as a continuation of `init`, not a new task. In that case, finish brand + stack synthesis first, then generate the Strategic Task Table.
 
 After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `.arms/SESSION.md`.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`.
+- **Prompt Intake Record:** Every new user prompt after bootstrap must be reflected in the task table so the workspace keeps a durable record of requested work. If the prompt continues an existing open task, update that row instead of duplicating it. If it introduces a new ask, append a new row before substantive execution begins.
+- **Proper Agent Assignment:** The intake row must be assigned to the specialist agent that owns the work, not automatically to `arms-main-agent`. Use `arms-main-agent` only for orchestration, session management, protocol control, memory coordination, and other meta-work.
+- **Default Routing Matrix:** UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`; API, auth, backend services, business logic → `arms-backend-agent`; schema, migrations, database, query tuning → `arms-data-agent`; tests, QA, accessibility validation, pre-flight → `arms-qa-agent`; secrets, OWASP, auth/security audit → `arms-security-agent`; CI/CD, deploy, infra, environments → `arms-devops-agent`; metadata, SEO, Core Web Vitals → `arms-seo-agent`; assets, logo, generated images → `arms-media-agent`; scope, product framing, prioritization → `arms-product-agent`.
 - Use the following schema:
 
 | # | Task | Assigned Agent | Active Skill | Dependencies | Status |
@@ -178,6 +186,8 @@ To maintain performance in large projects, use the command **"arms init compress
 - Reset bulky `Completed Tasks` noise in `.arms/SESSION.md` back to the lean active-state view.
 - Rewrite `.arms/MEMORY.md` into caveman-style dense notes while preserving section structure and key technical decisions.
 - If archive history grows too large, refresh `.arms/HISTORY_SUMMARY.md` while preserving `.arms/SESSION_ARCHIVE.md` as the full record of truth.
+- Treat token budgets as hard guardrails for hot-context artifacts: oversized session, synthesis, or generated prompt files must be tightened and flagged by `arms doctor`.
+- When compression or protocol refresh writes archive history, print archive diagnostics with the exact `.arms/SESSION_ARCHIVE.md` / `.arms/HISTORY_SUMMARY.md` paths touched.
 - Normal `arms init` runs may auto-compact oversized workspace state using the same rules when session, memory, or archive files cross the built-in thresholds.
 
 ### 6. Memory Integrity Protocol
@@ -201,6 +211,11 @@ The System Architect MUST verify that the active session matches the current wor
 
 ### 8. State Synchronization
 After every agent turn or state change, you MUST update `.arms/SESSION.md` to reflect the current progress.
+
+### 9. Runtime Cancellation Diagnostics
+- If a task row is marked `Failed`, treat it as an ARMS-visible execution failure that still needs remediation.
+- If a task row is marked `Cancelled` / `Canceled`, do not assume ARMS cancelled it automatically. Surface it as an external runtime or operator cancellation unless the user explicitly requested cancellation.
+- `run status` should distinguish these two cases clearly so Copilot/runtime interruptions are not mistaken for engine-controlled task cancellation.
 
 ---
 

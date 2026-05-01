@@ -1,7 +1,7 @@
 ---
 name: arms-orchestrator
 description: >
-  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
+  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
 ---
 
 # ARMS — Architectural Runtime Management System
@@ -92,6 +92,8 @@ If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
    - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`. Never delete the roster during a task update.
+   - **Visibility:** Keep the hot-context roster compact, but show bound-but-inactive skills so users can tell a skill is available even when no open task is currently activating it.
+   - **Budget Guardrail:** Keep `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` inside their token budgets. If a generated artifact nears or exceeds budget, tighten duplicate context instead of accepting prompt sprawl.
 ```
 
 ### Initialization Continuation Rule
@@ -301,10 +303,14 @@ Pending → In Progress → Pre-Flight → Done
 ### Rules
 
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
+- **Prompt Intake Record:** Every new user prompt after bootstrap must appear in the task table so ARMS preserves a durable work ledger. If the prompt continues an open task, update that row instead of duplicating it. If it introduces a new ask, append a new row before substantive execution starts.
+- **Proper Agent Assignment:** Intake rows must be assigned to the specialist agent that owns the requested work. Do not default new user asks to `arms-main-agent` unless the work is orchestration/meta work.
+- **Default Routing Matrix:** UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`; API, auth, backend services, business logic → `arms-backend-agent`; schema, migrations, database, query tuning → `arms-data-agent`; tests, QA, accessibility validation, pre-flight → `arms-qa-agent`; secrets, OWASP, auth/security audit → `arms-security-agent`; CI/CD, deploy, infra, environments → `arms-devops-agent`; metadata, SEO, Core Web Vitals → `arms-seo-agent`; assets, logo, generated images → `arms-media-agent`; scope, product framing, prioritization → `arms-product-agent`.
 - **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy.
 - If an agent has exactly one available skill, use it automatically.
 - If an agent has multiple available skills, pick the most relevant skill for the task being delegated.
 - Use `—` only when that agent truly has no bound skill.
+- **Delegation Integrity:** Never present specialist implementation output under `arms-main-agent`. The orchestrator delegates; specialist turns must be rendered under the owning agent name, especially for frontend/backend/QA/security work.
 - Only `arms-main-agent` transitions tasks to `Done` — subagents report completion, the orchestrator validates and updates.
 - **Auto-Critique (Quality Gate):** No feature task can be marked `Done` without verification from `arms-qa-agent`. QA must run pre-flight checks (tests/lint/build) before status is finalized.
 - `Blocked` tasks must include the reason and the unblocking condition.
@@ -336,12 +342,13 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 | `init` | Standard | Standard boot sequence. Halt for plan approval. |
 | `init yolo` | Automated | Full automation. Skip initial plan approval gate. |
 | `init compress`| Efficiency| Scaffold and then run the native ARMS compression pass to shrink session/memory. |
-| `doctor` | Inline | Audit workspace health, ownership safety, and protocol readiness. `doctor --fix` may safely resync engine-owned mirrors first. |
+| `doctor` | Inline | Audit workspace health, context budgets, version diagnostics, ownership safety, and protocol readiness. End with a final triage summary. `doctor --fix` may safely resync engine-owned mirrors first and should report obsolete managed artifacts it removed. |
+| `release check` | Inline | Run the read-only pre-release gate using doctor diagnostics plus a shipping summary for blocking categories, warnings, ready areas, and version snapshot. |
 | `yolo` | Override | Activate Fast-Track Execution for current plan. |
 | `run review` | REVIEW_PROTOCOL.md | Delegate audit to QA, Security, Frontend. → **HALT** |
 | `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review report, generate Task Table, delegate. → **HALT** |
 | `run deploy` | DEPLOY_PROTOCOL.md | Pre-flight checks, sync DB, deploy. → **HALT** |
-| `run status` | Inline | Dump current state: active tasks, blockers, pipeline phase. |
+| `run status` | Inline | Dump current state: active tasks, blockers, pipeline phase, and runtime cancellation diagnostics. |
 | `run pipeline` | Sequence | REVIEW → confirm → FIX_ISSUE → confirm → DEPLOY. |
 
 ### `run status` — Inline Protocol

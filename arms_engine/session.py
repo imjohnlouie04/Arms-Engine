@@ -12,6 +12,10 @@ from .brand import infer_brand_context_from_project
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
 from .versioning import resolve_version
 
+TOKEN_RE = re.compile(r"\S+")
+DEFAULT_TOKEN_BUDGET_WARN_RATIO = 0.9
+SESSION_TOKEN_BUDGET = 1400
+
 
 MEMORY_TEMPLATE = """# ARMS Project Memory
 
@@ -51,6 +55,9 @@ SESSION_ARCHIVE_TEMPLATE = """# ARMS Session Archive
 
 > Managed by ARMS Engine. Append completed or cancelled work here; never delete history.
 """
+MEMORY_SIGNAL_PREFIX = "- Read `.arms/MEMORY.md` before task work."
+MEMORY_SIGNAL_SUFFIX = "- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`."
+MEMORY_SIGNAL_EMPTY = "- No approved memory lessons recorded yet."
 
 
 class SessionContextMismatchError(RuntimeError):
@@ -462,6 +469,44 @@ def render_compact_skill_roster(task_rows):
     return "\n".join(lines)
 
 
+def render_compact_skill_roster_with_inactive(task_rows, agent_skill_bindings):
+    active_skills = []
+    seen_active = set()
+    for row in task_rows:
+        skill = row["skill"].strip()
+        if skill.lower() in {"", "-", "—", "none", "n/a", "na"} or skill in seen_active:
+            continue
+        seen_active.add(skill)
+        active_skills.append(skill)
+
+    lines = []
+    if active_skills:
+        for skill in active_skills:
+            suffix = " [Active]" if skill == "arms-orchestrator" else ""
+            lines.append(f"- {skill}{suffix}")
+    else:
+        lines.append("- arms-orchestrator [Active]")
+
+    bound_skills = []
+    seen_bound = set()
+    for skills in (agent_skill_bindings or {}).values():
+        for skill in skills:
+            normalized_skill = (skill or "").strip()
+            if normalized_skill.lower() in {"", "-", "—", "none", "n/a", "na"}:
+                continue
+            if normalized_skill in seen_bound:
+                continue
+            seen_bound.add(normalized_skill)
+            bound_skills.append(normalized_skill)
+
+    inactive_skills = [skill for skill in bound_skills if skill not in seen_active]
+    if inactive_skills:
+        lines.append("- Bound but inactive: {}".format(", ".join(inactive_skills)))
+
+    lines.append("- Registry: .agents/skills.yaml")
+    return "\n".join(lines)
+
+
 def normalize_memory_signal(text, limit=180):
     collapsed = " ".join((text or "").split()).strip()
     collapsed = re.sub(r"^[-*]\s*", "", collapsed)
@@ -499,14 +544,89 @@ def collect_memory_signals(project_root, limit=4):
 
 
 def render_memory_signals(project_root):
-    lines = ["- Read `.arms/MEMORY.md` before task work."]
+    lines = [MEMORY_SIGNAL_PREFIX]
     memory_signals = collect_memory_signals(project_root)
     if memory_signals:
         lines.extend(f"- {item}" for item in memory_signals)
     else:
-        lines.append("- No approved memory lessons recorded yet.")
-    lines.append("- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`.")
+        lines.extend(extract_legacy_memory_signals(read_existing_memory_signals(project_root)))
+    if len(lines) == 1:
+        lines.append(MEMORY_SIGNAL_EMPTY)
+    lines.append(MEMORY_SIGNAL_SUFFIX)
     return "\n".join(lines)
+
+
+def read_existing_memory_signals(project_root):
+    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    if not os.path.isfile(session_path):
+        return ""
+    _, sections = parse_markdown_sections(read_text_file(session_path))
+    return sections.get("Memory Signals", "")
+
+
+def extract_legacy_memory_signals(content, limit=4):
+    signals = []
+    seen = set()
+    for raw_line in (content or "").splitlines():
+        normalized = normalize_memory_signal(raw_line)
+        if not normalized:
+            continue
+        if raw_line.strip() in {
+            MEMORY_SIGNAL_PREFIX,
+            MEMORY_SIGNAL_EMPTY,
+            MEMORY_SIGNAL_SUFFIX,
+        }:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        signals.append(normalized)
+        if len(signals) >= limit:
+            break
+    return signals
+
+
+def estimate_token_count(text):
+    return len(TOKEN_RE.findall(text or ""))
+
+
+def assess_token_budget(content, budget, warn_ratio=DEFAULT_TOKEN_BUDGET_WARN_RATIO):
+    tokens = estimate_token_count(content)
+    warn_at = max(1, int(budget * warn_ratio))
+    if tokens > budget:
+        status = "fail"
+    elif tokens >= warn_at:
+        status = "warn"
+    else:
+        status = "ok"
+    return {
+        "status": status,
+        "tokens": tokens,
+        "budget": budget,
+        "warn_at": warn_at,
+    }
+
+
+def format_token_budget_message(label, budget_assessment):
+    status = budget_assessment["status"]
+    if status == "fail":
+        return (
+            "⚠️  {} token budget exceeded: {} tokens (budget {}). "
+            "Trim duplicated context or run `arms init compress`."
+        ).format(label, budget_assessment["tokens"], budget_assessment["budget"])
+    if status == "warn":
+        return (
+            "⚠️  {} token budget is nearing its limit: {} tokens "
+            "(warning at {}, budget {})."
+        ).format(
+            label,
+            budget_assessment["tokens"],
+            budget_assessment["warn_at"],
+            budget_assessment["budget"],
+        )
+    return (
+        "✅ {} token budget healthy: {} / {} tokens."
+    ).format(label, budget_assessment["tokens"], budget_assessment["budget"])
 
 
 def extract_session_engine_version(session_content):
@@ -931,7 +1051,7 @@ None"""
 
     hot_task_rows = filter_hot_task_rows(parse_active_task_rows(active_tasks_content))
     compact_agents_list = render_compact_agent_roster(hot_task_rows)
-    compact_skills_list = render_compact_skill_roster(hot_task_rows)
+    compact_skills_list = render_compact_skill_roster_with_inactive(hot_task_rows, agent_skill_bindings)
     memory_signals = render_memory_signals(project_root)
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     exec_mode = detect_execution_mode()
@@ -960,4 +1080,7 @@ Generated: {now}
 {tasks_content}"""
 
     write_text_atomic(session_path, content)
+    session_budget = assess_token_budget(content, SESSION_TOKEN_BUDGET)
+    if session_budget["status"] != "ok":
+        print(format_token_budget_message(".arms/SESSION.md", session_budget))
     return True

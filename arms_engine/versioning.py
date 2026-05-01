@@ -4,6 +4,38 @@ import re
 import subprocess
 
 
+def resolve_git_describe_raw(package_dir):
+    repo_root = os.path.dirname(os.path.abspath(package_dir))
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        return ""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", repo_root, "describe", "--tags", "--dirty", "--always"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return ""
+    return completed.stdout.strip()
+
+
+def resolve_latest_git_tag(package_dir):
+    repo_root = os.path.dirname(os.path.abspath(package_dir))
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        return ""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", repo_root, "describe", "--tags", "--abbrev=0"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return ""
+    return completed.stdout.strip()
+
+
 def format_git_describe_version(raw_version):
     value = raw_version.strip()
     if not value:
@@ -37,19 +69,7 @@ def format_git_describe_version(raw_version):
 
 
 def resolve_git_version(package_dir):
-    repo_root = os.path.dirname(os.path.abspath(package_dir))
-    if not os.path.isdir(os.path.join(repo_root, ".git")):
-        return ""
-    try:
-        completed = subprocess.run(
-            ["git", "-C", repo_root, "describe", "--tags", "--dirty", "--always"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return ""
-    return format_git_describe_version(completed.stdout)
+    return format_git_describe_version(resolve_git_describe_raw(package_dir))
 
 
 def _read_version_file(package_dir):
@@ -68,6 +88,41 @@ def _read_version_file(package_dir):
     return getattr(module, "version", "") or getattr(module, "__version__", "") or ""
 
 
+def resolve_generated_version(package_dir):
+    return _read_version_file(package_dir)
+
+
+def resolve_installed_package_version():
+    try:
+        from importlib.metadata import PackageNotFoundError, version as package_version
+    except ImportError:
+        PackageNotFoundError = Exception
+        package_version = None
+
+    if package_version is None:
+        return ""
+    try:
+        return package_version("arms-engine")
+    except PackageNotFoundError:
+        return ""
+
+
+def collect_version_diagnostics(package_dir, runtime_version):
+    git_describe_raw = resolve_git_describe_raw(package_dir)
+    git_describe_version = format_git_describe_version(git_describe_raw)
+    latest_tag = resolve_latest_git_tag(package_dir)
+    generated_version = resolve_generated_version(package_dir)
+    installed_version = resolve_installed_package_version()
+    return {
+        "runtime_version": runtime_version or "",
+        "git_describe_raw": git_describe_raw,
+        "git_describe_version": git_describe_version,
+        "latest_tag": latest_tag,
+        "generated_version": generated_version,
+        "installed_version": installed_version,
+    }
+
+
 def resolve_version(package_dir):
     # 1. Git describe — most accurate for dev checkouts
     git_version = resolve_git_version(package_dir)
@@ -75,24 +130,14 @@ def resolve_version(package_dir):
         return git_version
 
     # 2. Generated _version.py — present in built wheels and editable installs
-    generated_version = _read_version_file(package_dir)
+    generated_version = resolve_generated_version(package_dir)
     if generated_version:
         return generated_version
 
     # 3. Installed package metadata
-    try:
-        from importlib.metadata import PackageNotFoundError, version as package_version
-    except ImportError:
-        PackageNotFoundError = Exception
-        package_version = None
-
-    if package_version is not None:
-        try:
-            installed_version = package_version("arms-engine")
-        except PackageNotFoundError:
-            installed_version = ""
-        if installed_version:
-            return installed_version
+    installed_version = resolve_installed_package_version()
+    if installed_version:
+        return installed_version
 
     return "0.0.0-dev"
 

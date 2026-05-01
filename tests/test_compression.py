@@ -207,6 +207,7 @@ class CompressionTests(unittest.TestCase):
             self.assertIn("Completed setup task", archive)
             self.assertNotIn("Completed setup task", session)
             self.assertIn("Remaining setup task", session)
+            self.assertIn(str(project_root / ".arms" / "SESSION_ARCHIVE.md"), output)
 
 
 if __name__ == "__main__":

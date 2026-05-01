@@ -30,6 +30,7 @@ def remove_obsolete_gemini_skill_artifacts(project_root):
                 ", ".join(f"`{path}`" for path in removed_paths)
             )
         )
+    return removed_paths
 
 
 def ensure_agent_tools_frontmatter(content):

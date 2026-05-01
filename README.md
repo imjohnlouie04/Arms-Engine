@@ -54,7 +54,7 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 
 | Path | Purpose | Notes |
 |---|---|---|
-| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, memory signals, task table, blockers |
+| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, bound-but-inactive skill visibility, memory signals, task table, blockers, and is kept within a token budget |
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
 | `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers into a compact execution brief, including workspace mode and current stack recommendation |
@@ -121,7 +121,7 @@ The package exposes two entry points:
 
 | Command | What it does |
 |---|---|
-| `arms` | Main workspace bootstrap CLI, diagnostics, and protocol runner (`init`, `start`, `doctor`, `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status`) |
+| `arms` | Main workspace bootstrap CLI, diagnostics, release validation, and protocol runner (`init`, `start`, `doctor`, `release check`, `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status`) |
 | `arms-docs` | Updates the README agent roster block from `agents.yaml` |
 
 `arms --version` and `arms-docs --version` are also supported.
@@ -140,6 +140,7 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 | `arms_engine/brand.py` | Brand inference, questionnaire rendering, structured-answer parsing, and brand updates |
 | `arms_engine/compression.py` | Native workspace compression for `arms init compress`, including session archiving, memory compaction, and history summaries |
 | `arms_engine/doctor.py` | Workspace diagnostics for `arms doctor`, including sync checks, ownership safety, and protocol readiness |
+| `arms_engine/release.py` | Read-only pre-release validation flow that reuses doctor diagnostics and emits a shipping summary |
 | `arms_engine/prompts.py` | Context synthesis, generated prompts, and seeded startup tasks |
 | `arms_engine/protocols.py` | Protocol command dispatch, session/report updates, pipeline status summaries, and release-note scaffolding |
 | `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, mirrored runtime-rule injection, and registry generation |
@@ -163,10 +164,11 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
-13. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
-14. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
-15. Ends in either standard halt mode or YOLO-ready mode.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table is intended to act as the durable ledger for new user asks: each new prompt should create or update a row and be assigned to the proper specialist agent rather than defaulting to `arms-main-agent`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
+13. Measures token budgets for `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` so oversized hot-context output is surfaced immediately during init and later enforced by `arms doctor`.
+14. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
+15. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
+16. Ends in either standard halt mode or YOLO-ready mode.
 
 ### Standard mode
 
@@ -206,6 +208,7 @@ This now runs a **native ARMS compression pass** after the normal init sync:
 - clears bulky `Completed Tasks` noise from `.arms/SESSION.md`
 - rewrites `.arms/MEMORY.md` into dense caveman-style notes while preserving section headings
 - refreshes `.arms/HISTORY_SUMMARY.md` when archive history grows beyond the compression threshold
+- prints archive diagnostics with the exact archive/history-summary paths touched during compression
 
 It is designed to shrink long-lived workspace state without deleting pending or blocked work.
 
@@ -257,6 +260,30 @@ arms doctor --fix
 
 `arms doctor` inspects the current workspace and exits non-zero when it finds blocking problems.
 
+It now validates hot-context token budgets for:
+- `.arms/SESSION.md`
+- `.arms/CONTEXT_SYNTHESIS.md`
+- `.arms/GENERATED_PROMPTS.md`
+
+It also reports version diagnostics for:
+- git tag / latest tag
+- git describe output
+- runtime `__version__`
+- generated `arms_engine/_version.py`
+- installed package metadata
+
+and always ends with a compact final triage block that separates:
+- blocking issues
+- warnings
+- safe repairs applied
+- repair notes that were skipped
+
+When `arms doctor --fix` removes obsolete managed artifacts, those removals are now listed explicitly in the repair output instead of being hidden behind the generic resync summary.
+
+`arms run status` now also distinguishes:
+- **failed tasks** recorded by ARMS in `SESSION.md`
+- **cancelled tasks** that should usually be treated as external runtime/operator cancellations unless the user explicitly cancelled them
+
 `arms doctor --fix` safely resyncs engine-owned mirrored files first (`.gemini/agents*`, mirrored skills and registries, `.arms/workflow/`, `.arms/ENGINE.md`, and root `AGENTS.md`) and then reports anything still unsafe or incomplete. It does not bootstrap a missing workspace and it does not overwrite project-owned instruction files.
 
 It checks:
@@ -269,6 +296,23 @@ It checks:
 - readiness for `run review`, `fix issues`, and `run deploy`
 
 Warnings do not fail the command, but blocking issues do.
+
+### Release validation mode
+
+```bash
+arms release check
+```
+
+`arms release check` is a read-only pre-release gate built on top of the same diagnostics stack as `arms doctor`.
+
+It adds a shipping summary that condenses:
+- blocking categories
+- warning categories
+- ready categories
+- a version snapshot from runtime / git describe / latest tag
+- the recommended next command before shipping
+
+The command exits non-zero when blocking issues are present, stays read-only even when warnings exist, and leaves all repair behavior in `arms doctor --fix`.
 
 ---
 

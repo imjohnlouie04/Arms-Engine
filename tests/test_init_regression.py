@@ -13,6 +13,7 @@ from unittest import mock
 
 from arms_engine import init_arms
 from arms_engine import cli as cli_module
+from arms_engine import prompts as prompts_module
 from arms_engine import session as session_module
 from arms_engine import versioning as versioning_module
 
@@ -83,6 +84,42 @@ class InitRegressionTests(unittest.TestCase):
 
             self.assertIn("Strict Init Rule", engine_instructions)
             self.assertEqual(root_gemini, "# Project-specific Gemini instructions\n")
+
+    def test_init_migrates_legacy_root_archive_when_managed_archive_is_missing(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nArchive migration.\n", encoding="utf-8")
+            (project_root / "SESSION_ARCHIVE.md").write_text(
+                "# Legacy Archive\n\n## Archive — old\n- Preserved history\n",
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            managed_archive = (project_root / ".arms" / "SESSION_ARCHIVE.md").read_text(encoding="utf-8")
+            self.assertIn("Preserved history", managed_archive)
+            self.assertFalse((project_root / "SESSION_ARCHIVE.md").exists())
+
+    def test_init_keeps_managed_archive_when_legacy_archive_collides(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            (project_root / "README.md").write_text("# Demo\nArchive collision.\n", encoding="utf-8")
+            (project_root / ".arms" / "SESSION_ARCHIVE.md").write_text(
+                "# Managed Archive\n\n- Keep this authoritative history\n",
+                encoding="utf-8",
+            )
+            (project_root / "SESSION_ARCHIVE.md").write_text(
+                "# Legacy Archive\n\n- Older conflicting history\n",
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            managed_archive = (project_root / ".arms" / "SESSION_ARCHIVE.md").read_text(encoding="utf-8")
+            legacy_archive = (project_root / "SESSION_ARCHIVE.md").read_text(encoding="utf-8")
+            self.assertIn("Keep this authoritative history", managed_archive)
+            self.assertIn("Older conflicting history", legacy_archive)
 
     def test_infer_brand_context_reads_gemini_from_gemini_directory(self):
         with TemporaryDirectory() as tmp:
@@ -231,7 +268,10 @@ class InitRegressionTests(unittest.TestCase):
 
             self.assertIn("Must ask for explicit user approval before updating `.arms/MEMORY.md`.", gemini_agent)
             self.assertIn("Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work", gemini_agent)
+            self.assertIn("Every new user prompt must create or update a row in `.arms/SESSION.md`", gemini_agent)
             self.assertIn("Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly.", engine_instructions)
+            self.assertIn("Every new user prompt after bootstrap must be reflected in the task table", engine_instructions)
+            self.assertIn("UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`", engine_instructions)
             self.assertIn("Ask the user for approval before updating `.arms/MEMORY.md`", rules)
             self.assertIn("Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before any task work.", rules)
             self.assertIn("## Memory Signals", session_content)
@@ -265,6 +305,71 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("Developer Preferences: Prefer Cypress over Playwright for browser E2E.", session_content)
             self.assertIn(
                 "Known Bugs & Fixes: Normalize active skills from agents.yaml instead of inferring from runtime screenshots.",
+                session_content,
+            )
+
+    def test_reinit_preserves_existing_session_memory_signals_when_memory_file_has_no_lessons(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nLegacy memory signals.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            (project_root / ".arms" / "SESSION.md").write_text(
+                "\n".join(
+                    [
+                        "# ARMS Session Log",
+                        "Generated: 2026-04-30T00:00:00Z",
+                        "",
+                        "## Environment",
+                        f"- ARMS Root: {ARMS_ROOT}",
+                        f"- Engine Version: {init_arms.__version__}",
+                        f"- Project Root: {project_root}",
+                        "- Project Name: Demo",
+                        "- Execution Mode: Parallel",
+                        "- YOLO Mode: Enabled",
+                        "",
+                        "## Active Agents",
+                        "- arms-main-agent",
+                        "- Registry: .gemini/agents.yaml",
+                        "",
+                        "## Active Skills",
+                        "- arms-orchestrator [Active]",
+                        "- Registry: .agents/skills.yaml",
+                        "",
+                        "## Memory Signals",
+                        "- Read `.arms/MEMORY.md` before task work.",
+                        "- ARCHITECTURAL DECISIONS: [HEADER] : Fixed h-20 + title truncation -> No layout shift / removeChild error.",
+                        "- ARCHITECTURAL DECISIONS: [SEO/TEST] : UUID mock data -> Match Zod schemas.",
+                        "- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`.",
+                        "",
+                        "## Active Tasks",
+                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+                        "|---|------|----------------|--------------|--------------|--------|",
+                        "",
+                        "## Completed Tasks",
+                        "- None",
+                        "",
+                        "## Blockers",
+                        "None",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (project_root / ".arms" / "MEMORY.md").write_text(
+                session_module.MEMORY_TEMPLATE,
+                encoding="utf-8",
+            )
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("## Memory Signals", session_content)
+            self.assertIn(
+                "ARCHITECTURAL DECISIONS: [HEADER] : Fixed h-20 + title truncation -> No layout shift / removeChild error.",
+                session_content,
+            )
+            self.assertIn(
+                "ARCHITECTURAL DECISIONS: [SEO/TEST] : UUID mock data -> Match Zod schemas.",
                 session_content,
             )
 
@@ -342,6 +447,7 @@ class InitRegressionTests(unittest.TestCase):
             session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
             self.assertIn("- Registry: .gemini/agents.yaml", session_content)
             self.assertIn("- Registry: .agents/skills.yaml", session_content)
+            self.assertIn("- Bound but inactive:", session_content)
             self.assertTrue((project_root / ".agents" / "skills" / "supabase" / "SKILL.md").exists())
             self.assertFalse((project_root / ".gemini" / "skills").exists())
             self.assertTrue((project_root / ".github" / "skills" / "supabase" / "SKILL.md").exists())
@@ -350,6 +456,18 @@ class InitRegressionTests(unittest.TestCase):
             self.assertFalse((project_root / ".gemini" / "skills-index.md").exists())
             self.assertIn("supabase:", (project_root / ".github" / "skills.yaml").read_text(encoding="utf-8"))
             self.assertIn(".agents/skills/arms-orchestrator/SKILL.md", (project_root / ".agents" / "skills-index.md").read_text(encoding="utf-8"))
+
+    def test_init_session_surfaces_bound_but_inactive_skills(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nSkill visibility.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "--root", str(ARMS_ROOT))
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("- Bound but inactive:", session_content)
+            self.assertIn("ui-ux-pro-max", session_content)
+            self.assertIn("Accessibility Auditor", session_content)
 
     def test_init_syncs_all_engine_skills_to_cli_skill_mirrors(self):
         with TemporaryDirectory() as tmp:
@@ -943,7 +1061,32 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("Automate operational approvals and audit workflows.", brand)
             self.assertIn("## Execution Profile", synthesis)
             self.assertIn("**Workspace Mode:** Existing Repository", synthesis)
-            self.assertIn("## Master Build Prompt", prompts)
+            self.assertIn("## Orchestrator Prompt", prompts)
+            self.assertIn("**Assigned Agent:** `arms-main-agent`", prompts)
+            self.assertIn("**Assigned Agent:** `arms-frontend-agent`", prompts)
+            self.assertIn("**Active Skill:** `ui-ux-pro-max`", prompts)
+            self.assertIn("Do not run specialist implementation prompts with `arms-main-agent`", prompts)
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8"),
+                    session_module.SESSION_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    synthesis,
+                    prompts_module.CONTEXT_SYNTHESIS_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    prompts,
+                    prompts_module.GENERATED_PROMPTS_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
 
     def test_run_init_once_normalizes_repo_root_override_to_package_root(self):
         with TemporaryDirectory() as tmp:
@@ -1132,6 +1275,8 @@ None
             self.assertIn("**UI System:** shadcn/ui", synthesis)
             self.assertIn("**Recommended Stack:** Next.js + Supabase + shadcn/ui", synthesis)
             self.assertIn("Read `.arms/CONTEXT_SYNTHESIS.md` first", prompts)
+            self.assertIn("**Assigned Agent:** `arms-frontend-agent`", prompts)
+            self.assertIn("**Active Skill:** `frontend-design`", prompts)
             self.assertIn("shadcn/ui", prompts)
             self.assertIn("nano-banana-pro", prompts)
             self.assertIn("Generate at least five production-ready images", prompts)
@@ -1140,6 +1285,27 @@ None
             self.assertIn("Nano Banana landing-page imagery", session)
             self.assertIn("arms-devops-agent", session)
             self.assertIn("devops-orchestrator", session)
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    session,
+                    session_module.SESSION_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    synthesis,
+                    prompts_module.CONTEXT_SYNTHESIS_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
+            self.assertEqual(
+                session_module.assess_token_budget(
+                    prompts,
+                    prompts_module.GENERATED_PROMPTS_TOKEN_BUDGET,
+                )["status"],
+                "ok",
+            )
 
 
 if __name__ == "__main__":

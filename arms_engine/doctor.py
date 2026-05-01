@@ -5,13 +5,22 @@ from collections import OrderedDict
 from contextlib import redirect_stdout
 
 from . import __version__
+from .prompts import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
 from .protocols import collect_recent_commit_subjects, find_latest_report, parse_actionable_issues
-from .session import compare_versions, extract_session_engine_version, parse_markdown_sections, read_text_file
+from .session import (
+    SESSION_TOKEN_BUDGET,
+    assess_token_budget,
+    compare_versions,
+    extract_session_engine_version,
+    parse_markdown_sections,
+    read_text_file,
+)
 from .skills import (
     build_agent_sync_content,
     create_skills_registry,
     discover_skill_catalog,
     load_agents_registry,
+    remove_obsolete_gemini_skill_artifacts,
     sync_agents,
     sync_agents_copilot,
     sync_engine_instructions,
@@ -19,6 +28,8 @@ from .skills import (
     sync_skills_copilot,
     sync_workflow,
 )
+from .update_docs import get_agent_docs
+from .versioning import collect_version_diagnostics
 
 
 REQUIRED_SESSION_SECTIONS = (
@@ -92,6 +103,8 @@ def build_doctor_report(project_root, arms_root):
     categories = OrderedDict(
         (
             ("Workspace Health", []),
+            ("Context Budgets", []),
+            ("Version Diagnostics", []),
             ("Ownership Safety", []),
             ("Protocol Readiness", []),
         )
@@ -254,6 +267,34 @@ def build_doctor_report(project_root, arms_root):
     validate_agent_mirrors(project_root, arms_root, categories, counts)
     validate_skill_mirror(project_root, arms_root, categories, counts)
     validate_workflow_mirror(project_root, arms_root, categories, counts)
+    validate_version_diagnostics(arms_root, categories, counts)
+    validate_token_budget(
+        project_root,
+        ".arms/SESSION.md",
+        SESSION_TOKEN_BUDGET,
+        "hot-context session",
+        categories,
+        counts,
+        "Keep only active execution context in `.arms/SESSION.md`, archive completed work, or run `arms init compress`.",
+    )
+    validate_token_budget(
+        project_root,
+        ".arms/CONTEXT_SYNTHESIS.md",
+        CONTEXT_SYNTHESIS_TOKEN_BUDGET,
+        "context synthesis",
+        categories,
+        counts,
+        "Trim duplicated intake detail in `.arms/BRAND.md` or tighten synthesis output before rerunning `arms init`.",
+    )
+    validate_token_budget(
+        project_root,
+        ".arms/GENERATED_PROMPTS.md",
+        GENERATED_PROMPTS_TOKEN_BUDGET,
+        "generated prompts",
+        categories,
+        counts,
+        "Keep prompts thin and reference `.arms/CONTEXT_SYNTHESIS.md` instead of repeating dense context.",
+    )
 
     validate_synced_file(
         project_root,
@@ -285,6 +326,7 @@ def build_doctor_report(project_root, arms_root):
         counts,
         "Rerun `arms init` to resync `.gemini/agents.yaml` from the engine source.",
     )
+    validate_engine_repo_readme_roster(project_root, arms_root, categories, counts)
 
     detected_instruction_files = [
         relative_path
@@ -432,6 +474,7 @@ def apply_safe_doctor_repairs(project_root, arms_root):
             )
         ]
 
+    removed_obsolete = remove_obsolete_gemini_skill_artifacts(project_root)
     with redirect_stdout(io.StringIO()):
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
@@ -441,12 +484,19 @@ def apply_safe_doctor_repairs(project_root, arms_root):
         sync_engine_instructions(arms_root, project_root)
         sync_root_agents_guide(arms_root, project_root)
 
-    return [
+    repairs = [
         "Resynced `.gemini/agents/` and `.gemini/agents.yaml` from the engine.",
         "Resynced `.github/agents/` from the engine.",
         "Rebuilt `.agents/skills/`, `.github/skills/`, and the generated skill registries.",
         "Resynced `.arms/workflow/`, `.arms/ENGINE.md`, and the root `AGENTS.md` guide.",
-    ], []
+    ]
+    if removed_obsolete:
+        repairs.append(
+            "Removed obsolete Gemini skill artifacts: {}.".format(
+                ", ".join(f"`{path}`" for path in removed_obsolete)
+            )
+        )
+    return repairs, []
 
 
 def validate_agent_mirrors(project_root, arms_root, categories, counts):
@@ -607,6 +657,54 @@ def validate_workflow_mirror(project_root, arms_root, categories, counts):
         )
 
 
+def validate_version_diagnostics(arms_root, categories, counts):
+    diagnostics = collect_version_diagnostics(arms_root, __version__)
+    details = [
+        "runtime `{}`".format(diagnostics["runtime_version"] or "unavailable"),
+        "git describe `{}`".format(diagnostics["git_describe_raw"] or "unavailable"),
+        "latest tag `{}`".format(diagnostics["latest_tag"] or "unavailable"),
+        "generated `_version.py` `{}`".format(diagnostics["generated_version"] or "unavailable"),
+        "installed package `{}`".format(diagnostics["installed_version"] or "unavailable"),
+    ]
+    add_check(
+        categories,
+        counts,
+        "Version Diagnostics",
+        "ok",
+        "Version sources: {}.".format(", ".join(details)),
+    )
+
+    runtime_version = diagnostics["runtime_version"]
+    git_describe_version = diagnostics["git_describe_version"]
+    if git_describe_version and runtime_version and git_describe_version != runtime_version:
+        add_check(
+            categories,
+            counts,
+            "Version Diagnostics",
+            "warn",
+            "Runtime version `{}` does not match git describe `{}`.".format(
+                runtime_version,
+                git_describe_version,
+            ),
+            "Prefer the git-tagged checkout or refresh the installed package so CLI version output matches the current source tree.",
+        )
+        return
+
+    installed_version = diagnostics["installed_version"]
+    if installed_version and runtime_version and installed_version != runtime_version:
+        add_check(
+            categories,
+            counts,
+            "Version Diagnostics",
+            "warn",
+            "Runtime version `{}` does not match installed package metadata `{}`.".format(
+                runtime_version,
+                installed_version,
+            ),
+            "Reinstall or upgrade the package if the CLI should match the installed distribution metadata.",
+        )
+
+
 def validate_synced_file(project_root, source_path, target_path, category, label, categories, counts, fix):
     relative_target = os.path.relpath(target_path, project_root)
     if not os.path.isfile(source_path):
@@ -645,6 +743,108 @@ def validate_synced_file(project_root, source_path, target_path, category, label
         category,
         "ok",
         "{} file `{}` matches the engine source.".format(label, relative_target),
+    )
+
+
+def validate_token_budget(project_root, relative_path, budget, label, categories, counts, fix):
+    target_path = os.path.join(project_root, relative_path)
+    if not os.path.isfile(target_path):
+        return
+
+    budget_assessment = assess_token_budget(read_text_file(target_path), budget)
+    tokens = budget_assessment["tokens"]
+    warn_at = budget_assessment["warn_at"]
+    if budget_assessment["status"] == "fail":
+        add_check(
+            categories,
+            counts,
+            "Context Budgets",
+            "fail",
+            "{} `{}` uses {} tokens, exceeding the budget of {}.".format(
+                label.capitalize(),
+                relative_path,
+                tokens,
+                budget,
+            ),
+            fix,
+        )
+        return
+    if budget_assessment["status"] == "warn":
+        add_check(
+            categories,
+            counts,
+            "Context Budgets",
+            "warn",
+            "{} `{}` uses {} tokens, nearing the warning threshold of {} / {}.".format(
+                label.capitalize(),
+                relative_path,
+                tokens,
+                warn_at,
+                budget,
+            ),
+            fix,
+        )
+        return
+    add_check(
+        categories,
+        counts,
+        "Context Budgets",
+        "ok",
+        "{} `{}` stays within budget at {} / {} tokens.".format(
+            label.capitalize(),
+            relative_path,
+            tokens,
+            budget,
+        ),
+    )
+
+
+def validate_engine_repo_readme_roster(project_root, arms_root, categories, counts):
+    repo_root = os.path.abspath(os.path.join(arms_root, os.pardir))
+    if os.path.abspath(project_root) != repo_root:
+        return
+
+    readme_path = os.path.join(project_root, "README.md")
+    if not os.path.isfile(readme_path):
+        return
+
+    readme_content = read_text_file(readme_path)
+    start_marker = "<!-- AGENT_ROSTER_START -->"
+    end_marker = "<!-- AGENT_ROSTER_END -->"
+    if start_marker not in readme_content or end_marker not in readme_content:
+        add_check(
+            categories,
+            counts,
+            "Ownership Safety",
+            "fail",
+            "Engine README roster markers are missing from `README.md`.",
+            "Restore the README roster markers or rerun `arms-docs` after replacing them.",
+        )
+        return
+
+    start_index = readme_content.rfind(start_marker)
+    end_index = readme_content.rfind(end_marker)
+    actual_roster = ""
+    if start_index != -1 and end_index != -1 and end_index > start_index:
+        actual_roster = readme_content[start_index + len(start_marker):end_index].strip()
+    expected_roster = get_agent_docs(arms_root).strip()
+    if actual_roster != expected_roster:
+        add_check(
+            categories,
+            counts,
+            "Ownership Safety",
+            "fail",
+            "Engine README agent roster is out of sync with `arms_engine/agents.yaml`.",
+            "Run `arms-docs` to regenerate the README roster block before release.",
+        )
+        return
+
+    add_check(
+        categories,
+        counts,
+        "Ownership Safety",
+        "ok",
+        "Engine README agent roster matches `arms_engine/agents.yaml`.",
     )
 
 
@@ -690,12 +890,35 @@ def emit_doctor_response(report):
         body_lines.append("")
 
     for category, checks in report["categories"].items():
+        if not checks:
+            continue
         body_lines.append("### {}".format(category))
         for check in checks:
             body_lines.append("- [{}] {}".format(check["status"].upper(), check["summary"]))
             if check["fix"]:
                 body_lines.append("  Fix: {}".format(check["fix"]))
         body_lines.append("")
+
+    fails = collect_report_items(report, "fail")
+    warns = collect_report_items(report, "warn")
+    fixed = report.get("repairs") or []
+    skipped = report.get("repair_notes") or []
+    body_lines.append("### Final Triage")
+    if fails:
+        body_lines.append("- Blocking issues ({}): {}".format(len(fails), "; ".join(fails)))
+    else:
+        body_lines.append("- Blocking issues: none.")
+    if warns:
+        body_lines.append("- Warnings ({}): {}".format(len(warns), "; ".join(warns)))
+    else:
+        body_lines.append("- Warnings: none.")
+    if fixed:
+        body_lines.append("- Safe repairs applied ({}): {}".format(len(fixed), "; ".join(fixed)))
+    else:
+        body_lines.append("- Safe repairs applied: none.")
+    if skipped:
+        body_lines.append("- Repair notes ({}): {}".format(len(skipped), "; ".join(skipped)))
+    body_lines.append("")
 
     if counts["fail"]:
         if report.get("repair_mode") and report.get("repairs"):
@@ -721,3 +944,12 @@ def emit_doctor_response(report):
     print("\n".join(body_lines).rstrip())
     print()
     print("[Next Step / Blocker]: {}".format(next_step))
+
+
+def collect_report_items(report, status):
+    items = []
+    for checks in report["categories"].values():
+        for check in checks:
+            if check["status"] == status:
+                items.append(check["summary"])
+    return items

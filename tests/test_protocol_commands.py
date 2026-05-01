@@ -236,6 +236,8 @@ class ProtocolCommandTests(unittest.TestCase):
             self.assertIn("Existing task", session)
             self.assertIn("Completed review cleanup", archive)
             self.assertIn("### Context: Protocol task refresh", archive)
+            self.assertIn("## Archive Diagnostics", output)
+            self.assertIn(str(project_root / ".arms" / "SESSION_ARCHIVE.md"), output)
 
     def test_run_pipeline_replaces_existing_phase_rows_and_clears_protocol_blockers(self):
         with TemporaryDirectory() as tmp:
@@ -318,6 +320,27 @@ class ProtocolCommandTests(unittest.TestCase):
             self.assertIn("Deploy: verify clean working tree and production build readiness", session)
             self.assertIn("**Current Phase:** Deploy", status_output)
             self.assertIn("Deploy: verify clean working tree and production build readiness", status_output)
+
+    def test_run_status_distinguishes_failed_tasks_from_cancelled_runtime_rows(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir(parents=True)
+            write_session(
+                project_root,
+                active_tasks=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Fix API auth regression | arms-backend-agent | backend-system-architect | — | Failed |\n"
+                    "| 2 | QA browser pass | arms-qa-agent | qa-automation-testing | — | Cancelled |"
+                ),
+            )
+
+            output = self.invoke_cli(project_root, "--root", str(ARMS_ROOT), "run", "status")
+
+            self.assertIn("## Runtime Diagnostics", output)
+            self.assertIn("Failed tasks recorded by ARMS: Fix API auth regression", output)
+            self.assertIn("Cancelled tasks recorded in session: QA browser pass", output)
+            self.assertIn("ARMS protocol planning does not auto-cancel task rows", output)
 
     def test_pipeline_fix_phase_can_resume_after_blocker(self):
         with TemporaryDirectory() as tmp:

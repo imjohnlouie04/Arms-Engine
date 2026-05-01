@@ -64,6 +64,9 @@ def compress_workspace(project_root):
     session_summary = compress_session_state(project_root)
     memory_summary = compress_memory_file(project_root)
     history_summary = maintain_archive_summary(project_root)
+    archive_diagnostics = session_summary["archive_diagnostics"]
+    if archive_diagnostics and history_summary["history_summary_path"]:
+        archive_diagnostics["history_summary_path"] = history_summary["history_summary_path"]
     return {
         "archived_tasks": session_summary["archived_tasks"],
         "archived_notes": session_summary["archived_notes"],
@@ -71,6 +74,8 @@ def compress_workspace(project_root):
         "memory_entries": memory_summary["entries"],
         "history_summary_updated": history_summary["updated"],
         "history_summary_sections": history_summary["sections"],
+        "history_summary_path": history_summary["history_summary_path"],
+        "archive_diagnostics": archive_diagnostics,
     }
 
 
@@ -89,6 +94,10 @@ def format_compression_summary(summary):
                 summary["history_summary_sections"]
             )
         )
+    for diagnostic_line in format_archive_diagnostics_lines(summary.get("archive_diagnostics")):
+        lines.append("   - {}".format(diagnostic_line))
+    if summary["history_summary_updated"] and summary.get("history_summary_path") and not summary.get("archive_diagnostics"):
+        lines.append("   - History summary write: `{}`.".format(summary["history_summary_path"]))
     return "\n".join(lines)
 
 
@@ -122,6 +131,7 @@ def compress_session_state(project_root):
 
     archived_rows = []
     remaining_rows = []
+    archive_diagnostics = None
     for row in active_rows:
         if row["Status"].strip().lower() in ARCHIVABLE_STATUSES:
             archived_rows.append(row)
@@ -130,7 +140,7 @@ def compress_session_state(project_root):
 
     remaining_rows = sort_active_rows(remaining_rows)
     if archived_rows or completed_notes:
-        append_archive_entry(project_root, archived_rows, completed_notes)
+        archive_diagnostics = append_archive_entry(project_root, archived_rows, completed_notes)
 
     sections["Active Tasks"] = render_task_table(remaining_rows)
     sections["Completed Tasks"] = "- None"
@@ -140,6 +150,7 @@ def compress_session_state(project_root):
         "archived_tasks": len(archived_rows),
         "archived_notes": len(completed_notes),
         "remaining_tasks": len(remaining_rows),
+        "archive_diagnostics": archive_diagnostics,
     }
 
 
@@ -169,15 +180,15 @@ def compress_memory_file(project_root):
 def maintain_archive_summary(project_root):
     archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
     if not os.path.exists(archive_path):
-        return {"updated": False, "sections": 0}
+        return {"updated": False, "sections": 0, "history_summary_path": ""}
 
     archive_content = read_text_file(archive_path)
     if count_tokens(archive_content) <= ARCHIVE_TOKEN_LIMIT:
-        return {"updated": False, "sections": 0}
+        return {"updated": False, "sections": 0, "history_summary_path": ""}
 
     archive_sections = extract_archive_sections(archive_content)
     if not archive_sections:
-        return {"updated": False, "sections": 0}
+        return {"updated": False, "sections": 0, "history_summary_path": ""}
 
     summarized_sections = archive_sections[:-1] or archive_sections
     summary_lines = []
@@ -206,12 +217,13 @@ def maintain_archive_summary(project_root):
         "\n".join(summary_lines)
     )
     write_text_atomic(history_summary_path, history_summary_content)
-    return {"updated": True, "sections": len(summarized_sections)}
+    return {"updated": True, "sections": len(summarized_sections), "history_summary_path": history_summary_path}
 
 
 def append_archive_entry(project_root, archived_rows, completed_notes, context="Compression pass"):
     archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
-    if os.path.exists(archive_path):
+    archive_existed = os.path.exists(archive_path)
+    if archive_existed:
         archive_content = read_text_file(archive_path).rstrip()
     else:
         archive_content = SESSION_ARCHIVE_TEMPLATE.rstrip()
@@ -245,6 +257,33 @@ def append_archive_entry(project_root, archived_rows, completed_notes, context="
 
     new_content = "{}\n\n{}\n".format(archive_content, "\n".join(block_lines))
     write_text_atomic(archive_path, new_content)
+    return {
+        "archive_path": archive_path,
+        "archive_existed": archive_existed,
+        "context": context,
+        "history_summary_path": "",
+    }
+
+
+def format_archive_diagnostics_lines(diagnostics):
+    if not diagnostics:
+        return []
+
+    archive_path = diagnostics["archive_path"]
+    archive_state = "existing archive" if diagnostics["archive_existed"] else "initialized archive"
+    access_mode = "read+write" if diagnostics["archive_existed"] else "write"
+    lines = [
+        "Archive diagnostics: {} `{}` ({}, context: {}).".format(
+            access_mode,
+            archive_path,
+            archive_state,
+            diagnostics["context"],
+        )
+    ]
+    history_summary_path = diagnostics.get("history_summary_path") or ""
+    if history_summary_path:
+        lines.append("History summary write: `{}`.".format(history_summary_path))
+    return lines
 
 
 def parse_task_rows(content):

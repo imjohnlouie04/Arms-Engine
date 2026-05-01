@@ -4,7 +4,7 @@ import re
 import subprocess
 from collections import OrderedDict
 
-from .compression import ARCHIVABLE_STATUSES, append_archive_entry
+from .compression import ARCHIVABLE_STATUSES, append_archive_entry, format_archive_diagnostics_lines
 from .session import (
     normalize_active_tasks_table,
     parse_markdown_sections,
@@ -66,7 +66,7 @@ def run_review_protocol(project_root, arms_root):
     existing_rows = parse_task_rows(sections.get("Active Tasks", ""))
     review_rows = build_review_rows()
     combined_rows = replace_phase_rows(existing_rows, ("Review:",), review_rows)
-    update_protocol_session(
+    archive_diagnostics = update_protocol_session(
         project_root,
         arms_root,
         combined_rows,
@@ -85,6 +85,7 @@ def run_review_protocol(project_root, arms_root):
                 "**Review Report:** `{}`".format(relative_to_project(project_root, report_path)),
                 "",
                 render_task_table(combined_rows, arms_root),
+                render_archive_diagnostics_section(archive_diagnostics),
             ]
         ),
         "Review protocol staged and logged. Populate findings in the review report, then decide whether to continue with `fix issues`. → HALT",
@@ -96,7 +97,7 @@ def run_pipeline_protocol(project_root, arms_root):
     existing_rows = parse_task_rows(sections.get("Active Tasks", ""))
     review_rows = build_review_rows()
     combined_rows = replace_phase_rows(existing_rows, ("Review:", "Fix:", "Deploy:"), review_rows)
-    update_protocol_session(
+    archive_diagnostics = update_protocol_session(
         project_root,
         arms_root,
         combined_rows,
@@ -115,6 +116,7 @@ def run_pipeline_protocol(project_root, arms_root):
                 "**Review Report:** `{}`".format(relative_to_project(project_root, report_path)),
                 "",
                 render_task_table(combined_rows, arms_root),
+                render_archive_diagnostics_section(archive_diagnostics),
             ]
         ),
         "Pipeline entered the Review phase. Confirm the review findings before continuing with `fix issues`, then `run deploy`. → HALT",
@@ -162,7 +164,7 @@ def run_fix_issues_protocol(project_root, arms_root):
     fix_rows = build_fix_rows(issues)
     combined_rows = replace_phase_rows(existing_rows, ("Fix:",), fix_rows)
     blockers = clear_protocol_blockers(sections.get("Blockers", "None"))
-    update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
+    archive_diagnostics = update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
 
     plan_path = dated_report_path(project_root, "fix-plan")
     write_text_atomic(plan_path, render_fix_plan_report(project_root, review_path, fix_rows, arms_root))
@@ -176,6 +178,7 @@ def run_fix_issues_protocol(project_root, arms_root):
                 "**Fix Plan:** `{}`".format(relative_to_project(project_root, plan_path)),
                 "",
                 render_task_table(combined_rows, arms_root),
+                render_archive_diagnostics_section(archive_diagnostics),
             ]
         ),
         "Task plan generated and logged. Shall I begin executing these fixes? → HALT",
@@ -188,7 +191,7 @@ def run_deploy_protocol(project_root, arms_root):
     deploy_rows = build_deploy_rows(project_root)
     combined_rows = replace_phase_rows(existing_rows, ("Deploy:",), deploy_rows)
     blockers = clear_protocol_blockers(sections.get("Blockers", "None"))
-    update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
+    archive_diagnostics = update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
 
     release_notes_path = dated_report_path(project_root, "release-notes")
     write_text_atomic(release_notes_path, render_release_notes(project_root))
@@ -204,6 +207,7 @@ def run_deploy_protocol(project_root, arms_root):
                 "**Migration Summary:** {}".format(migration_summary),
                 "",
                 render_task_table(combined_rows, arms_root),
+                render_archive_diagnostics_section(archive_diagnostics),
             ]
         ),
         "Pre-flight tasks staged and release notes generated. Review the migration summary before any remote deployment. → HALT",
@@ -218,6 +222,7 @@ def run_status_protocol(project_root):
     execution_mode = extract_environment_value(sections.get("Environment", ""), "Execution Mode") or "Unknown"
     current_phase = infer_current_phase(active_rows)
     last_completed = extract_last_completed(project_root, sections.get("Completed Tasks", "- None"))
+    runtime_diagnostics = render_runtime_diagnostics(active_rows)
 
     emit_protocol_response(
         "None",
@@ -235,6 +240,9 @@ def run_status_protocol(project_root):
                 "",
                 "**Last Completed:**",
                 last_completed,
+                "",
+                "## Runtime Diagnostics",
+                runtime_diagnostics,
             ]
         ),
         "Status report complete. Awaiting next command. → HALT",
@@ -470,8 +478,9 @@ def load_agent_skill_context(arms_root):
 
 def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_EXISTING):
     active_rows, archived_rows = split_archivable_rows(active_rows)
+    archive_diagnostics = None
     if archived_rows:
-        append_archive_entry(project_root, archived_rows, [], context="Protocol task refresh")
+        archive_diagnostics = append_archive_entry(project_root, archived_rows, [], context="Protocol task refresh")
     preamble, sections = load_session_sections(project_root)
     ordered_sections = OrderedDict(sections)
     ordered_sections["Active Tasks"] = render_task_table(active_rows, arms_root)
@@ -484,6 +493,7 @@ def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_
         ordered_sections["Blockers"] = blockers
     session_path = os.path.join(project_root, ".arms", "SESSION.md")
     write_markdown_sections(session_path, preamble, ordered_sections)
+    return archive_diagnostics
 
 
 def split_archivable_rows(rows):
@@ -552,6 +562,47 @@ def clear_protocol_blockers(blockers_text):
         if normalized.startswith(prefix):
             return "None"
     return normalized
+
+
+def render_archive_diagnostics_section(archive_diagnostics):
+    if not archive_diagnostics:
+        return ""
+    return "\n".join(
+        [
+            "## Archive Diagnostics",
+            "",
+            *["- {}".format(line) for line in format_archive_diagnostics_lines(archive_diagnostics)],
+        ]
+    )
+
+
+def render_runtime_diagnostics(active_rows):
+    cancelled_rows = [
+        row for row in active_rows
+        if row.get("Status", "").strip().lower() in {"cancelled", "canceled"}
+    ]
+    failed_rows = [
+        row for row in active_rows
+        if row.get("Status", "").strip().lower() == "failed"
+    ]
+
+    if not cancelled_rows and not failed_rows:
+        return "- No cancelled or failed task rows are currently recorded in `.arms/SESSION.md`."
+
+    lines = []
+    if failed_rows:
+        lines.append(
+            "- Failed tasks recorded by ARMS: {}. Treat these as engine-visible execution failures that still need remediation.".format(
+                ", ".join(row["Task"] for row in failed_rows)
+            )
+        )
+    if cancelled_rows:
+        lines.append(
+            "- Cancelled tasks recorded in session: {}. ARMS protocol planning does not auto-cancel task rows, so treat these as external runtime or operator cancellations unless the user explicitly requested cancellation.".format(
+                ", ".join(row["Task"] for row in cancelled_rows)
+            )
+        )
+    return "\n".join(lines)
 
 
 def summarize_migrations(project_root):

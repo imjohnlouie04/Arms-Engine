@@ -12,7 +12,7 @@ from .brand import (
     read_text_file,
     resolve_stack_recommendation,
 )
-from .session import write_text_atomic
+from .session import assess_token_budget, format_token_budget_message, write_text_atomic
 
 
 GENERATED_PROMPTS_HEADER = """# ARMS Generated Prompts
@@ -25,12 +25,28 @@ CONTEXT_SYNTHESIS_HEADER = """# ARMS Context Synthesis
 > Managed by ARMS Engine. Regenerated from `.arms/BRAND.md` during `arms init`.
 > This file condenses the approved brand and stack answers into an AI-ready project brief.
 """
+CONTEXT_SYNTHESIS_TOKEN_BUDGET = 2200
+GENERATED_PROMPTS_TOKEN_BUDGET = 1600
 
 
 def render_markdown_bullets(items, empty_message):
     if not items:
         return f"- {empty_message}"
     return "\n".join(f"- {item}" for item in items)
+
+
+def render_agent_prompt_section(title, agent, prompt, skill="—"):
+    lines = [
+        f"## {title}",
+        f"**Assigned Agent:** `{agent}`",
+    ]
+    if skill and skill != "—":
+        lines.append(f"**Active Skill:** `{skill}`")
+    lines.append(f"**Copilot CLI:** `/agent {agent}`")
+    lines.append("```text")
+    lines.append(prompt)
+    lines.append("```")
+    return "\n".join(lines)
 
 
 def build_startup_tasks(data):
@@ -403,6 +419,12 @@ def render_context_synthesis(project_root):
     )
 
 
+def maybe_print_budget_warning(label, content, budget):
+    budget_assessment = assess_token_budget(content, budget)
+    if budget_assessment["status"] != "ok":
+        print(format_token_budget_message(label, budget_assessment))
+
+
 def sync_context_synthesis(project_root):
     synthesis_path = os.path.join(project_root, ".arms/CONTEXT_SYNTHESIS.md")
     synthesis_content = render_context_synthesis(project_root)
@@ -415,6 +437,7 @@ def sync_context_synthesis(project_root):
 
     write_text_atomic(synthesis_path, synthesis_content)
     print("📋 Generated .arms/CONTEXT_SYNTHESIS.md from the approved brand and stack context.")
+    maybe_print_budget_warning(".arms/CONTEXT_SYNTHESIS.md", synthesis_content, CONTEXT_SYNTHESIS_TOKEN_BUDGET)
     return True
 
 
@@ -465,13 +488,20 @@ def render_generated_prompts(project_root):
         """
     ).strip()
 
+    frontend_skill = "ui-ux-pro-max" if is_existing_project else "frontend-design"
     sections = [
         GENERATED_PROMPTS_HEADER.strip(),
-        "## Usage\n- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n- These prompts stay intentionally thin so the synthesis file remains the single dense context source.",
-        "## Master Build Prompt\n```text\n" + master_prompt + "\n```",
-        "## Product Kickoff Prompt\n```text\n" + product_prompt + "\n```",
-        "## DevOps Prompt\n```text\n" + devops_prompt + "\n```",
-        "## Frontend Prompt\n```text\n" + frontend_prompt + "\n```",
+        (
+            "## Usage\n"
+            "- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n"
+            "- These prompts stay intentionally thin so the synthesis file remains the single dense context source.\n"
+            "- Use the listed specialist agent for each prompt.\n"
+            "- Do not run specialist implementation prompts with `arms-main-agent`; keep `arms-main-agent` for orchestration only."
+        ),
+        render_agent_prompt_section("Orchestrator Prompt", "arms-main-agent", master_prompt, "arms-orchestrator"),
+        render_agent_prompt_section("Product Kickoff Prompt", "arms-product-agent", product_prompt),
+        render_agent_prompt_section("DevOps Prompt", "arms-devops-agent", devops_prompt, "devops-orchestrator"),
+        render_agent_prompt_section("Frontend Prompt", "arms-frontend-agent", frontend_prompt, frontend_skill),
     ]
 
     if backend_needed:
@@ -498,9 +528,19 @@ def render_generated_prompts(project_root):
         ).strip()
         sections.extend(
             [
-                "## Data Prompt\n```text\n" + data_prompt + "\n```",
-                "## Backend Prompt\n```text\n" + backend_prompt + "\n```",
-                "## Security Prompt\n```text\n" + security_prompt + "\n```",
+                render_agent_prompt_section("Data Prompt", "arms-data-agent", data_prompt),
+                render_agent_prompt_section(
+                    "Backend Prompt",
+                    "arms-backend-agent",
+                    backend_prompt,
+                    "backend-system-architect",
+                ),
+                render_agent_prompt_section(
+                    "Security Prompt",
+                    "arms-security-agent",
+                    security_prompt,
+                    "security-code-review",
+                ),
             ]
         )
 
@@ -512,7 +552,14 @@ def render_generated_prompts(project_root):
             Use nano-banana-pro and {build_media_asset_brief(data)}
             """
         ).strip()
-        sections.append("## Media Prompt\n```text\n" + media_prompt + "\n```")
+        sections.append(
+            render_agent_prompt_section(
+                "Media Prompt",
+                "arms-media-agent",
+                media_prompt,
+                "nano-banana-pro",
+            )
+        )
 
     if "content / marketing site" in data["project_type"].lower() or "website" in data["build_surface"].lower() or "landing page" in data["build_surface"].lower():
         seo_prompt = textwrap.dedent(
@@ -522,7 +569,14 @@ def render_generated_prompts(project_root):
             Keep recommendations aligned to {data['primary_audience']}, {data['seo_focus']}, and {data['primary_ctas']}.
             """
         ).strip()
-        sections.append("## SEO / Content Prompt\n```text\n" + seo_prompt + "\n```")
+        sections.append(
+            render_agent_prompt_section(
+                "SEO / Content Prompt",
+                "arms-seo-agent",
+                seo_prompt,
+                "seo-web-performance-expert",
+            )
+        )
 
     qa_prompt = textwrap.dedent(
         f"""\
@@ -532,7 +586,14 @@ def render_generated_prompts(project_root):
         """
     ).strip()
 
-    sections.append("## QA Prompt\n```text\n" + qa_prompt + "\n```")
+    sections.append(
+        render_agent_prompt_section(
+            "QA Prompt",
+            "arms-qa-agent",
+            qa_prompt,
+            "qa-automation-testing",
+        )
+    )
 
     return "\n\n".join(sections) + "\n"
 
@@ -549,4 +610,5 @@ def sync_generated_prompts(project_root):
 
     write_text_atomic(prompts_path, prompts_content)
     print("🧠 Generated .arms/GENERATED_PROMPTS.md from the approved brand and stack context.")
+    maybe_print_budget_warning(".arms/GENERATED_PROMPTS.md", prompts_content, GENERATED_PROMPTS_TOKEN_BUDGET)
     return True

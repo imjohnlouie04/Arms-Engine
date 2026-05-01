@@ -21,6 +21,7 @@ from .prompts import (
     sync_generated_prompts,
 )
 from .protocols import handle_protocol_command, identify_protocol_command
+from .release import handle_release_validation_command, identify_release_validation_command
 from .session import (
     SessionContextMismatchError,
     bootstrap_runtime_files,
@@ -285,7 +286,12 @@ def run_init_once(
 
 def main():
     parser = argparse.ArgumentParser(description="ARMS Engine Activator")
-    parser.add_argument("command", nargs="*", default=["init"], help="Command to run (e.g., init, init yolo, start)")
+    parser.add_argument(
+        "command",
+        nargs="*",
+        default=["init"],
+        help="Command to run (e.g., init, init yolo, start, doctor, release check)",
+    )
     parser.add_argument("--root", help="Override arms root path")
     parser.add_argument(
         "--preset",
@@ -334,6 +340,10 @@ def main():
         raise SystemExit(1)
     if doctor_command:
         handle_doctor_command(project_root, arms_root, apply_fixes=args.fix)
+        return
+    release_validation_command = identify_release_validation_command(args.command)
+    if release_validation_command:
+        handle_release_validation_command(project_root, arms_root)
         return
     protocol_command = identify_protocol_command(args.command)
     if protocol_command:

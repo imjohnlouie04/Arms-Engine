@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from arms_engine import init_arms
+from arms_engine import doctor as doctor_module
 from arms_engine.session import read_text_file
 
 
@@ -51,6 +52,10 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertIn("**Result:** PASS", output)
             self.assertIn("[OK] Required workspace files are present.", output)
             self.assertIn("[WARN] `arms fix issues` is waiting on a review report.", output)
+            self.assertIn("Version Diagnostics", output)
+            self.assertIn("Version sources:", output)
+            self.assertIn("### Final Triage", output)
+            self.assertIn("Blocking issues: none.", output)
 
     def test_doctor_exits_nonzero_for_missing_workspace_files(self):
         with TemporaryDirectory() as tmp:
@@ -63,6 +68,36 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertIn("Missing required workspace directories", output)
             self.assertIn("Run `arms init` to scaffold the managed workspace directories.", output)
             self.assertIn("Doctor found", output)
+            self.assertIn("### Final Triage", output)
+
+    def test_doctor_fails_when_token_budgets_are_exceeded(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                "[project]\nname = 'budget-demo'\ndescription = 'Budget drift workspace.'\n",
+                encoding="utf-8",
+            )
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            (project_root / ".arms" / "SESSION.md").write_text(
+                read_text_file(str(project_root / ".arms" / "SESSION.md")) + ("\nextra " * 2000),
+                encoding="utf-8",
+            )
+            (project_root / ".arms" / "CONTEXT_SYNTHESIS.md").write_text(
+                read_text_file(str(project_root / ".arms" / "CONTEXT_SYNTHESIS.md")) + ("\nbrief " * 3000),
+                encoding="utf-8",
+            )
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Context Budgets", output)
+            self.assertIn("`.arms/SESSION.md` uses", output)
+            self.assertIn("`.arms/CONTEXT_SYNTHESIS.md` uses", output)
+            self.assertIn("### Final Triage", output)
+            self.assertIn("Blocking issues (", output)
 
     def test_doctor_fails_when_engine_instructions_are_out_of_sync(self):
         with TemporaryDirectory() as tmp:
@@ -80,6 +115,32 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("`.arms/ENGINE.md` is out of sync", output)
             self.assertIn("Rerun `arms init` to resync `.arms/ENGINE.md`", output)
+
+    def test_doctor_warns_when_runtime_version_differs_from_git_describe(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nVersion diagnostics.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            with mock.patch.object(
+                doctor_module,
+                "collect_version_diagnostics",
+                return_value={
+                    "runtime_version": "1.7.1",
+                    "git_describe_raw": "v1.7.2-1-gabc1234",
+                    "git_describe_version": "1.7.2.dev1+gabc1234",
+                    "latest_tag": "v1.7.2",
+                    "generated_version": "1.7.0",
+                    "installed_version": "1.7.1",
+                },
+            ):
+                exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Runtime version `1.7.1` does not match git describe `1.7.2.dev1+gabc1234`.", output)
+            self.assertIn("Version sources:", output)
 
     def test_doctor_fails_when_agent_mirror_content_is_stale(self):
         with TemporaryDirectory() as tmp:
@@ -155,6 +216,26 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertNotEqual(agent_source, "stale agent\n")
             self.assertEqual(project_instruction_path.read_text(encoding="utf-8"), "project-owned instructions\n")
 
+    def test_doctor_fix_reports_removed_obsolete_skill_artifacts(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nDoctor cleanup report.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            obsolete_dir = project_root / ".gemini" / "skills"
+            obsolete_dir.mkdir(parents=True)
+            (obsolete_dir / "stale").mkdir()
+            (project_root / ".gemini" / "skills.yaml").write_text("stale\n", encoding="utf-8")
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--fix", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Removed obsolete Gemini skill artifacts", output)
+            self.assertIn("`.gemini/skills`", output)
+            self.assertIn("`.gemini/skills.yaml`", output)
+
     def test_doctor_fix_does_not_bootstrap_missing_workspace(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
@@ -166,6 +247,47 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertIn("Missing required workspace directories", output)
             self.assertIn("Skipped automatic repair because `.arms/SESSION.md` is missing", output)
             self.assertFalse((project_root / ".arms" / "ENGINE.md").exists())
+
+    def test_release_check_passes_with_shipping_summary(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nRelease validation.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            exit_code, output = self.invoke_cli(project_root, "release", "check", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("## Release Validation", output)
+            self.assertIn("**Release Gate:** READY WITH WARNINGS", output)
+            self.assertIn("### Shipping Summary", output)
+            self.assertIn("Version snapshot:", output)
+            self.assertIn("Protocol Readiness", output)
+            self.assertIn("arms run deploy", output)
+
+    def test_release_check_exits_nonzero_when_workspace_is_missing(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nMissing release workspace.\n", encoding="utf-8")
+
+            exit_code, output = self.invoke_cli(project_root, "release", "check", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("**Release Gate:** BLOCKED", output)
+            self.assertIn("Blocking categories", output)
+            self.assertIn("Workspace Health", output)
+            self.assertIn("Release validation found blocking issues", output)
+
+    def test_release_check_rejects_fix_flag(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nRelease fix rejection.\n", encoding="utf-8")
+
+            exit_code, output = self.invoke_cli(project_root, "release", "check", "--fix", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("`--fix` is only supported with `arms doctor`", output)
 
 
 if __name__ == "__main__":
