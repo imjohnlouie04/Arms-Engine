@@ -373,6 +373,66 @@ class InitRegressionTests(unittest.TestCase):
                 session_content,
             )
 
+    def test_session_surfaces_memory_suggestions_from_active_tasks_and_blockers(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nMemory suggestions.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            (project_root / ".arms" / "SESSION.md").write_text(
+                "\n".join(
+                    [
+                        "# ARMS Session Log",
+                        "Generated: old",
+                        "",
+                        "## Environment",
+                        f"- ARMS Root: {ARMS_ROOT}",
+                        f"- Engine Version: {init_arms.__version__}",
+                        f"- Project Root: {project_root}",
+                        "- Project Name: Demo",
+                        "- Execution Mode: Parallel",
+                        "- YOLO Mode: Enabled",
+                        "",
+                        "## Active Agents",
+                        "- arms-main-agent",
+                        "- Registry: .gemini/agents.yaml",
+                        "",
+                        "## Active Skills",
+                        "- arms-orchestrator [Active]",
+                        "- Registry: .agents/skills.yaml",
+                        "",
+                        "## Memory Signals",
+                        "- Read `.arms/MEMORY.md` before task work.",
+                        "- No approved memory lessons recorded yet.",
+                        "- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`.",
+                        "",
+                        "## Active Tasks",
+                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+                        "|---|------|----------------|--------------|--------------|--------|",
+                        "| 1 | Improve task routing and memory workflow orchestration | arms-main-agent | arms-orchestrator | — | In Progress |",
+                        "| 2 | Fix auth token validation for long-lived API sessions | arms-backend-agent | backend-system-architect | — | Blocked |",
+                        "",
+                        "## Completed Tasks",
+                        "- None",
+                        "",
+                        "## Blockers",
+                        "Long-lived API sessions still expire unexpectedly after token refresh.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(str(project_root), str(ARMS_ROOT), yolo=True)
+
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("## Memory Suggestions", session_content)
+            self.assertIn("[Developer Preferences] Capture the preferred orchestration pattern", session_content)
+            self.assertIn(
+                "[Known Bugs & Fixes] Document the root cause and final resolution for 'Fix auth token validation for long-lived API sessions'",
+                session_content,
+            )
+            self.assertIn("Long-lived API sessions still expire unexpectedly after token refresh.", session_content)
+
     def test_init_injects_agents_yaml_rules_into_mirrored_agent_markdown(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)

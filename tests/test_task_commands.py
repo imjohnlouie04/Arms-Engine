@@ -95,7 +95,12 @@ class TaskCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            self.assertEqual(session_content.count("Improve responsive dashboard layout and mobile sidebar"), 1)
+            active_task_lines = [
+                line
+                for line in session_content.splitlines()
+                if "| Improve responsive dashboard layout and mobile sidebar |" in line
+            ]
+            self.assertEqual(len(active_task_lines), 1)
             self.assertIn(
                 "| {} | Improve responsive dashboard layout and mobile sidebar | arms-frontend-agent |".format(task_id),
                 session_content,

@@ -7,6 +7,7 @@ from .session import (
     MEMORY_PENDING_MARKER,
     parse_markdown_sections,
     read_text_file,
+    resolve_memory_suggestion,
     update_session,
     write_markdown_sections,
 )
@@ -21,8 +22,8 @@ def identify_memory_command(command_parts):
     return ""
 
 
-def handle_memory_command(project_root, arms_root, command_name, section="", lesson="", draft_id=""):
-    error = validate_memory_command(project_root, command_name, section, lesson, draft_id)
+def handle_memory_command(project_root, arms_root, command_name, section="", lesson="", draft_id="", from_suggestion=""):
+    error = validate_memory_command(project_root, command_name, section, lesson, draft_id, from_suggestion)
     if error:
         emit_memory_response(
             command_name,
@@ -34,7 +35,7 @@ def handle_memory_command(project_root, arms_root, command_name, section="", les
         raise SystemExit(1)
 
     if command_name == "draft":
-        result = create_memory_draft(project_root, section, lesson)
+        result = create_memory_draft(project_root, section, lesson, from_suggestion=from_suggestion)
         emit_memory_response(
             command_name,
             project_root,
@@ -67,12 +68,14 @@ def handle_memory_command(project_root, arms_root, command_name, section="", les
     )
 
 
-def validate_memory_command(project_root, command_name, section, lesson, draft_id):
+def validate_memory_command(project_root, command_name, section, lesson, draft_id, from_suggestion):
     session_path = os.path.join(project_root, ".arms", "SESSION.md")
     memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
     if not os.path.isfile(session_path) or not os.path.isfile(memory_path):
         return "Structured memory commands require an initialized workspace. Run `arms init` first."
     if command_name == "draft":
+        if from_suggestion.strip():
+            return ""
         if not section.strip():
             return "`arms memory draft` requires `--section`."
         if not lesson.strip():
@@ -87,10 +90,17 @@ def validate_memory_command(project_root, command_name, section, lesson, draft_i
     return ""
 
 
-def create_memory_draft(project_root, section, lesson):
+def create_memory_draft(project_root, section, lesson, from_suggestion=""):
     preamble, sections = load_memory_sections(project_root)
-    normalized_section = normalize_section_name(section)
-    normalized_lesson = normalize_lesson_text(lesson)
+    if from_suggestion.strip():
+        suggestion = resolve_memory_suggestion(project_root, from_suggestion)
+        if suggestion is None:
+            raise SystemExit(emit_and_exit_missing_suggestion(project_root, from_suggestion))
+        normalized_section = suggestion["section"]
+        normalized_lesson = normalize_lesson_text(suggestion["lesson"])
+    else:
+        normalized_section = normalize_section_name(section)
+        normalized_lesson = normalize_lesson_text(lesson)
     draft_id = next_memory_entry_id(sections)
     entry = render_memory_entry(MEMORY_PENDING_MARKER, draft_id, normalized_lesson)
     append_section_entry(sections, normalized_section, entry)
@@ -150,6 +160,20 @@ def emit_and_exit_not_found(project_root, draft_id):
             "Use `arms memory draft --section ... --lesson ...` first or inspect `.arms/MEMORY.md`.",
         ],
         next_step="Create or locate the correct draft before appending. → HALT",
+    )
+    return 1
+
+
+def emit_and_exit_missing_suggestion(project_root, suggestion_ref):
+    emit_memory_response(
+        "draft",
+        project_root,
+        updates="None",
+        action_lines=[
+            "No session-derived memory suggestion matched `{}`.".format(suggestion_ref),
+            "Review `## Memory Suggestions` in `.arms/SESSION.md` and choose a current suggestion index.",
+        ],
+        next_step="Pick a valid suggestion and rerun `arms memory draft --from-suggestion <n>`. → HALT",
     )
     return 1
 

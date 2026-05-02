@@ -63,6 +63,9 @@ SESSION_ARCHIVE_TEMPLATE = """# ARMS Session Archive
 MEMORY_SIGNAL_PREFIX = "- Read `.arms/MEMORY.md` before task work."
 MEMORY_SIGNAL_SUFFIX = "- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`."
 MEMORY_SIGNAL_EMPTY = "- No approved memory lessons recorded yet."
+MEMORY_SUGGESTIONS_PREFIX = "- Review session-derived memory candidates before appending to `.arms/MEMORY.md`."
+MEMORY_SUGGESTIONS_SUFFIX = "- Stage one with `arms memory draft --from-suggestion <n>` after review and approval."
+MEMORY_SUGGESTIONS_EMPTY = "- No session-derived memory suggestions right now."
 
 
 class SessionContextMismatchError(RuntimeError):
@@ -564,6 +567,171 @@ def render_memory_signals(project_root):
     return "\n".join(lines)
 
 
+def summarize_memory_task_text(text, limit=96):
+    collapsed = " ".join((text or "").split()).strip()
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3].rstrip() + "..."
+
+
+def normalize_memory_suggestion_ref(value):
+    normalized = (value or "").strip()
+    if normalized.startswith("#"):
+        normalized = normalized[1:].strip()
+    return normalized
+
+
+def choose_memory_suggestion_section(task_text, status, blockers_text, dependencies):
+    normalized_task = (task_text or "").lower()
+    normalized_status = (status or "").lower()
+    normalized_dependencies = (dependencies or "").strip().lower()
+
+    if normalized_status in {"blocked", "failed"}:
+        return "Known Bugs & Fixes"
+    if any(
+        token in normalized_task
+        for token in (
+            "memory",
+            "workflow",
+            "routing",
+            "prompt",
+            "session",
+            "task",
+            "agent",
+            "skill",
+            "approval",
+            "protocol",
+            "convention",
+        )
+    ):
+        return "Developer Preferences"
+    if normalized_dependencies not in {"", "none", "-", "—", "n/a", "na"}:
+        return "Phase 2 Backlog"
+    if any(token in normalized_task for token in ("mvp", "brand", "product", "audience", "charter", "scope")):
+        return "Project Context & MVP"
+    if any(token in normalized_task for token in ("use case", "persona", "journey", "cta", "seo")):
+        return "Primary Use Case & Implications"
+    return "Developer Preferences"
+
+
+def build_memory_suggestion_lesson(task_text, status, blockers_text, dependencies):
+    normalized_task = summarize_memory_task_text(task_text).rstrip(".")
+    normalized_status = (status or "").strip().lower()
+    normalized_dependencies = (dependencies or "").strip()
+    normalized_blockers = normalize_memory_signal(blockers_text, limit=140)
+
+    if normalized_status in {"blocked", "failed"}:
+        if normalized_blockers and normalized_blockers.lower() != "none":
+            return "Document the root cause and final resolution for '{}' while the session blocker is still fresh: {}.".format(
+                normalized_task,
+                normalized_blockers,
+            )
+        return "Document the root cause and final resolution for '{}' while the failure path is still fresh.".format(
+            normalized_task
+        )
+    if any(
+        token in normalized_task.lower()
+        for token in ("memory", "workflow", "routing", "prompt", "session", "task", "agent", "skill", "approval", "protocol")
+    ):
+        return "Capture the preferred orchestration pattern that emerged while implementing '{}' so future deep-dive work follows the same path.".format(
+            normalized_task
+        )
+    if normalized_dependencies.lower() not in {"", "none", "-", "—", "n/a", "na"}:
+        return "Record the dependency chain and follow-up rule for '{}' so deferred work stays traceable: {}.".format(
+            normalized_task,
+            normalized_dependencies,
+        )
+    return "Capture the reusable implementation decision behind '{}' if this session establishes a pattern worth repeating.".format(
+        normalized_task
+    )
+
+
+def collect_memory_suggestions(active_task_rows, blockers_text="None", limit=3):
+    suggestions = []
+    seen = set()
+    normalized_blockers = (blockers_text or "None").strip() or "None"
+
+    for index, row in enumerate(active_task_rows, start=1):
+        task_text = row.get("task", "").strip()
+        status = row.get("status", "").strip()
+        dependencies = row.get("dependencies", "").strip()
+        if not task_text:
+            continue
+        blocker_context = normalized_blockers if (status or "").strip().lower() in {"blocked", "failed"} else "None"
+
+        section = choose_memory_suggestion_section(task_text, status, blocker_context, dependencies)
+        lesson = build_memory_suggestion_lesson(task_text, status, blocker_context, dependencies)
+        key = (section, lesson)
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            {
+                "index": str(len(suggestions) + 1),
+                "section": section,
+                "lesson": lesson,
+                "source": "task #{} is {}".format(index, status or "Pending"),
+            }
+        )
+        if len(suggestions) >= limit:
+            return suggestions
+
+    if normalized_blockers.lower() not in {"", "none"} and len(suggestions) < limit:
+        blocker_lesson = "Document the blocker resolution rule for this session so repeated interruptions can be handled faster: {}.".format(
+            normalize_memory_signal(normalized_blockers, limit=140)
+        )
+        key = ("Known Bugs & Fixes", blocker_lesson)
+        if key not in seen:
+            suggestions.append(
+                {
+                    "index": str(len(suggestions) + 1),
+                    "section": "Known Bugs & Fixes",
+                    "lesson": blocker_lesson,
+                    "source": "session blocker",
+                }
+            )
+    return suggestions
+
+
+def render_memory_suggestions(active_task_rows, blockers_text="None"):
+    lines = [MEMORY_SUGGESTIONS_PREFIX]
+    suggestions = collect_memory_suggestions(active_task_rows, blockers_text=blockers_text)
+    if suggestions:
+        for suggestion in suggestions:
+            lines.append(
+                "- {}. [{}] {} Source: {}.".format(
+                    suggestion["index"],
+                    suggestion["section"],
+                    suggestion["lesson"],
+                    suggestion["source"],
+                )
+            )
+    else:
+        lines.append(MEMORY_SUGGESTIONS_EMPTY)
+    lines.append(MEMORY_SUGGESTIONS_SUFFIX)
+    return "\n".join(lines)
+
+
+def load_session_rows_and_blockers(project_root):
+    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    if not os.path.isfile(session_path):
+        return [], "None"
+    _, sections = parse_markdown_sections(read_text_file(session_path))
+    rows = filter_hot_task_rows(parse_active_task_rows(sections.get("Active Tasks", "")))
+    blockers = (sections.get("Blockers", "None") or "None").strip() or "None"
+    return rows, blockers
+
+
+def resolve_memory_suggestion(project_root, suggestion_ref):
+    normalized_ref = normalize_memory_suggestion_ref(suggestion_ref)
+    rows, blockers = load_session_rows_and_blockers(project_root)
+    derived = collect_memory_suggestions(rows, blockers_text=blockers)
+    for suggestion in derived:
+        if suggestion["index"] == normalized_ref:
+            return suggestion
+    return None
+
+
 def read_existing_memory_signals(project_root):
     session_path = os.path.join(project_root, ".arms", "SESSION.md")
     if not os.path.isfile(session_path):
@@ -997,6 +1165,7 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
 
     tasks_match = re.search(r"(## Active Tasks.*)", existing_content, re.DOTALL)
     active_tasks_content = ""
+    blockers_content = "None"
     if tasks_match:
         tasks_content_raw = tasks_match.group(1)
         header_pattern = r"## (Active Tasks|Completed Tasks|Blockers)"
@@ -1017,6 +1186,8 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
                         if normalized_startup_tasks_content and not active_tasks_table_has_rows(content):
                             content = normalized_startup_tasks_content
                         active_tasks_content = content
+                    if header == "Blockers":
+                        blockers_content = content or "None"
                     new_tasks_content.append(f"## {header}\n{content}")
                 else:
                     if header == "Active Tasks":
@@ -1028,6 +1199,7 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
                     elif header == "Completed Tasks":
                         new_tasks_content.append(f"## {header}\n- None")
                     elif header == "Blockers":
+                        blockers_content = "None"
                         new_tasks_content.append(f"## {header}\nNone")
                 seen_headers.add(header)
 
@@ -1042,6 +1214,7 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
                 elif req == "Completed Tasks":
                     new_tasks_content.append(f"## {req}\n- None")
                 elif req == "Blockers":
+                    blockers_content = "None"
                     new_tasks_content.append(f"## {req}\nNone")
 
         tasks_content = "\n\n".join(new_tasks_content)
@@ -1061,6 +1234,7 @@ None"""
     compact_agents_list = render_compact_agent_roster(hot_task_rows)
     compact_skills_list = render_compact_skill_roster_with_inactive(hot_task_rows, agent_skill_bindings)
     memory_signals = render_memory_signals(project_root)
+    memory_suggestions = render_memory_suggestions(hot_task_rows, blockers_text=blockers_content)
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
@@ -1084,6 +1258,9 @@ Generated: {now}
 
 ## Memory Signals
 {memory_signals}
+
+## Memory Suggestions
+{memory_suggestions}
 
 {tasks_content}"""
 

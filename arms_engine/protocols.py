@@ -6,6 +6,12 @@ from collections import OrderedDict
 
 from .compression import ARCHIVABLE_STATUSES, append_archive_entry, format_archive_diagnostics_lines
 from .session import (
+    filter_hot_task_rows,
+    parse_active_task_rows,
+    render_compact_agent_roster,
+    render_compact_skill_roster_with_inactive,
+    render_memory_signals,
+    render_memory_suggestions,
     normalize_active_tasks_table,
     parse_markdown_sections,
     read_text_file,
@@ -483,7 +489,8 @@ def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_
         archive_diagnostics = append_archive_entry(project_root, archived_rows, [], context=archive_context)
     preamble, sections = load_session_sections(project_root)
     ordered_sections = OrderedDict(sections)
-    ordered_sections["Active Tasks"] = render_task_table(active_rows, arms_root)
+    active_tasks_content = render_task_table(active_rows, arms_root)
+    ordered_sections["Active Tasks"] = active_tasks_content
     if "Completed Tasks" not in ordered_sections:
         ordered_sections["Completed Tasks"] = "- None"
     if blockers is KEEP_EXISTING:
@@ -491,9 +498,40 @@ def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_
             ordered_sections["Blockers"] = "None"
     else:
         ordered_sections["Blockers"] = blockers
+    current_blockers = (ordered_sections.get("Blockers", "None") or "None").strip() or "None"
+    hot_task_rows = filter_hot_task_rows(parse_active_task_rows(active_tasks_content))
+    agent_skill_bindings, _ = load_agent_skill_context(arms_root)
+    ordered_sections["Active Agents"] = render_compact_agent_roster(hot_task_rows)
+    ordered_sections["Active Skills"] = render_compact_skill_roster_with_inactive(hot_task_rows, agent_skill_bindings)
+    ordered_sections["Memory Signals"] = render_memory_signals(project_root)
+    ordered_sections = upsert_section_after(
+        ordered_sections,
+        "Memory Suggestions",
+        render_memory_suggestions(hot_task_rows, blockers_text=current_blockers),
+        after_title="Memory Signals",
+    )
     session_path = os.path.join(project_root, ".arms", "SESSION.md")
     write_markdown_sections(session_path, preamble, ordered_sections)
     return archive_diagnostics
+
+
+def upsert_section_after(sections, title, body, after_title):
+    ordered = OrderedDict()
+    inserted = False
+    for existing_title, existing_body in sections.items():
+        if existing_title == title:
+            if inserted:
+                continue
+            ordered[title] = body
+            inserted = True
+            continue
+        ordered[existing_title] = existing_body
+        if existing_title == after_title and not inserted:
+            ordered[title] = body
+            inserted = True
+    if not inserted:
+        ordered[title] = body
+    return ordered
 
 
 def split_archivable_rows(rows):

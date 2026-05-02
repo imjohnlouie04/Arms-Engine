@@ -335,6 +335,10 @@ def main():
         help="With `arms memory append`, approve an existing pending draft by ID.",
     )
     parser.add_argument(
+        "--from-suggestion",
+        help="With `arms memory draft`, stage a pending entry from the numbered suggestion in `## Memory Suggestions`.",
+    )
+    parser.add_argument(
         "--task",
         help="With `arms task log` / `arms task update`, task text to record in `.arms/SESSION.md`.",
     )
@@ -392,6 +396,7 @@ def main():
             section=args.section or "",
             lesson=args.lesson or "",
             draft_id=args.draft_id or "",
+            from_suggestion=args.from_suggestion or "",
         )
         return
     task_command = identify_task_command(args.command)

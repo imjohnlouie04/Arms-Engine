@@ -54,7 +54,7 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 
 | Path | Purpose | Notes |
 |---|---|---|
-| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, bound-but-inactive skill visibility, memory signals, task table, blockers, and is kept within a token budget |
+| `.arms/SESSION.md` | Live orchestration board | Stores environment, compact hot-context agent/skill references, bound-but-inactive skill visibility, approved memory signals, session-derived memory suggestions, task table, blockers, and is kept within a token budget |
 | `.arms/SESSION_ARCHIVE.md` | Permanent task history | Created if missing and preserved across re-runs |
 | `.arms/BRAND.md` | Brand + stack + product intake | Inferred for existing repos, questionnaire-driven for new projects |
 | `.arms/CONTEXT_SYNTHESIS.md` | AI-ready project brief | Summarizes approved brand + stack answers into a compact execution brief, including workspace mode and current stack recommendation |
@@ -166,7 +166,7 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table acts as the durable ledger for new user asks: each prompt should create or update a row, be assigned to the proper specialist agent, and can be managed directly with `arms task log`, `arms task update`, and `arms task done`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, session-derived memory suggestions from active tasks/blockers, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table acts as the durable ledger for new user asks: each prompt should create or update a row, be assigned to the proper specialist agent, and can be managed directly with `arms task log`, `arms task update`, and `arms task done`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
 13. Measures token budgets for `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` so oversized hot-context output is surfaced immediately during init and later enforced by `arms doctor`.
 14. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
 15. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
@@ -320,6 +320,7 @@ The command exits non-zero when blocking issues are present, stays read-only eve
 
 ```bash
 arms memory draft --section "Known Bugs & Fixes" --lesson "Preserve session memory signals during re-init."
+arms memory draft --from-suggestion 1
 arms memory append --draft-id memory-20260501-01
 ```
 
@@ -331,6 +332,8 @@ Notes:
 - pending entries are stored with `[PENDING APPROVAL][memory-YYYYMMDD-NN]: ...`
 - approved entries are stored with `[APPROVED][memory-YYYYMMDD-NN]: ...`
 - only approved entries are surfaced into `## Memory Signals`
+- `## Memory Suggestions` in `.arms/SESSION.md` is generated automatically from active tasks and blockers so deeper sessions still surface candidate lessons
+- `arms memory draft --from-suggestion <n>` stages one of those generated suggestions without manually copying the lesson text
 - `arms memory append` also supports direct approval with `--section` plus `--lesson`
 
 ### Structured task workflow
