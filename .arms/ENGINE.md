@@ -9,6 +9,8 @@
 
 **Strict Init Rule:** If the command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** switch into generic planning, repo cleanup, linting, `git status`, or issue triage before the boot sequence. Resolve the ARMS engine path first, run the linker/bootstrap flow, migrate legacy state, and only then continue with normal orchestration.
 
+**Init Monitor Rule:** If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. This opens a local activity HUD at `.arms/reports/init-monitor-latest.html` and records each init step without changing the default init workflow.
+
 **Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, context budgets, version diagnostics, ownership safety, and protocol readiness. Print actionable diagnostics, end with a compact final triage summary, and exit non-zero when blocking issues are present. If the command is `arms doctor --fix`, first resync engine-owned mirrored files only, report any obsolete managed artifacts removed during cleanup, then report any remaining failures; do not bootstrap a missing workspace and do not overwrite project-owned instruction files.
 
 **Release Validation Rule:** If the command is `arms release check`, reuse the doctor diagnostics as a read-only pre-release gate. Print a shipping summary that shows blocking categories, warning categories, ready categories, a compact version snapshot, and the recommended next command. Exit non-zero when blocking issues are present, but do not mutate workspace state and do not support repair mode under this command.
@@ -64,6 +66,8 @@ Once `$ARMS_ROOT` is confirmed, immediately execute the global linker script to 
 **Run:** `bash $ARMS_ROOT/init-arms.sh`
 
 This script preserves the caller's `PYTHONPATH`, prepends the engine checkout, and executes `python3 -m arms_engine.init_arms` so the current engine source drives init. It ensures the local `./.github/`, `./.gemini/`, and `./.arms/` structures are present, migrates legacy project state into `./.arms/`, and registers all global ARMS agents and skills to the current project.
+
+When runtime visibility is requested, run the same bootstrap with `--monitor` so the HUD opens immediately and the HTML step log updates while init is in progress.
 
 ### Step 2: Load Global Engine
 

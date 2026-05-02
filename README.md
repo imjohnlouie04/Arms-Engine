@@ -198,6 +198,22 @@ arms init yolo
 
 This enables the YOLO flag in the generated session state and changes the completion message to fleet mode. It also auto-accepts a session context overwrite if an existing `SESSION.md` points to a different project root.
 
+### Activity monitor HUD
+
+```bash
+arms init --monitor
+```
+
+This opens a local browser HUD and writes a live debug report to `.arms/reports/init-monitor-latest.html` while init runs.
+
+Use it when you want step-by-step visibility into:
+- folder setup and legacy migration
+- agent/skill/workflow sync
+- brand/context generation
+- session refresh and completion state
+
+The HUD is opt-in so normal `arms init` stays quiet. The generated HTML report remains in the project for later debugging even after the command exits.
+
 ### Compression mode
 
 ```bash

@@ -207,6 +207,32 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("Initializing ARMS Engine", result.stdout)
             self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
 
+    def test_init_monitor_opens_browser_and_writes_complete_hud(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                """[project]
+name = "orbitops"
+description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+
+            with mock.patch("arms_engine.monitor.webbrowser.open") as open_browser:
+                output = self.invoke_cli(project_root, "init", "yolo", "--monitor", "--root", str(ARMS_ROOT))
+
+            hud_path = project_root / ".arms" / "reports" / "init-monitor-latest.html"
+            hud = hud_path.read_text(encoding="utf-8")
+
+            open_browser.assert_called_once()
+            self.assertIn("Activity monitor:", output)
+            self.assertTrue(hud_path.exists())
+            self.assertIn("ARMS Init Activity Monitor", hud)
+            self.assertIn("Complete", hud)
+            self.assertIn("Setup workspace folders", hud)
+            self.assertIn("Sync agents, skills, and workflow", hud)
+            self.assertIn("ARMS Engine ready. Fleet mode activated.", hud)
+
     def test_init_arms_shell_script_preserves_pythonpath_and_runs_init(self):
         with TemporaryDirectory() as tmp:
             temp_root = Path(tmp)
@@ -1277,6 +1303,27 @@ None
                 )
 
             self.assertIn("Could not resolve engine version", stdout.getvalue())
+
+    def test_run_init_once_updates_monitor_when_brand_answers_are_required(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            monitor = init_arms.InitActivityMonitor(str(project_root))
+
+            result = init_arms.run_init_once(
+                str(project_root),
+                str(ARMS_ROOT),
+                "init",
+                False,
+                show_banner=False,
+                monitor=monitor,
+            )
+
+            hud = (project_root / ".arms" / "reports" / "init-monitor-latest.html").read_text(encoding="utf-8")
+
+            self.assertEqual(result["status"], "questions_required")
+            self.assertIn("Awaiting Input", hud)
+            self.assertIn("Awaiting brand answers in .arms/BRAND.md.", hud)
+            self.assertIn("Prepare waiting-state context files", hud)
 
     def test_new_project_answers_generate_context_synthesis_prompts_and_seeded_tasks(self):
         with TemporaryDirectory() as tmp:

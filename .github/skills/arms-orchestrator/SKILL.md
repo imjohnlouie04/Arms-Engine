@@ -74,6 +74,8 @@ When `./.arms/` or `./.gemini/` does not exist or is missing required files, `ar
 
 If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** begin with generic planning, repo triage, linting, or `git status`. Boot ARMS first.
 
+If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. It opens the local activity HUD at `.arms/reports/init-monitor-latest.html` and keeps a durable HTML step log for debugging.
+
 ### Bootstrap Sequence
 
 ```

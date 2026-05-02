@@ -5,6 +5,7 @@ import sys
 import time
 
 from . import __version__
+from .monitor import InitActivityMonitor
 from .brand import (
     IGNORED_PROJECT_ENTRIES,
     PROJECT_PRESETS,
@@ -167,6 +168,12 @@ def prompt_context_overwrite(error):
     return confirm.strip().lower() == "y"
 
 
+def run_monitored_step(monitor, label, func, *args, **kwargs):
+    if monitor is None:
+        return func(*args, **kwargs)
+    return monitor.run_step(label, func, *args, **kwargs)
+
+
 def run_init_once(
     project_root,
     arms_root,
@@ -177,8 +184,11 @@ def run_init_once(
     allow_engine_downgrade=False,
     show_banner=True,
     context_overwrite=None,
+    monitor=None,
 ):
     arms_root = normalize_arms_root(arms_root)
+    if monitor is not None:
+        monitor.begin_run(arms_root, full_command, is_yolo)
     if show_banner:
         print("🚀 Initializing ARMS Engine...")
         print(f"📂 Project: {project_root}")
@@ -189,43 +199,77 @@ def run_init_once(
         if is_yolo:
             print("⚡ Mode:    YOLO (Full Automation)")
 
-    setup_folders(project_root)
-    migrate_legacy_state(project_root)
-    enforce_engine_version_guard(
+    run_monitored_step(monitor, "Setup workspace folders", setup_folders, project_root)
+    run_monitored_step(monitor, "Migrate legacy workspace state", migrate_legacy_state, project_root)
+    run_monitored_step(
+        monitor,
+        "Validate engine version",
+        enforce_engine_version_guard,
         project_root,
         arms_root,
         allow_engine_downgrade=allow_engine_downgrade,
     )
-    bootstrap_runtime_files(project_root)
-    remove_obsolete_gemini_skill_artifacts(project_root)
-    sync_agents(arms_root, project_root)
-    sync_agents_copilot(arms_root, project_root)
-    sync_skills_copilot(arms_root, project_root)
-    create_skills_registry(arms_root, project_root)
-    sync_workflow(arms_root, project_root)
-    brand_context_state = initialize_brand_context(project_root)
+    run_monitored_step(monitor, "Bootstrap runtime files", bootstrap_runtime_files, project_root)
+
+    def sync_runtime_mirrors():
+        remove_obsolete_gemini_skill_artifacts(project_root)
+        sync_agents(arms_root, project_root)
+        sync_agents_copilot(arms_root, project_root)
+        sync_skills_copilot(arms_root, project_root)
+        create_skills_registry(arms_root, project_root)
+        sync_workflow(arms_root, project_root)
+
+    run_monitored_step(monitor, "Sync agents, skills, and workflow", sync_runtime_mirrors)
+
+    brand_context_state = run_monitored_step(
+        monitor,
+        "Refresh brand context",
+        initialize_brand_context,
+        project_root,
+    )
     if preset_name or answers_text:
-        inputs_applied = apply_brand_inputs(
+        inputs_applied = run_monitored_step(
+            monitor,
+            "Apply brand answers",
+            apply_brand_inputs,
             project_root,
             preset_name=preset_name,
             answers_text=answers_text,
         )
         if inputs_applied:
-            brand_context_state = initialize_brand_context(project_root)
+            brand_context_state = run_monitored_step(
+                monitor,
+                "Refresh brand context",
+                initialize_brand_context,
+                project_root,
+            )
     context_synthesis_ready = False
     generated_prompts_ready = False
-    if brand_context_state and brand_context_state.get("status") == "questions_required":
-        sync_context_synthesis(project_root)
-        sync_generated_prompts(project_root)
-    else:
+
+    def generate_context_outputs():
+        nonlocal context_synthesis_ready
+        nonlocal generated_prompts_ready
+        if brand_context_state and brand_context_state.get("status") == "questions_required":
+            sync_context_synthesis(project_root)
+            sync_generated_prompts(project_root)
+            return
         context_synthesis_ready = sync_context_synthesis(project_root)
         generated_prompts_ready = sync_generated_prompts(project_root)
+
+    if brand_context_state and brand_context_state.get("status") == "questions_required":
+        run_monitored_step(monitor, "Prepare waiting-state context files", generate_context_outputs)
+    else:
+        run_monitored_step(monitor, "Generate context outputs", generate_context_outputs)
 
     synthesis_data = build_context_synthesis_data(project_root)
     startup_tasks_content = ""
     if synthesis_data is not None:
         startup_tasks_content = render_startup_tasks_content(synthesis_data)
-    session_updated = update_session(
+
+    session_updated = run_monitored_step(
+        monitor,
+        "Refresh session state",
+        update_session,
         project_root,
         arms_root,
         yolo=is_yolo,
@@ -233,13 +277,18 @@ def run_init_once(
         context_overwrite=context_overwrite,
     )
     if not session_updated:
+        if monitor is not None:
+            monitor.finish("failed", "Session refresh aborted to preserve workspace state.")
         return {
             "status": "aborted",
             "brand_signature": capture_file_signature(os.path.join(project_root, ".arms/BRAND.md")),
         }
 
-    sync_engine_instructions(arms_root, project_root)
-    sync_root_agents_guide(arms_root, project_root)
+    def sync_managed_instructions():
+        sync_engine_instructions(arms_root, project_root)
+        sync_root_agents_guide(arms_root, project_root)
+
+    run_monitored_step(monitor, "Sync managed instructions", sync_managed_instructions)
 
     manual_compress = "compress" in full_command.lower()
     auto_compress_reasons = []
@@ -247,7 +296,12 @@ def run_init_once(
         auto_compress_reasons = workspace_compression_reasons(project_root)
 
     if manual_compress or auto_compress_reasons:
-        compression_summary = compress_workspace(project_root)
+        compression_summary = run_monitored_step(
+            monitor,
+            "Compress oversized workspace state",
+            compress_workspace,
+            project_root,
+        )
         print(format_compression_summary(compression_summary))
 
     if manual_compress:
@@ -261,6 +315,8 @@ def run_init_once(
 
     brand_signature = capture_file_signature(os.path.join(project_root, ".arms/BRAND.md"))
     if brand_context_state and brand_context_state.get("status") == "questions_required":
+        if monitor is not None:
+            monitor.finish("awaiting_input", "Awaiting brand answers in .arms/BRAND.md.")
         print()
         print(brand_context_state["prompt"])
         print("\n✅ ARMS Engine sequence complete. Awaiting Brand Context answers. → HALT")
@@ -269,12 +325,16 @@ def run_init_once(
             "brand_signature": brand_signature,
         }
     if is_yolo:
+        if monitor is not None:
+            monitor.finish("complete", "ARMS Engine ready. Fleet mode activated.")
         if context_synthesis_ready:
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
         print("\n✅ ARMS Engine ready. Fleet mode activated.")
     else:
+        if monitor is not None:
+            monitor.finish("complete", "ARMS Engine sequence complete.")
         if context_synthesis_ready:
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
@@ -316,6 +376,11 @@ def main():
         "--watch",
         action="store_true",
         help="Watch .arms/BRAND.md and auto-rerun init while the project is waiting on brand context.",
+    )
+    parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Open a local activity HUD for `arms init` and write a live debug report to `.arms/reports/init-monitor-latest.html`.",
     )
     parser.add_argument(
         "--fix",
@@ -431,6 +496,11 @@ def main():
     pending_answers_text = answers_text
     pending_context_overwrite = None
     show_banner = True
+    monitor = None
+    if args.monitor:
+        monitor = InitActivityMonitor(project_root)
+        monitor.launch()
+        print(f"🖥️  Activity monitor: {monitor.report_uri()}")
 
     while True:
         try:
@@ -444,6 +514,7 @@ def main():
                 allow_engine_downgrade=args.allow_engine_downgrade,
                 show_banner=show_banner,
                 context_overwrite=pending_context_overwrite,
+                monitor=monitor,
             )
         except SessionContextMismatchError as exc:
             if not prompt_context_overwrite(exc):
