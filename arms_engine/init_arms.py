@@ -11,11 +11,13 @@ from .brand import *  # noqa: F401,F403
 from .cli import *  # noqa: F401,F403
 from .compression import *  # noqa: F401,F403
 from .doctor import *  # noqa: F401,F403
+from .memory import *  # noqa: F401,F403
 from .prompts import *  # noqa: F401,F403
 from .protocols import *  # noqa: F401,F403
 from .release import *  # noqa: F401,F403
 from .session import *  # noqa: F401,F403
 from .skills import *  # noqa: F401,F403
+from .tasks import *  # noqa: F401,F403
 from .versioning import *  # noqa: F401,F403
 from . import cli as _cli
 

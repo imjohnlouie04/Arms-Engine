@@ -121,7 +121,7 @@ The package exposes two entry points:
 
 | Command | What it does |
 |---|---|
-| `arms` | Main workspace bootstrap CLI, diagnostics, release validation, and protocol runner (`init`, `start`, `doctor`, `release check`, `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status`) |
+| `arms` | Main workspace bootstrap CLI, diagnostics, task/memory workflow, release validation, and protocol runner (`init`, `start`, `doctor`, `task log`, `task update`, `task done`, `memory draft`, `memory append`, `release check`, `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status`) |
 | `arms-docs` | Updates the README agent roster block from `agents.yaml` |
 
 `arms --version` and `arms-docs --version` are also supported.
@@ -140,9 +140,11 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 | `arms_engine/brand.py` | Brand inference, questionnaire rendering, structured-answer parsing, and brand updates |
 | `arms_engine/compression.py` | Native workspace compression for `arms init compress`, including session archiving, memory compaction, and history summaries |
 | `arms_engine/doctor.py` | Workspace diagnostics for `arms doctor`, including sync checks, ownership safety, and protocol readiness |
+| `arms_engine/memory.py` | Structured memory workflow for drafting and approving lessons in `.arms/MEMORY.md` |
 | `arms_engine/release.py` | Read-only pre-release validation flow that reuses doctor diagnostics and emits a shipping summary |
 | `arms_engine/prompts.py` | Context synthesis, generated prompts, and seeded startup tasks |
 | `arms_engine/protocols.py` | Protocol command dispatch, session/report updates, pipeline status summaries, and release-note scaffolding |
+| `arms_engine/tasks.py` | Executable task-ledger commands for logging, updating, routing, and archiving `.arms/SESSION.md` rows |
 | `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, mirrored runtime-rule injection, and registry generation |
 | `arms_engine/session.py` | Legacy migration, version guard, task-table normalization, and atomic `SESSION.md` updates |
 | `arms_engine/init_arms.py` | Compatibility shim, stable script entrypoint, and executable module wrapper for `python -m arms_engine.init_arms` |
@@ -164,7 +166,7 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
 11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table is intended to act as the durable ledger for new user asks: each new prompt should create or update a row and be assigned to the proper specialist agent rather than defaulting to `arms-main-agent`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table acts as the durable ledger for new user asks: each prompt should create or update a row, be assigned to the proper specialist agent, and can be managed directly with `arms task log`, `arms task update`, and `arms task done`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
 13. Measures token budgets for `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` so oversized hot-context output is surfaced immediately during init and later enforced by `arms doctor`.
 14. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
 15. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
@@ -313,6 +315,43 @@ It adds a shipping summary that condenses:
 - the recommended next command before shipping
 
 The command exits non-zero when blocking issues are present, stays read-only even when warnings exist, and leaves all repair behavior in `arms doctor --fix`.
+
+### Structured memory workflow
+
+```bash
+arms memory draft --section "Known Bugs & Fixes" --lesson "Preserve session memory signals during re-init."
+arms memory append --draft-id memory-20260501-01
+```
+
+Use `arms memory draft` to stage a lesson in `.arms/MEMORY.md` with a **pending approval** marker.
+
+Use `arms memory append` to approve the lesson and refresh `## Memory Signals` in `.arms/SESSION.md`.
+
+Notes:
+- pending entries are stored with `[PENDING APPROVAL][memory-YYYYMMDD-NN]: ...`
+- approved entries are stored with `[APPROVED][memory-YYYYMMDD-NN]: ...`
+- only approved entries are surfaced into `## Memory Signals`
+- `arms memory append` also supports direct approval with `--section` plus `--lesson`
+
+### Structured task workflow
+
+```bash
+arms task log --task "Improve responsive dashboard layout and mobile sidebar"
+arms task update --task-id 6 --status "In Progress"
+arms task done --task-id 6
+```
+
+Use `arms task log` to add a new `.arms/SESSION.md` row or update an exact matching open task without duplicating it.
+
+Use `arms task update` to change task text, routing, dependencies, or status on an existing row.
+
+Use `arms task done` to mark a row complete and archive it out of hot context immediately.
+
+Notes:
+- new task rows infer the proper specialist agent from task text unless `--assigned-agent` overrides it
+- `Active Skill` is auto-filled from the assigned agent's bound skills in `arms_engine/agents.yaml`
+- `Done` / `Cancelled` rows are removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`
+- task commands require an initialized workspace, just like the memory workflow
 
 ---
 
@@ -535,6 +574,8 @@ If ARMS finds an older `SESSION.md` task table shape, it upgrades it to the curr
 |---|---|---|---|---|---|
 
 On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound skill in `arms_engine/agents.yaml`, `arms init` backfills the correct skill automatically.
+
+For live task updates after bootstrap, prefer the executable ledger commands: `arms task log`, `arms task update`, and `arms task done`.
 
 ### Startup task seeding
 

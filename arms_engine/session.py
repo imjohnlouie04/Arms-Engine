@@ -15,11 +15,16 @@ from .versioning import resolve_version
 TOKEN_RE = re.compile(r"\S+")
 DEFAULT_TOKEN_BUDGET_WARN_RATIO = 0.9
 SESSION_TOKEN_BUDGET = 1400
+MEMORY_ENTRY_ID_RE = re.compile(r"\[(memory-\d{8}-\d+)\]")
+MEMORY_ENTRY_PREFIX_RE = re.compile(r"^\[(APPROVED|PENDING APPROVAL)\](?:\[(memory-\d{8}-\d+)\])?:\s*")
+MEMORY_APPROVED_MARKER = "[APPROVED]"
+MEMORY_PENDING_MARKER = "[PENDING APPROVAL]"
 
 
 MEMORY_TEMPLATE = """# ARMS Project Memory
 
 > Managed by ARMS Engine. This is a continuous learning file. APPEND only; never overwrite.
+> Use `arms memory draft` to stage lessons for approval, then `arms memory append` to approve them and refresh `SESSION.md`.
 
 ## Project Context & MVP
 ## Primary Use Case & Implications
@@ -510,6 +515,9 @@ def render_compact_skill_roster_with_inactive(task_rows, agent_skill_bindings):
 def normalize_memory_signal(text, limit=180):
     collapsed = " ".join((text or "").split()).strip()
     collapsed = re.sub(r"^[-*]\s*", "", collapsed)
+    if collapsed.startswith(MEMORY_PENDING_MARKER):
+        return ""
+    collapsed = MEMORY_ENTRY_PREFIX_RE.sub("", collapsed).strip()
     if not collapsed or collapsed.lower() in {"none", "n/a", "na", "tbd"}:
         return ""
     if len(collapsed) <= limit:

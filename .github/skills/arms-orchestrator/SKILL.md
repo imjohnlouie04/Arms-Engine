@@ -1,7 +1,7 @@
 ---
 name: arms-orchestrator
 description: >
-  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
+  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'task log', 'task update', 'task done', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
 ---
 
 # ARMS — Architectural Runtime Management System
@@ -304,6 +304,7 @@ Pending → In Progress → Pre-Flight → Done
 
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
 - **Prompt Intake Record:** Every new user prompt after bootstrap must appear in the task table so ARMS preserves a durable work ledger. If the prompt continues an open task, update that row instead of duplicating it. If it introduces a new ask, append a new row before substantive execution starts.
+- **Executable Ledger:** Prefer `arms task log`, `arms task update`, and `arms task done` when mutating `.arms/SESSION.md` directly so task routing, skill autofill, and archival stay consistent with engine rules.
 - **Proper Agent Assignment:** Intake rows must be assigned to the specialist agent that owns the requested work. Do not default new user asks to `arms-main-agent` unless the work is orchestration/meta work.
 - **Default Routing Matrix:** UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`; API, auth, backend services, business logic → `arms-backend-agent`; schema, migrations, database, query tuning → `arms-data-agent`; tests, QA, accessibility validation, pre-flight → `arms-qa-agent`; secrets, OWASP, auth/security audit → `arms-security-agent`; CI/CD, deploy, infra, environments → `arms-devops-agent`; metadata, SEO, Core Web Vitals → `arms-seo-agent`; assets, logo, generated images → `arms-media-agent`; scope, product framing, prioritization → `arms-product-agent`.
 - **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy.
@@ -343,6 +344,11 @@ When a command is triggered, `arms-main-agent` MUST immediately read the corresp
 | `init yolo` | Automated | Full automation. Skip initial plan approval gate. |
 | `init compress`| Efficiency| Scaffold and then run the native ARMS compression pass to shrink session/memory. |
 | `doctor` | Inline | Audit workspace health, context budgets, version diagnostics, ownership safety, and protocol readiness. End with a final triage summary. `doctor --fix` may safely resync engine-owned mirrors first and should report obsolete managed artifacts it removed. |
+| `task log` | Inline | Create or refresh a `.arms/SESSION.md` task row, infer the specialist agent from task text by default, and auto-fill `Active Skill` from bound skills. |
+| `task update` | Inline | Update an existing task row's task text, routing, dependencies, or status in place. |
+| `task done` | Inline | Mark a task row `Done` and archive it immediately into `.arms/SESSION_ARCHIVE.md`. |
+| `memory draft` | Inline | Write a pending approval lesson into `.arms/MEMORY.md`, return a draft ID, and keep it out of `## Memory Signals` until approved. |
+| `memory append` | Inline | Approve a draft ID or direct lesson, persist it as approved in `.arms/MEMORY.md`, and refresh `## Memory Signals` in `.arms/SESSION.md`. |
 | `release check` | Inline | Run the read-only pre-release gate using doctor diagnostics plus a shipping summary for blocking categories, warnings, ready areas, and version snapshot. |
 | `yolo` | Override | Activate Fast-Track Execution for current plan. |
 | `run review` | REVIEW_PROTOCOL.md | Delegate audit to QA, Security, Frontend. → **HALT** |

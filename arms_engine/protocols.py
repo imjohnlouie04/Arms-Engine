@@ -476,11 +476,11 @@ def load_agent_skill_context(arms_root):
     return build_agent_skill_bindings(resolved_agents), {skill["name"]: skill for skill in skill_catalog}
 
 
-def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_EXISTING):
+def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_EXISTING, archive_context="Protocol task refresh"):
     active_rows, archived_rows = split_archivable_rows(active_rows)
     archive_diagnostics = None
     if archived_rows:
-        archive_diagnostics = append_archive_entry(project_root, archived_rows, [], context="Protocol task refresh")
+        archive_diagnostics = append_archive_entry(project_root, archived_rows, [], context=archive_context)
     preamble, sections = load_session_sections(project_root)
     ordered_sections = OrderedDict(sections)
     ordered_sections["Active Tasks"] = render_task_table(active_rows, arms_root)

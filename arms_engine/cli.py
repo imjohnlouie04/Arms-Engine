@@ -14,6 +14,7 @@ from .brand import (
 )
 from .compression import compress_workspace, format_compression_summary, workspace_compression_reasons
 from .doctor import handle_doctor_command, identify_doctor_command
+from .memory import handle_memory_command, identify_memory_command
 from .prompts import (
     build_context_synthesis_data,
     render_startup_tasks_content,
@@ -22,6 +23,7 @@ from .prompts import (
 )
 from .protocols import handle_protocol_command, identify_protocol_command
 from .release import handle_release_validation_command, identify_release_validation_command
+from .tasks import handle_task_command, identify_task_command
 from .session import (
     SessionContextMismatchError,
     bootstrap_runtime_files,
@@ -290,7 +292,7 @@ def main():
         "command",
         nargs="*",
         default=["init"],
-        help="Command to run (e.g., init, init yolo, start, doctor, release check)",
+        help="Command to run (e.g., init, init yolo, start, doctor, memory draft, task log, release check)",
     )
     parser.add_argument("--root", help="Override arms root path")
     parser.add_argument(
@@ -320,6 +322,42 @@ def main():
         action="store_true",
         help="With `arms doctor`, safely resync engine-owned mirrored files before reporting remaining issues.",
     )
+    parser.add_argument(
+        "--section",
+        help="With `arms memory draft` / `arms memory append`, target MEMORY.md section.",
+    )
+    parser.add_argument(
+        "--lesson",
+        help="With `arms memory draft` / `arms memory append`, lesson text to record.",
+    )
+    parser.add_argument(
+        "--draft-id",
+        help="With `arms memory append`, approve an existing pending draft by ID.",
+    )
+    parser.add_argument(
+        "--task",
+        help="With `arms task log` / `arms task update`, task text to record in `.arms/SESSION.md`.",
+    )
+    parser.add_argument(
+        "--task-id",
+        help="With `arms task update` / `arms task done`, target task row number from `.arms/SESSION.md`.",
+    )
+    parser.add_argument(
+        "--assigned-agent",
+        help="With task commands, explicitly assign the row to a specific agent instead of auto-routing it.",
+    )
+    parser.add_argument(
+        "--active-skill",
+        help="With task commands, explicitly set the active skill when it is already bound to the assigned agent.",
+    )
+    parser.add_argument(
+        "--dependencies",
+        help="With task commands, set the Dependencies cell for the task row.",
+    )
+    parser.add_argument(
+        "--status",
+        help="With `arms task log` / `arms task update`, set the task status (for example Pending, In Progress, Blocked, or Done).",
+    )
     parser.add_argument("--version", action="version", version=f"ARMS Engine {__version__}")
     args = parser.parse_args()
 
@@ -344,6 +382,31 @@ def main():
     release_validation_command = identify_release_validation_command(args.command)
     if release_validation_command:
         handle_release_validation_command(project_root, arms_root)
+        return
+    memory_command = identify_memory_command(args.command)
+    if memory_command:
+        handle_memory_command(
+            project_root,
+            arms_root,
+            memory_command,
+            section=args.section or "",
+            lesson=args.lesson or "",
+            draft_id=args.draft_id or "",
+        )
+        return
+    task_command = identify_task_command(args.command)
+    if task_command:
+        handle_task_command(
+            project_root,
+            arms_root,
+            task_command,
+            task=args.task or "",
+            task_id=args.task_id or "",
+            assigned_agent=args.assigned_agent or "",
+            active_skill=args.active_skill or "",
+            dependencies=args.dependencies or "",
+            status=args.status or "",
+        )
         return
     protocol_command = identify_protocol_command(args.command)
     if protocol_command:
