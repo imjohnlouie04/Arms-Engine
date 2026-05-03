@@ -1,4 +1,5 @@
 import os
+import re
 
 from .protocols import (
     KEEP_EXISTING,
@@ -197,6 +198,13 @@ ROUTING_RULES = (
             "server",
         ),
     ),
+)
+ROUTING_RULE_PATTERNS = tuple(
+    (
+        agent_name,
+        tuple(re.compile(r"\b{}\b".format(re.escape(pattern))) for pattern in patterns),
+    )
+    for agent_name, patterns in ROUTING_RULES
 )
 
 
@@ -499,8 +507,8 @@ def finalize_rows(rows, arms_root):
 
 def infer_agent_from_task(task_text):
     normalized = task_text.lower()
-    for agent_name, patterns in ROUTING_RULES:
-        if any(pattern in normalized for pattern in patterns):
+    for agent_name, patterns in ROUTING_RULE_PATTERNS:
+        if any(pattern.search(normalized) for pattern in patterns):
             return agent_name
     return "arms-main-agent"
 

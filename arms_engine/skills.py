@@ -5,8 +5,31 @@ import shutil
 
 try:
     import yaml
-except ImportError:
+except ImportError as import_error:
     yaml = None
+    YAML_IMPORT_ERROR = import_error
+else:
+    YAML_IMPORT_ERROR = None
+
+
+REFERENCE_ONLY_SKILL_DIRS = {
+    "ui-ux-pro-max": ("data",),
+}
+
+
+def require_yaml_dependency():
+    if yaml is None:
+        raise ImportError(
+            "PyYAML is required by arms-engine but could not be imported. "
+            "Reinstall dependencies with `pip install -e .` or `pip install pyyaml`."
+        ) from YAML_IMPORT_ERROR
+    return yaml
+
+
+def build_skill_mirror_ignore(skill_name):
+    ignored_entries = [".DS_Store", "__pycache__"]
+    ignored_entries.extend(REFERENCE_ONLY_SKILL_DIRS.get(skill_name, ()))
+    return shutil.ignore_patterns(*ignored_entries)
 
 
 def remove_obsolete_gemini_skill_artifacts(project_root):
@@ -158,37 +181,17 @@ def parse_skill_metadata(skill_md_path, fallback_name):
             frontmatter_lines.append(line)
         frontmatter = "\n".join(frontmatter_lines)
         if frontmatter.strip():
-            parsed_frontmatter = {}
-            if yaml is not None:
-                try:
-                    parsed_frontmatter = yaml.safe_load(frontmatter) or {}
-                except yaml.YAMLError:
-                    parsed_frontmatter = {}
-            if not isinstance(parsed_frontmatter, dict) or not parsed_frontmatter:
-                idx = 0
-                while idx < len(frontmatter_lines):
-                    line = frontmatter_lines[idx]
-                    if ":" not in line or line.startswith((" ", "\t")):
-                        idx += 1
-                        continue
-                    key, value = line.split(":", 1)
-                    key = key.strip().lower()
-                    value = value.strip()
-                    if value in {">", "|"}:
-                        block_lines = []
-                        idx += 1
-                        while idx < len(frontmatter_lines):
-                            next_line = frontmatter_lines[idx]
-                            if next_line.startswith((" ", "\t")):
-                                block_lines.append(next_line.strip())
-                                idx += 1
-                                continue
-                            break
-                        separator = " " if value == ">" else "\n"
-                        parsed_frontmatter[key] = separator.join(part for part in block_lines if part).strip()
-                        continue
-                    parsed_frontmatter[key] = value.strip('"').strip("'")
-                    idx += 1
+            yaml_module = require_yaml_dependency()
+            try:
+                parsed_frontmatter = yaml_module.safe_load(frontmatter) or {}
+            except yaml_module.YAMLError as error:
+                raise ValueError(
+                    "Invalid YAML frontmatter in `{}`: {}".format(skill_md_path, error)
+                ) from error
+            if not isinstance(parsed_frontmatter, dict):
+                raise ValueError(
+                    "YAML frontmatter in `{}` must parse to a mapping.".format(skill_md_path)
+                )
             if isinstance(parsed_frontmatter, dict):
                 for key, value in parsed_frontmatter.items():
                     normalized_key = str(key).strip().lower()
@@ -259,7 +262,7 @@ def sync_skills_copilot(arms_root, project_root):
                     shutil.copytree(
                         skill_path,
                         dest_dir,
-                        ignore=shutil.ignore_patterns(".DS_Store", "__pycache__"),
+                        ignore=build_skill_mirror_ignore(skill_name),
                     )
 
                     dest_skill_md_path = os.path.join(dest_dir, "SKILL.md")
@@ -446,86 +449,34 @@ def load_agents_registry(arms_root):
     with open(yaml_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
 
-    if yaml is not None:
-        try:
-            parsed = yaml.safe_load(content) or {}
-        except yaml.YAMLError:
-            parsed = {}
-        raw_agents = parsed.get("agents", {})
-        if isinstance(raw_agents, dict):
-            agents = []
-            for agent_name, info in raw_agents.items():
-                if not isinstance(info, dict):
-                    info = {}
-                raw_skills = info.get("skills") or []
-                if not isinstance(raw_skills, list):
-                    raw_skills = []
-                agents.append(
-                    {
-                        "name": str(agent_name).strip(),
-                        "role": str(info.get("role", "")).strip(),
-                        "scope": str(info.get("scope", "")).strip(),
-                        "skills": [str(skill).strip() for skill in raw_skills if str(skill).strip()],
-                        "rules": str(info.get("rules", "")).strip(),
-                    }
-                )
-            return agents
+    yaml_module = require_yaml_dependency()
+    try:
+        parsed = yaml_module.safe_load(content) or {}
+    except yaml_module.YAMLError as error:
+        raise ValueError("Invalid YAML in `{}`: {}".format(yaml_path, error)) from error
+    if not isinstance(parsed, dict):
+        raise ValueError("Top-level YAML in `{}` must parse to a mapping.".format(yaml_path))
+
+    raw_agents = parsed.get("agents", {})
+    if not isinstance(raw_agents, dict):
+        return []
 
     agents = []
-    current_agent = None
-    in_skills = False
-
-    for line in content.splitlines():
-        agent_match = re.match(r"^\s\s([\w-]+):", line)
-        if agent_match:
-            if current_agent:
-                agents.append(current_agent)
-            current_agent = {
-                "name": agent_match.group(1),
-                "role": "",
-                "scope": "",
-                "skills": [],
-                "rules": "",
+    for agent_name, info in raw_agents.items():
+        if not isinstance(info, dict):
+            info = {}
+        raw_skills = info.get("skills") or []
+        if not isinstance(raw_skills, list):
+            raw_skills = []
+        agents.append(
+            {
+                "name": str(agent_name).strip(),
+                "role": str(info.get("role", "")).strip(),
+                "scope": str(info.get("scope", "")).strip(),
+                "skills": [str(skill).strip() for skill in raw_skills if str(skill).strip()],
+                "rules": str(info.get("rules", "")).strip(),
             }
-            in_skills = False
-            continue
-
-        if not current_agent:
-            continue
-
-        role_match = re.match(r"^\s\s\s\srole:\s*(.*)$", line)
-        if role_match:
-            current_agent["role"] = role_match.group(1).strip()
-            in_skills = False
-            continue
-
-        scope_match = re.match(r"^\s\s\s\sscope:\s*(.*)$", line)
-        if scope_match:
-            current_agent["scope"] = scope_match.group(1).strip()
-            in_skills = False
-            continue
-
-        rules_match = re.match(r"^\s\s\s\srules:\s*(.*)$", line)
-        if rules_match:
-            current_agent["rules"] = rules_match.group(1).strip().strip("'\"")
-            in_skills = False
-            continue
-
-        if re.match(r"^\s\s\s\sskills:\s*$", line):
-            in_skills = True
-            continue
-
-        if in_skills:
-            skill_match = re.match(r"^\s{6}-\s*(.+?)\s*$", line)
-            if skill_match:
-                current_agent["skills"].append(skill_match.group(1).strip().strip("'\""))
-                continue
-            if line.strip() and not line.strip().startswith("-"):
-                in_skills = False
-
-    if current_agent:
-        agents.append(current_agent)
-
+        )
     return agents
 
 

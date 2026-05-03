@@ -57,6 +57,7 @@ SOURCE_FILE_EXTENSIONS = {
     ".scala",
     ".sh",
 }
+PROJECT_SIGNAL_FILE_CHAR_CAP = 12000
 PLACEHOLDER_BRAND_TOKENS = (
     "[Name]",
     "[Purpose]",
@@ -360,8 +361,26 @@ STACK_RECOMMENDATIONS = {
 def read_text_file(path, max_chars=40000):
     if not os.path.exists(path):
         return ""
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        return f.read(max_chars)
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read(max_chars)
+    except OSError:
+        return ""
+
+
+def read_project_signal_file(path, max_chars=PROJECT_SIGNAL_FILE_CHAR_CAP):
+    if not os.path.exists(path):
+        return "", "missing"
+    try:
+        if os.path.getsize(path) > max_chars:
+            return "", "too_large"
+    except OSError:
+        return "", "unreadable"
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read(max_chars), "ok"
+    except OSError:
+        return "", "unreadable"
 
 
 def is_new_project_brand_questionnaire(content):
@@ -1020,11 +1039,11 @@ def infer_brand_context_from_project(project_root):
     has_project_scripts = False
 
     package_json_path = os.path.join(project_root, "package.json")
-    if os.path.exists(package_json_path):
+    package_json_content, package_json_state = read_project_signal_file(package_json_path)
+    if package_json_state == "ok":
         evidence.append("package.json")
         try:
-            with open(package_json_path, "r", encoding="utf-8") as f:
-                package_data = json.load(f)
+            package_data = json.loads(package_json_content)
             package_name = str(package_data.get("name", "")).strip()
             description = str(package_data.get("description", "")).strip()
             keywords = [str(keyword).strip() for keyword in package_data.get("keywords", []) if str(keyword).strip()]
@@ -1045,12 +1064,16 @@ def infer_brand_context_from_project(project_root):
                 frameworks.append("Express")
             if "@nestjs/core" in deps:
                 frameworks.append("Nest")
-        except (json.JSONDecodeError, OSError):
-            evidence.append("package.json (unparsed)")
+        except json.JSONDecodeError:
+            evidence[-1] = "package.json (unparsed)"
+    elif package_json_state == "too_large":
+        evidence.append("package.json (skipped: too large)")
+    elif package_json_state == "unreadable":
+        evidence.append("package.json (unreadable)")
 
     pyproject_path = os.path.join(project_root, "pyproject.toml")
-    pyproject_content = read_text_file(pyproject_path)
-    if pyproject_content:
+    pyproject_content, pyproject_state = read_project_signal_file(pyproject_path)
+    if pyproject_state == "ok" and pyproject_content:
         evidence.append("pyproject.toml")
         pyproject_metadata = parse_pyproject_metadata(pyproject_content)
         package_name = package_name or pyproject_metadata["name"]
@@ -1065,10 +1088,14 @@ def infer_brand_context_from_project(project_root):
             frameworks.append("Django")
         if "typer" in lowered or "click" in lowered:
             frameworks.append("Python CLI")
+    elif pyproject_state == "too_large":
+        evidence.append("pyproject.toml (skipped: too large)")
+    elif pyproject_state == "unreadable":
+        evidence.append("pyproject.toml (unreadable)")
 
     cargo_toml_path = os.path.join(project_root, "Cargo.toml")
-    cargo_content = read_text_file(cargo_toml_path)
-    if cargo_content:
+    cargo_content, cargo_state = read_project_signal_file(cargo_toml_path)
+    if cargo_state == "ok" and cargo_content:
         evidence.append("Cargo.toml")
         cargo_name_match = re.search(r'(?m)^name\s*=\s*"([^"]+)"', cargo_content)
         cargo_description_match = re.search(r'(?m)^description\s*=\s*"([^"]+)"', cargo_content)
@@ -1077,22 +1104,34 @@ def infer_brand_context_from_project(project_root):
         if cargo_description_match and not description:
             description = cargo_description_match.group(1).strip()
         frameworks.append("Rust")
+    elif cargo_state == "too_large":
+        evidence.append("Cargo.toml (skipped: too large)")
+    elif cargo_state == "unreadable":
+        evidence.append("Cargo.toml (unreadable)")
 
     go_mod_path = os.path.join(project_root, "go.mod")
-    go_mod_content = read_text_file(go_mod_path)
-    if go_mod_content:
+    go_mod_content, go_mod_state = read_project_signal_file(go_mod_path)
+    if go_mod_state == "ok" and go_mod_content:
         evidence.append("go.mod")
         module_match = re.search(r"(?m)^module\s+(.+)$", go_mod_content)
         if module_match and not package_name:
             package_name = module_match.group(1).strip().split("/")[-1]
         frameworks.append("Go")
+    elif go_mod_state == "too_large":
+        evidence.append("go.mod (skipped: too large)")
+    elif go_mod_state == "unreadable":
+        evidence.append("go.mod (unreadable)")
 
     readme_path = os.path.join(project_root, "README.md")
-    readme_content = read_text_file(readme_path)
+    readme_content, readme_state = read_project_signal_file(readme_path)
     readme_summary = ""
-    if readme_content:
+    if readme_state == "ok" and readme_content:
         evidence.append("README.md")
         readme_summary = extract_first_meaningful_paragraph(readme_content)
+    elif readme_state == "too_large":
+        evidence.append("README.md (skipped: too large)")
+    elif readme_state == "unreadable":
+        evidence.append("README.md (unreadable)")
 
     project_instruction_summary = ""
     project_instruction_candidates = (
@@ -1104,11 +1143,16 @@ def infer_brand_context_from_project(project_root):
     )
     for gemini_filename in project_instruction_candidates:
         gemini_path = os.path.join(project_root, gemini_filename)
-        gemini_content = read_text_file(gemini_path)
-        if gemini_content:
+        gemini_content, gemini_state = read_project_signal_file(gemini_path)
+        if gemini_state == "ok" and gemini_content:
             evidence.append(gemini_filename)
             project_instruction_summary = extract_first_meaningful_paragraph(gemini_content)
             break
+        if gemini_state == "too_large":
+            evidence.append(f"{gemini_filename} (skipped: too large)")
+            continue
+        if gemini_state == "unreadable":
+            evidence.append(f"{gemini_filename} (unreadable)")
 
     if os.path.isdir(os.path.join(project_root, "src")):
         evidence.append("src/")

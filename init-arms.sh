@@ -15,14 +15,25 @@ cd "$ARMS_ROOT" || exit 1
 ARMS_ROOT=$PWD
 cd "$CALLER_PWD" || exit 1
 
-# Check if python3 is available
-if command -v python3 >/dev/null 2>&1; then
+# Prefer an explicitly provided interpreter, then an active/adjacent venv, then system python3.
+PYTHON_BIN=${ARMS_PYTHON:-}
+if [ -z "$PYTHON_BIN" ] && [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+    PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+fi
+if [ -z "$PYTHON_BIN" ] && [ -x "$ARMS_ROOT/venv/bin/python" ]; then
+    PYTHON_BIN="$ARMS_ROOT/venv/bin/python"
+fi
+if [ -z "$PYTHON_BIN" ] && command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+fi
+
+if [ -n "$PYTHON_BIN" ]; then
     if [ -n "${PYTHONPATH:-}" ]; then
         export PYTHONPATH="$ARMS_ROOT:$PYTHONPATH"
     else
         export PYTHONPATH="$ARMS_ROOT"
     fi
-    exec python3 -m arms_engine.init_arms "$@"
+    exec "$PYTHON_BIN" -m arms_engine.init_arms "$@"
 else
     echo "⚠️ Python 3 not found. Falling back to legacy shell initialization..."
     # Legacy logic (simplified or preserved)

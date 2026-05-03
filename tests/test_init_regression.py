@@ -15,6 +15,7 @@ from arms_engine import init_arms
 from arms_engine import cli as cli_module
 from arms_engine import prompts as prompts_module
 from arms_engine import session as session_module
+from arms_engine import skills as skills_module
 from arms_engine import versioning as versioning_module
 
 
@@ -206,6 +207,10 @@ class InitRegressionTests(unittest.TestCase):
             )
             self.assertIn("Initializing ARMS Engine", result.stdout)
             self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
+
+    def test_init_arms_shim_uses_explicit_imports(self):
+        shim = (ARMS_ROOT / "init_arms.py").read_text(encoding="utf-8")
+        self.assertNotIn("import *", shim)
 
     def test_init_monitor_opens_browser_and_writes_complete_hud(self):
         with TemporaryDirectory() as tmp:
@@ -653,6 +658,7 @@ Generated: 2026-05-03T00:00:00Z
                 mirror_root = project_root / relative_root
                 mirrored_skills = {path.name for path in mirror_root.iterdir() if path.is_dir()}
                 self.assertEqual(mirrored_skills, expected_skills)
+                self.assertFalse((mirror_root / "ui-ux-pro-max" / "data").exists())
             for relative_file in (
                 ".agents/skills.yaml",
                 ".agents/skills-index.md",
@@ -743,6 +749,77 @@ Generated: 2026-05-03T00:00:00Z
 
             self.assertEqual(inferred, [])
             self.assertNotIn("platform-ops", bindings["arms-devops-agent"])
+
+    def test_parse_skill_metadata_requires_pyyaml(self):
+        with TemporaryDirectory() as tmp:
+            skill_md = Path(tmp) / "SKILL.md"
+            skill_md.write_text(
+                "---\nname: demo\ndescription: Example skill.\n---\n\n# Demo\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(skills_module, "yaml", None), mock.patch.object(
+                skills_module,
+                "YAML_IMPORT_ERROR",
+                ImportError("No module named yaml"),
+            ):
+                with self.assertRaisesRegex(ImportError, "PyYAML is required by arms-engine"):
+                    skills_module.parse_skill_metadata(str(skill_md), "demo")
+
+    def test_load_agents_registry_requires_pyyaml(self):
+        with TemporaryDirectory() as tmp:
+            engine_root = Path(tmp)
+            (engine_root / "agents.yaml").write_text(
+                "agents:\n  demo-agent:\n    role: Demo\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(skills_module, "yaml", None), mock.patch.object(
+                skills_module,
+                "YAML_IMPORT_ERROR",
+                ImportError("No module named yaml"),
+            ):
+                with self.assertRaisesRegex(ImportError, "PyYAML is required by arms-engine"):
+                    skills_module.load_agents_registry(str(engine_root))
+
+    def test_infer_brand_context_skips_oversized_readme_in_favor_of_other_project_signals(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("A" * 20000, encoding="utf-8")
+            (project_root / ".github").mkdir()
+            (project_root / ".github" / "copilot-instructions.md").write_text(
+                "# Notes\nThis platform schedules field inspections for distributed teams.\n",
+                encoding="utf-8",
+            )
+
+            inferred = init_arms.infer_brand_context_from_project(str(project_root))
+
+            self.assertEqual(
+                inferred["mission"],
+                "This platform schedules field inspections for distributed teams.",
+            )
+
+    def test_infer_brand_context_skips_unreadable_project_signals_gracefully(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                "[project]\nname = 'ops-hub'\ndescription = 'Coordinate field service dispatch.'\n",
+                encoding="utf-8",
+            )
+            (project_root / "README.md").write_text("# Demo\nIgnored\n", encoding="utf-8")
+
+            original_getsize = os.path.getsize
+            with mock.patch("arms_engine.brand.os.path.getsize") as mocked_getsize:
+                def side_effect(path):
+                    if str(path).endswith("README.md"):
+                        raise OSError("boom")
+                    return original_getsize(path)
+
+                mocked_getsize.side_effect = side_effect
+                inferred = init_arms.infer_brand_context_from_project(str(project_root))
+
+            self.assertEqual(inferred["project_name"], "ops-hub")
+            self.assertEqual(inferred["mission"], "Coordinate field service dispatch.")
 
     def test_run_init_once_restores_engine_version_in_session(self):
         with TemporaryDirectory() as tmp:

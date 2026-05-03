@@ -168,6 +168,12 @@ class TaskCommandTests(unittest.TestCase):
             self.assertIn("### Context: Task command: complete row", archive_content)
             self.assertIn("## Archive Diagnostics", done_output)
 
+    def test_task_routing_uses_word_boundaries_for_keyword_matches(self):
+        self.assertEqual(init_arms.infer_agent_from_task("Add API endpoint for auth"), "arms-backend-agent")
+        self.assertEqual(init_arms.infer_agent_from_task("Add QA regression coverage"), "arms-qa-agent")
+        self.assertEqual(init_arms.infer_agent_from_task("Review capital allocation memo"), "arms-main-agent")
+        self.assertEqual(init_arms.infer_agent_from_task("Document attestation flow"), "arms-main-agent")
+
 
 if __name__ == "__main__":
     unittest.main()
