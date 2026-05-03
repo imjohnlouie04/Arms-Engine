@@ -500,7 +500,7 @@ def main():
     if args.monitor:
         monitor = InitActivityMonitor(project_root)
         monitor.launch()
-        print(f"🖥️  Activity monitor: {monitor.report_uri()}")
+        print(f"🖥️  Activity monitor: {monitor.launch_description()}")
 
     while True:
         try:

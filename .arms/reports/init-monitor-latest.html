@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARMS Init Activity Monitor</title>
+  
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 23, 42, 0.88);
+      --border: rgba(148, 163, 184, 0.18);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 25%),
+        var(--bg);
+      color: var(--text);
+    }
+    .shell {
+      width: min(1100px, calc(100vw - 32px));
+      margin: 24px auto;
+      display: grid;
+      gap: 16px;
+    }
+    .hero {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .panel {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.35);
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      color: var(--text);
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+    .status-pill::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 16px var(--accent);
+    }
+    h1, h2, h3, p { margin: 0; }
+    .headline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .headline p {
+      color: var(--muted);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .stats {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 18px;
+    }
+    .stat {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.56);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .stat label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .stat strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .steps {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .step-card {
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.58);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .step-header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: start;
+    }
+    .step-index {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .step-header h3 {
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .step-header p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: white;
+    }
+    .step-details {
+      margin-top: 12px;
+      color: #fecaca;
+      line-height: 1.5;
+    }
+    .empty-state {
+      padding: 24px;
+      border-radius: 16px;
+      border: 1px dashed rgba(148, 163, 184, 0.24);
+      color: var(--muted);
+    }
+    .empty-state p {
+      margin-top: 8px;
+    }
+    .error-panel pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #fecaca;
+      font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, monospace;
+    }
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 16px, 1100px);
+        margin: 12px auto;
+      }
+      .panel {
+        padding: 16px;
+      }
+      .step-header {
+        grid-template-columns: 1fr;
+      }
+      .step-index {
+        width: 34px;
+        height: 34px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel">
+      <div class="headline">
+        <div>
+          <div class="status-pill">Complete</div>
+          <h1 style="margin-top:12px;">ARMS Init Activity Monitor</h1>
+          <p>ARMS Engine sequence complete.</p>
+        </div>
+        <div class="stat">
+          <label>Report File</label>
+          <strong>/Users/johnlouiebinas/Documents/Project/Arms-Engine/.arms/reports/init-monitor-latest.html</strong>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <label>Project Root</label>
+          <strong>/Users/johnlouiebinas/Documents/Project/Arms-Engine</strong>
+        </div>
+        <div class="stat">
+          <label>ARMS Root</label>
+          <strong>/tmp/arms-engine-monitor-repro-fixed</strong>
+        </div>
+        <div class="stat">
+          <label>Command</label>
+          <strong>init</strong>
+        </div>
+        <div class="stat">
+          <label>Mode</label>
+          <strong>Standard</strong>
+        </div>
+        <div class="stat">
+          <label>Engine Version</label>
+          <strong>1.7.4+dirty</strong>
+        </div>
+        <div class="stat">
+          <label>Updated</label>
+          <strong>2026-05-03 03:47:24</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Step Timeline</h2>
+      <div class="steps">
+        
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">01</span>
+                        <div>
+                          <h3>Setup workspace folders</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">02</span>
+                        <div>
+                          <h3>Migrate legacy workspace state</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">03</span>
+                        <div>
+                          <h3>Validate engine version</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">04</span>
+                        <div>
+                          <h3>Bootstrap runtime files</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">05</span>
+                        <div>
+                          <h3>Sync agents, skills, and workflow</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">06</span>
+                        <div>
+                          <h3>Refresh brand context</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">07</span>
+                        <div>
+                          <h3>Generate context outputs</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">08</span>
+                        <div>
+                          <h3>Refresh session state</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+                    <div class="step-card">
+                      <div class="step-header">
+                        <span class="step-index">09</span>
+                        <div>
+                          <h3>Sync managed instructions</h3>
+                          <p>2026-05-03 03:47:24 - 0.0s</p>
+                        </div>
+                        <span class="badge" style="background:#16a34a;">Done</span>
+                      </div>
+                      
+                    </div>
+                    
+      </div>
+    </section>
+
+    
+  </main>
+</body>
+</html>

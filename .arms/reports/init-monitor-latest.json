@@ -1,0 +1,88 @@
+{
+  "project_root": "/Users/johnlouiebinas/Documents/Project/Arms-Engine",
+  "report_path": "/Users/johnlouiebinas/Documents/Project/Arms-Engine/.arms/reports/init-monitor-latest.html",
+  "snapshot_path": "/Users/johnlouiebinas/Documents/Project/Arms-Engine/.arms/reports/init-monitor-latest.json",
+  "viewer_script_path": "/Users/johnlouiebinas/Documents/Project/Arms-Engine/.arms/reports/init-monitor-viewer.py",
+  "command": "init",
+  "arms_root": "/tmp/arms-engine-monitor-repro-cli",
+  "is_yolo": false,
+  "status": "complete",
+  "summary": "ARMS Engine sequence complete.",
+  "updated_at": "2026-05-03 03:45:14",
+  "engine_version": "1.7.5.dev0+g5fce88c5a.d20260502",
+  "error_message": "",
+  "steps": [
+    {
+      "index": 1,
+      "label": "Setup workspace folders",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 2,
+      "label": "Migrate legacy workspace state",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 3,
+      "label": "Validate engine version",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 4,
+      "label": "Bootstrap runtime files",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 5,
+      "label": "Sync agents, skills, and workflow",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 6,
+      "label": "Refresh brand context",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 7,
+      "label": "Generate context outputs",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 8,
+      "label": "Refresh session state",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    },
+    {
+      "index": 9,
+      "label": "Sync managed instructions",
+      "status": "done",
+      "started_at": "2026-05-03 03:45:14",
+      "duration": "0.0s",
+      "details": ""
+    }
+  ]
+}
