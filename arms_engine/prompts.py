@@ -496,6 +496,7 @@ def render_generated_prompts(project_root):
             "- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n"
             "- These prompts stay intentionally thin so the synthesis file remains the single dense context source.\n"
             "- Use the listed specialist agent for each prompt.\n"
+            "- If the user is already replying inside one of these generated/custom specialist prompts, treat clarifying questions and issue follow-ups as continuation of that active task unless they introduce a net-new ask.\n"
             "- Do not run specialist implementation prompts with `arms-main-agent`; keep `arms-main-agent` for orchestration only."
         ),
         render_agent_prompt_section("Orchestrator Prompt", "arms-main-agent", master_prompt, "arms-orchestrator"),
@@ -583,6 +584,7 @@ def render_generated_prompts(project_root):
         Read `.arms/CONTEXT_SYNTHESIS.md`.
         Prepare the pre-flight validation plan for {data['project_name']}.
         Validate the primary {data['build_surface']} and core flows tied to {data['core_features']}; {qa_action}.
+        Prefer Cypress for browser E2E. Escalate to Playwright only if the project is already configured for it or the flow explicitly needs cross-browser, multi-tab, multi-origin, or OAuth coverage.
         """
     ).strip()
 

@@ -218,20 +218,96 @@ description = "Automate operational approvals and audit workflows."
                 encoding="utf-8",
             )
 
-            with mock.patch("arms_engine.monitor.webbrowser.open") as open_browser:
+            with mock.patch("arms_engine.monitor.sys.platform", "darwin"), mock.patch(
+                "arms_engine.monitor.launch_terminal_viewer",
+                return_value=False,
+            ) as open_terminal, mock.patch("arms_engine.monitor.webbrowser.open") as open_browser:
                 output = self.invoke_cli(project_root, "init", "yolo", "--monitor", "--root", str(ARMS_ROOT))
 
             hud_path = project_root / ".arms" / "reports" / "init-monitor-latest.html"
+            viewer_path = project_root / ".arms" / "reports" / "init-monitor-viewer.py"
             hud = hud_path.read_text(encoding="utf-8")
 
+            open_terminal.assert_called_once()
             open_browser.assert_called_once()
             self.assertIn("Activity monitor:", output)
             self.assertTrue(hud_path.exists())
+            self.assertTrue(viewer_path.exists())
             self.assertIn("ARMS Init Activity Monitor", hud)
             self.assertIn("Complete", hud)
             self.assertIn("Setup workspace folders", hud)
             self.assertIn("Sync agents, skills, and workflow", hud)
             self.assertIn("ARMS Engine ready. Fleet mode activated.", hud)
+
+    def test_init_monitor_prefers_terminal_hud_on_macos(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "pyproject.toml").write_text(
+                """[project]
+name = "orbitops"
+description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+
+            with mock.patch("arms_engine.monitor.sys.platform", "darwin"), mock.patch(
+                "arms_engine.monitor.launch_terminal_viewer",
+                return_value=True,
+            ) as open_terminal, mock.patch("arms_engine.monitor.webbrowser.open") as open_browser:
+                output = self.invoke_cli(project_root, "init", "yolo", "--monitor", "--root", str(ARMS_ROOT))
+
+            open_terminal.assert_called_once()
+            open_browser.assert_not_called()
+            self.assertIn("terminal HUD", output)
+            viewer_path, snapshot_path = open_terminal.call_args[0]
+            self.assertTrue(str(viewer_path).endswith("init-monitor-viewer.py"))
+            self.assertTrue(str(snapshot_path).endswith("init-monitor-latest.json"))
+
+    def test_terminal_dashboard_includes_live_workspace_health(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            reports_dir = arms_dir / "reports"
+            reports_dir.mkdir(parents=True)
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: 2026-05-03T00:00:00Z
+
+## Environment
+- ARMS Root: /tmp/arms-engine
+- Engine Version: 1.7.4+dirty
+- Project Root: /tmp/demo
+- Project Name: demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Ship live task monitor | arms-main-agent | arms-orchestrator | — | In Progress |
+| 2 | Review blocker behavior | arms-qa-agent | qa-automation-testing | #1 | Blocked |
+
+## Completed Tasks
+- None
+
+## Blockers
+- Waiting on QA sign-off
+""",
+                encoding="utf-8",
+            )
+            (arms_dir / "BRAND.md").write_text("Project Name: Demo\nMission: Test monitor\n", encoding="utf-8")
+            (arms_dir / "CONTEXT_SYNTHESIS.md").write_text("ready\n", encoding="utf-8")
+            (arms_dir / "GENERATED_PROMPTS.md").write_text("ready\n", encoding="utf-8")
+            (arms_dir / "MEMORY.md").write_text("# Memory\n", encoding="utf-8")
+
+            monitor = init_arms.InitActivityMonitor(str(project_root))
+            monitor.prepare()
+            dashboard = init_arms.render_terminal_dashboard(monitor._snapshot_payload(), width=120)
+
+            self.assertIn("Workspace", dashboard)
+            self.assertIn("Parallel", dashboard)
+            self.assertIn("Waiting on QA sign-off", dashboard)
+            self.assertIn("Ship live task monitor", dashboard)
 
     def test_init_arms_shell_script_preserves_pythonpath_and_runs_init(self):
         with TemporaryDirectory() as tmp:
@@ -280,6 +356,10 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("Initializing ARMS Engine", result.stdout)
             self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
 
+    def test_init_arms_shell_script_avoids_command_substitution(self):
+        script = (REPO_ROOT / "init-arms.sh").read_text(encoding="utf-8")
+        self.assertNotIn("$(", script)
+
     def test_init_syncs_memory_approval_gate_into_gemini_agent_and_engine_instructions(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
@@ -294,9 +374,11 @@ description = "Automate operational approvals and audit workflows."
 
             self.assertIn("Must ask for explicit user approval before updating `.arms/MEMORY.md`.", gemini_agent)
             self.assertIn("Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work", gemini_agent)
-            self.assertIn("Every new user prompt must create or update a row in `.arms/SESSION.md`", gemini_agent)
+            self.assertIn("Only prompts that start or materially change durable work should create or update a row in `.arms/SESSION.md`", gemini_agent)
+            self.assertIn("First check whether the message belongs to an existing custom prompt / generated specialist prompt", gemini_agent)
             self.assertIn("Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly.", engine_instructions)
-            self.assertIn("Every new user prompt after bootstrap must be reflected in the task table", engine_instructions)
+            self.assertIn("Every new user prompt after bootstrap that starts or materially changes durable work must be reflected in the task table", engine_instructions)
+            self.assertIn("First check whether the message is inside an existing custom prompt / generated specialist prompt", engine_instructions)
             self.assertIn("UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`", engine_instructions)
             self.assertIn("Ask the user for approval before updating `.arms/MEMORY.md`", rules)
             self.assertIn("Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before any task work.", rules)
@@ -1151,6 +1233,8 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("**Assigned Agent:** `arms-main-agent`", prompts)
             self.assertIn("**Assigned Agent:** `arms-frontend-agent`", prompts)
             self.assertIn("**Active Skill:** `ui-ux-pro-max`", prompts)
+            self.assertIn("treat clarifying questions and issue follow-ups as continuation of that active task", prompts)
+            self.assertIn("Prefer Cypress for browser E2E. Escalate to Playwright only if the project is already configured for it", prompts)
             self.assertIn("Do not run specialist implementation prompts with `arms-main-agent`", prompts)
             self.assertEqual(
                 session_module.assess_token_budget(

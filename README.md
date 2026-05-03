@@ -548,7 +548,7 @@ Once `.arms/BRAND.md` is complete enough to be actionable, ARMS generates:
 - optional data / backend / security prompts when backend foundation work is needed
 - optional media and SEO/content prompts when the project mode and surface call for them
 
-The prompt file is intentionally **thin**: it references `.arms/CONTEXT_SYNTHESIS.md` instead of repeating the full project brief in every prompt block.
+The prompt file is intentionally **thin**: it references `.arms/CONTEXT_SYNTHESIS.md` instead of repeating the full project brief in every prompt block. It also reminds agents to treat clarifying replies and issue follow-ups inside an active generated/custom prompt as continuation of the same task unless the user introduces a net-new ask.
 
 If the brand brief becomes incomplete again, ARMS removes stale generated prompts rather than leaving outdated prompt output behind.
 
