@@ -8,6 +8,7 @@ import tempfile
 from collections import OrderedDict
 
 from . import __version__
+from .bm25 import score_tokens as _bm25_score_tokens
 from .brand import infer_brand_context_from_project
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
 from .paths import WorkspacePaths
@@ -287,28 +288,7 @@ def is_missing_active_skill(value):
 
 
 def score_task_skill_match(task_text, skill):
-    task = task_text.lower()
-    skill_name = skill["name"].lower()
-    description = skill["description"].lower()
-    score = 0
-
-    if skill_name in task:
-        score += 8
-
-    task_tokens = {token for token in re.findall(r"[a-z0-9]+", task) if len(token) >= 3}
-    skill_name_tokens = {token for token in re.findall(r"[a-z0-9]+", skill_name) if len(token) >= 3}
-    skill_tokens = {token for token in re.findall(r"[a-z0-9]+", f"{skill_name} {description}") if len(token) >= 4}
-
-    score += 4 * len(task_tokens & skill_name_tokens)
-    score += len(task_tokens & skill_tokens)
-
-    for task_token in task_tokens:
-        for skill_token in skill_name_tokens:
-            shared_prefix_length = len(os.path.commonprefix([task_token, skill_token]))
-            if shared_prefix_length >= 5:
-                score += 6
-                break
-    return score
+    return _bm25_score_tokens(task_text, skill["name"], skill.get("description", ""))
 
 
 def choose_task_active_skill(task_text, assigned_agent, current_skill, agent_skill_bindings, skill_catalog_by_name):

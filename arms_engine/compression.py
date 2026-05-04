@@ -19,6 +19,7 @@ from .session import (
     write_markdown_sections,
     write_text_atomic,
 )
+from .tables import parse_task_rows
 
 
 TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
@@ -513,31 +514,6 @@ def format_archive_diagnostics_lines(diagnostics):
     if history_summary_path:
         lines.append("History summary write: `{}`.".format(history_summary_path))
     return lines
-
-
-def parse_task_rows(content):
-    rows = []
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not (line.startswith("|") and line.endswith("|")):
-            continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
-            continue
-        first_cell = cells[0].replace(" ", "")
-        if cells[0] == "#" or set(first_cell) <= {"-"}:
-            continue
-        rows.append(
-            {
-                "#": cells[0],
-                "Task": cells[1],
-                "Assigned Agent": cells[2],
-                "Active Skill": cells[3],
-                "Dependencies": cells[4],
-                "Status": cells[5],
-            }
-        )
-    return rows
 
 
 def render_task_table(rows):

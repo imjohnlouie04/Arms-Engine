@@ -17,7 +17,7 @@ def _int_env(name: str, default: int) -> int:
 
 # ── SESSION.md token budget ──────────────────────────────────────────────────
 # Arms doctor warns when SESSION.md exceeds this many estimated tokens.
-SESSION_TOKEN_BUDGET: int = _int_env("ARMS_SESSION_TOKEN_BUDGET", 1400)
+SESSION_TOKEN_BUDGET: int = _int_env("ARMS_SESSION_TOKEN_BUDGET", 2000)
 
 # Ratio of budget at which the "approaching limit" warning fires (0–1).
 DEFAULT_TOKEN_BUDGET_WARN_RATIO: float = 0.9

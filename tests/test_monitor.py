@@ -107,5 +107,27 @@ class SummarizeExceptionTests(unittest.TestCase):
         self.assertIn("test error", result)
 
 
+class ViewerScriptExtractionTests(unittest.TestCase):
+    def test_load_viewer_script_template_returns_string(self):
+        from arms_engine.monitor import _load_viewer_script_template
+        content = _load_viewer_script_template()
+        self.assertIsInstance(content, str)
+        self.assertGreater(len(content), 100)
+
+    def test_viewer_script_is_valid_python(self):
+        from arms_engine.monitor import _load_viewer_script_template
+        import ast
+        content = _load_viewer_script_template()
+        # Should parse without SyntaxError
+        tree = ast.parse(content)
+        self.assertIsNotNone(tree)
+
+    def test_viewer_script_has_main_entrypoint(self):
+        from arms_engine.monitor import _load_viewer_script_template
+        content = _load_viewer_script_template()
+        self.assertIn("def main()", content)
+        self.assertIn('if __name__ == "__main__"', content)
+
+
 if __name__ == "__main__":
     unittest.main()

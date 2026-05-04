@@ -20,6 +20,7 @@ from .session import (
     write_text_atomic,
 )
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
+from .tables import parse_task_rows
 
 
 TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
@@ -422,31 +423,6 @@ def render_task_table(rows, arms_root):
         agent_skill_bindings=agent_skill_bindings,
         skill_catalog_by_name=skill_catalog_by_name,
     )
-
-
-def parse_task_rows(content):
-    rows = []
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not (line.startswith("|") and line.endswith("|")):
-            continue
-        cells = [cell.strip().replace("&#124;", "|") for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
-            continue
-        first_cell = cells[0].replace(" ", "")
-        if cells[0] == "#" or set(first_cell) <= {"-"}:
-            continue
-        rows.append(
-            {
-                "#": cells[0],
-                "Task": cells[1],
-                "Assigned Agent": cells[2],
-                "Active Skill": cells[3],
-                "Dependencies": cells[4],
-                "Status": cells[5],
-            }
-        )
-    return rows
 
 
 def infer_current_phase(active_rows):
