@@ -1,368 +1,188 @@
 # Copilot Instructions for Arms-Engine
 
-> **Source of Truth:** `.github/copilot-instructions.md` is derived from `arms_engine/skills/arms-orchestrator/SKILL.md`, which is the authoritative specification for ARMS. If this document and SKILL.md diverge, **SKILL.md is correct**. Refer to the full skill document for authoritative protocol details.
+> **Source of Truth:** `arms_engine/skills/arms-orchestrator/SKILL.md` is the authoritative specification for ARMS protocols. If this file and SKILL.md diverge, **SKILL.md is correct**.
 
 ## Build, Test & Lint
 
-### Development Installation
 ```bash
-# Install from current directory in editable mode
+# Development install
 pip install -e .
 
-# Or use pipx for global installation
-pipx install git+https://github.com/imjohnlouie04/Arms-Engine.git
-```
+# Full regression suite
+python -m unittest discover -s tests -p "test_*.py"
 
-### Available Commands
-- **`arms`** – Main orchestration CLI (entry point: `arms_engine.init_arms:main`)
-- **`arms-docs`** – Auto-update README.md agent roster from agents.yaml (entry point: `arms_engine.update_docs:main`)
+# Single test file
+python -m unittest tests.test_init_regression
 
-### Build & Packaging
-```bash
+# Single test case
+python -m unittest tests.test_init_regression.InitRegressionTests.test_sync_engine_instructions_preserves_root_gemini
+
 # Build distribution packages
 python -m build
-
-# Dynamic versioning via git tags (setuptools-scm)
-# Tags are automatically synced to _version.py
-git tag v1.1.0 && git push origin v1.1.0
 ```
 
-### Testing & Validation
-- Minimal regression suite: `python -m unittest discover -s tests -p "test_*.py"`
-- Validate `arms init` changes with the regression suite first, then use a real temp project for manual confirmation when behavior spans multiple CLI surfaces
+No lint configuration — follow PEP 8.
 
-### Linting
-- **No lint configuration** – use Python conventions (PEP 8)
+After changing `arms init` behavior, run the regression suite first, then manually test with a real temp project when behavior spans multiple CLI surfaces.
 
 ---
 
-## Architecture Overview
+## Architecture
 
-### Hub and Spoke Model
-ARMS operates with a strict separation of global engine logic from project-specific state:
+### Hub-and-Spoke Model
 
-- **Global Engine** (`arms_engine/` when installed): The "brain" containing agent definitions, skills, and workflows that never change per-project
-- **Local Project State** (`.arms/` in each project): The managed execution state containing session history, brand context, memory, rules, engine instructions, and generated planning artifacts
-- **Local Assistant Mirrors** (`.gemini/`, `.agents/`, `.github/agents/`): Synced helper assets for agent discovery, skill discovery, and CLI integration
+```
+arms_engine/          ← Global engine (never write project state here)
+  agents/             ← Agent .md instruction sets (synced to .github/agents/)
+  agents.yaml         ← Canonical agent registry (roles, skills, rules)
+  skills/             ← Skill directories (each must contain SKILL.md)
+  workflow/           ← Protocol .md files (REVIEW, FIX_ISSUE, DEPLOY)
+  ENGINE.md           ← Deployed as .arms/ENGINE.md in target projects
 
-### Key Components
+.arms/                ← Per-project managed state (never overwrite templates)
+  SESSION.md          ← Active task table + hot-context roster
+  MEMORY.md           ← Append-only lessons file
+  BRAND.md            ← Visual identity (watched by --watch mode)
+  ENGINE.md           ← Copied from arms_engine/ENGINE.md on init
+  RULES.md            ← Project-specific rules
+  SESSION_ARCHIVE.md  ← Completed task history — never delete
 
-#### 1. **Agent System** (`arms_engine/agents/` + `agents.yaml`)
-- **agents.yaml**: Canonical registry mapping agents to roles, scopes, skills, and execution rules
-- **Agent Markdown Files** (`agents/`): Individual agent instruction sets (imported by Copilot CLI via `/agent` command and synced to `.github/agents/` during `arms init`)
-- **10 specialized agents**: Main (Orchestrator), Product, Backend, Frontend, DevOps, SEO, Media, Data, QA, Security
+.agents/skills/       ← Skill mirror for Copilot CLI discovery
+.gemini/agents/       ← Agent mirror for Gemini CLI discovery
+.github/agents/       ← Agent mirror for Copilot /agent command
+.github/skills/       ← Skill mirror for GitHub Copilot
+```
 
-#### 2. **Skill System** (`arms_engine/skills/`)
-- **Structure**: Each skill is a directory with a required `SKILL.md` + optional `references/` (checklists, best practices) and `scripts/` (utility scripts)
-- **Metadata Headers**: Each `SKILL.md` has frontmatter with `name`, `description`, and optional metadata (same format as agents)
-- **Discovery**: Valid skills must contain `SKILL.md` and are registered during init sync
-- **Copilot CLI Sync**: All valid `SKILL.md` files are synced to `.agents/skills/` for Copilot CLI discovery
-- **Current Skills**: arms-orchestrator, backend-system-architect, frontend-design, devops-orchestrator, logo-design, nano-banana-pro, qa-automation-testing, security-code-review, seo-web-performance-expert, arms-docs-generator, caveman-compressor
-- **Skill Adoption**: Skills are adopted by agents to gain domain-specific capabilities for specialized tasks
+### Initialization Pipeline (`cli.py` → support modules)
 
-#### 3. **Workflow Protocols** (`arms_engine/workflow/`)
-- Standardized procedures for CI/CD, code review, issue resolution, deployment
-- Synced to `.arms/workflow/` during `arms init` for project-specific reference
+The public entry point is `arms_engine.init_arms:main` (a thin shim). Real logic lives in:
 
-#### 4. **Initialization Pipeline** (`cli.py` + support modules)
-The public entry point remains `arms_engine.init_arms:main`, but the implementation is split across focused modules:
-- `cli.py` — CLI parsing, watch mode, and orchestration
-- `brand.py` — brand inference, questionnaires, and structured answer parsing
-- `prompts.py` — context synthesis, generated prompts, and startup task seeding
-- `skills.py` — agent/skill sync and registry generation
-- `session.py` — migrations, version guard, and atomic session updates
+| Module | Responsibility |
+|--------|---------------|
+| `cli.py` | Argument parsing, watch mode, `run_init_once()` orchestration |
+| `brand.py` | Brand questionnaire, preset application, answer parsing |
+| `session.py` | Version guard, migrations, `update_session()`, token budgets |
+| `skills.py` | Agent/skill sync to mirrors, registry generation (`skills.yaml`, `skills-index.md`) |
+| `prompts.py` | `CONTEXT_SYNTHESIS.md` and `GENERATED_PROMPTS.md` generation, startup task seeding |
+| `protocols.py` | `run review`, `fix issues`, `run deploy`, `run pipeline`, `run status` handlers |
+| `tasks.py` | `arms task log/update/done` — SESSION.md task row management |
+| `memory.py` | `arms memory draft/append` — MEMORY.md staged-approval workflow |
+| `doctor.py` | Workspace diagnostics, required file/dir checks, token budget warnings |
+| `compression.py` | SESSION.md and MEMORY.md compaction (`arms init compress`) |
+| `release.py` | `arms release check` pre-release gate (read-only, exits non-zero on blockers) |
+| `monitor.py` | `--monitor` HUD: live HTML debug report at `.arms/reports/init-monitor-latest.html` |
+| `versioning.py` | Version resolution from git tags, `_version.py`, and installed metadata |
+| `update_docs.py` | `arms-docs` command — auto-updates README.md agent roster from agents.yaml |
 
-The initialization flow orchestrates:
-1. **Folder Setup** – Creates `.arms/`, `.gemini/agents/`, `.agents/skills/`, and supporting report/output directories
-2. **Agent Sync** – Copies agent .md files to `.gemini/agents/` and `.github/agents/` (for Copilot CLI `/agent` discovery)
-3. **Skill Sync** – Copies valid skill directories (with `SKILL.md`) to `.agents/skills/` and regenerates the local skill registry/index
-4. **Workflow Sync** – Copies protocol files to `.arms/workflow/`
-5. **Instruction Sync** – Deploys `.arms/ENGINE.md` and root `AGENTS.md`
-6. **Context Synthesis** – Generates `.arms/CONTEXT_SYNTHESIS.md` and a thin `.arms/GENERATED_PROMPTS.md` when intake is complete
-7. **Session Refresh** – Updates `.arms/SESSION.md` with compact hot-context agent/skill references and seeds the startup task table when appropriate
+`init_arms.py` is a **compatibility shim** — do not add logic there; put it in the appropriate module above.
 
 ---
 
-## ARMS System: Critical Protocols
+## Key Conventions
 
-This section documents protocols from `arms_engine/skills/arms-orchestrator/SKILL.md`. All future Copilot sessions must follow these rules strictly.
+### Command Handler Pattern
+Every sub-command follows the same two-function pattern, dispatched from `cli.py`:
 
-### 1. **Path Discovery (Always Run First)**
-Resolve ARMS engine location in this order:
-1. `~/.gemini/Arms-Engine/` (Global Safe Zone — Preferred)
-2. `../Arms-Engine/` (Sibling to project)
-3. `./Arms-Engine/` (Inside project root)
+```python
+# In the handler module (e.g., tasks.py, memory.py, protocols.py):
+def identify_<command>(command_parts) -> str | None:
+    # Returns a command key or empty string; never raises
 
-Never assume a path. If not found, halt immediately and request setup.
-
-### 2. **Session Bootstrap Files (Never Overwrite)**
-The managed ARMS workspace persists across sessions:
-- **`./.arms/SESSION.md`**: Active task table, execution mode, and compact hot-context agent/skill references. **CRITICAL:** Task continuity mandate — NEVER delete `Pending`/`In Progress`/`Blocked` tasks. Archive `Done` tasks to `SESSION_ARCHIVE.md`.
-- **`./.arms/MEMORY.md`**: Continuous learning file. **CRITICAL:** APPEND only; NEVER overwrite with template.
-- **`./.arms/BRAND.md`**: Visual identity & positioning (referenced by Frontend, SEO, Media agents).
-- **`./.arms/ENGINE.md`**: ARMS engine instructions, architecture direction, deployment target, and standards for the engine workflow.
-- **`./.arms/RULES.md`**: Folder structure, naming conventions, TypeScript strict mode, testing standards.
-- **`./GEMINI.md` or `./.gemini/GEMINI.md`**: Optional project-owned instructions. Preserve them if they already exist; read them as project context instead of overwriting them.
-
-**Golden Rule:** If `./.arms/` or `./.gemini/` exists with populated files, READ them — NEVER overwrite managed state or memory with a template. Overwriting project memory is a **protocol violation**.
-
-### 3. **Task Table Schema (Standardized)**
-Every task delegation uses this schema:
-
-| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|------|----------------|--------------|--------------|--------|
-| 1 | Concise description | agent-name | skill-folder OR — | — OR task #'s | Pending/In Progress/Pre-Flight/Done/Blocked/Failed |
-
-**Status Lifecycle:**
-```
-Pending → In Progress → Pre-Flight → Done
-                      ↘ Blocked (+ reason)
-                      ↘ Failed (+ reason)
+def handle_<command>(project_root, arms_root, command_name, **kwargs):
+    # Executes the command; raises SystemExit on failure
 ```
 
-**Status Rules:**
-- Only `arms-main-agent` transitions tasks to `Done`
-- **Auto-Critique Gate:** No feature can be marked `Done` without `arms-qa-agent` validation (tests/lint/build)
-- When task status becomes `Done` or `Cancelled`, immediately remove from `SESSION.md` and append to `SESSION_ARCHIVE.md`
-- `SESSION_ARCHIVE.md` is the **ultimate record of truth** for completed work — NEVER delete
+`cli.py` calls each `identify_*` function in order and short-circuits on the first match.
 
-### 4. **Strict Response Template (Every Response)**
-All agents must follow this structure — no exceptions:
+### Skill Validation
+A skill directory is **only valid** if it contains `SKILL.md`. Directories without it are silently ignored during sync. `REFERENCE_ONLY_SKILL_DIRS` in `skills.py` lists skill subdirs that are excluded from the project mirror.
 
-```
-[Speaking Agent]: <agent-name>
-[Active Skill]:   <skill folder OR "None">
+### Session File Rules
+- `SESSION.md`: NEVER delete `Pending`/`In Progress`/`Blocked` rows. Archive `Done`/`Cancelled` rows to `SESSION_ARCHIVE.md` immediately.
+- `MEMORY.md`: APPEND only — never overwrite with a template.
+- `SESSION_ARCHIVE.md`: Never delete. Compress with `arms init compress` if too large.
+- `ENGINE.md` and `AGENTS.md` at project root are engine-owned and overwritten on every `arms init`. `GEMINI.md` and `.github/copilot-instructions.md` are **project-owned** — read them for context, never overwrite.
 
-[State Updates]: <Files written to ./.gemini/ | "None">
+### Version Management
+- Dynamic versioning via `setuptools-scm` writes to `arms_engine/_version.py`.
+- Release: `git tag v1.x.x && git push origin v1.x.x`.
+- Dev fallback: `"1.0.0-dev"` when git tags are unavailable.
+- `arms doctor` reports all version sources (git describe, `_version.py`, installed metadata).
 
-[Action / Code]:
-<Task execution, code generation, or task table>
+### Package Data
+Files vendored into the distribution (declared in `pyproject.toml`):
+`agents/*.md`, `agents.yaml`, `skills/**/*`, `workflow/*`, `ENGINE.md`, `AGENTS.md`
 
-[Next Step / Blocker]: <Clear instruction ending with HALT for approval>
-```
+Adding a new file under these paths requires no `pyproject.toml` change. Adding a new top-level directory does.
 
-### 5. **Global Commands & Protocols**
-When users invoke commands, `arms-main-agent` reads the corresponding protocol:
+### Naming Conventions
+- **Agent names**: kebab-case with `arms-` prefix (`arms-backend-agent`)
+- **Skill directories**: kebab-case (`backend-system-architect`, `arms-orchestrator`)
+- **Workspace dirs**: `.arms/` (state), `.agents/` (Copilot skills), `.gemini/` (Gemini), `.github/agents/` (Copilot agents)
 
-| Command | Protocol | Action |
-|---|---|---|
-| `init` | Standard | Boot sequence. Halt for plan approval. |
-| `init yolo` | Automated | Full automation. Skip initial approval. |
-| `init compress` | Efficiency | Bootstrap + compress SESSION/MEMORY for token efficiency. |
-| `yolo` | Override | Fast-track execution for current plan. |
-| `run review` | REVIEW_PROTOCOL.md | Audit via QA, Security, Frontend. |
-| `fix issues` | FIX_ISSUE_PROTOCOL.md | Parse review, generate tasks, delegate. |
-| `run deploy` | DEPLOY_PROTOCOL.md | Pre-flight, sync DB, deploy. |
-| `run status` | Inline | Dump current state (tasks, blockers, phase). |
-| `run pipeline` | Sequence | REVIEW → FIX → DEPLOY (gates between phases). |
+### Test Patterns
+All tests use `unittest.TestCase` with `TemporaryDirectory` for isolation and `mock.patch.object(sys, "argv", [...])` + `redirect_stdout` to invoke the CLI without subprocess overhead:
 
-**YOLO Mode:** Architect executes entire task table without individual approvals. Flash Recovery allowed (one auto-fix attempt on minor lint/type errors) before halting.
-
-### 6. **Execution Modes (Detect at Session Start)**
-
-**Mode A — Parallel (Copilot CLI with subagent support):**
-- Spawn all independent agents in the same turn
-- Never sequential-first; launch everything at once
-- Agents with dependencies → spawn sequentially, gate on output
-- `arms-main-agent` aggregates outputs
-
-**Mode B — Simulated (Web UI / No subagent environment):**
-- YOU (Copilot) embody each agent in sequence (inline, same response)
-- Every agent turn rendered explicitly with strict response template
-- Separated by dividers; never collapsed or summarized
-- Dependencies respected: independent agents first, dependent agents after
-
-**Shared Rules (Both Modes):**
-- NEVER overwrite `## Environment` or remove the compact roster/reference sections in SESSION.md
-- NEVER remove `- Engine Version:` from the `## Environment` block when updating tasks, blockers, or execution state
-- NEVER overwrite MEMORY.md
-- Every agent receives: role definition + SKILL.md + SESSION.md + MEMORY.md
-- `arms-main-agent` owns aggregation — subagents return output, orchestrator writes to SESSION.md
-- If any agent returns a blocker → HALT immediately
-
-### 7. **Conflict Resolution Protocol**
-When agents produce contradictory outputs:
-
-1. **PAUSE** — Do not apply either
-2. **PRESENT** — Side-by-side recommendations
-3. **CLASSIFY** — Label conflict type:
-   - Security vs. Feature → Security wins (user can override)
-   - Performance vs. UX → Present trade-off, user decides
-   - Style/Convention → Defer to RULES.md, then user
-   - Architectural → Always escalate
-4. **RECOMMEND** — Single recommended resolution
-5. **HALT** — Never auto-resolve architectural or security conflicts
-
-### 8. **Error Recovery Playbook**
-| Failure | Symptoms | Recovery |
-|---------|----------|----------|
-| Agent Timeout | No output / incomplete response | Mark `Failed`. Re-queue. If fails twice → decompose + **HALT** |
-| Build Failure | npm build or type-check fails | Mark `Failed`. Present error. Do NOT advance pipeline → **HALT** |
-| Conflicting File Writes | Two agents modified same file | Invoke Conflict Resolution. Revert later write + **HALT** |
-| SESSION.md Corruption | Empty/malformed/missing sections | Re-scaffold from Bootstrap Template. Preserve readable content → **HALT** |
-| Missing Skill | Task requires non-existent skill | Execute using baseline from agents.yaml. Log warning. |
-| Partial Pipeline Failure | Pipeline fails mid-sequence | DO NOT restart from beginning. Resume from failed phase → **HALT** |
-
-**Recovery Rules:**
-- Never silently retry. Surface every failure.
-- Never discard partial work.
-- Always log failure in SESSION.md under `## Blockers` with timestamp.
-- Escalate after 2 consecutive failures — present decomposition strategy → **HALT**
-
-### 9. **Memory Management & Archival**
-Before task execution, read `SESSION.md`, consult the compact `## Memory Signals` digest, and open `MEMORY.md` when prior lessons, preferences, or known bugs are relevant.
-
-After significant technical work, ask user approval before updating `MEMORY.md`:
-
-> "May I update `./.arms/MEMORY.md` with this bug fix / preference / architectural decision?"
-
-Draft the lesson first in concise form so the append stays high-signal and prevents future context drift.
-
-**Archival Triggers:**
-- Task completion (Done/Cancelled) → append to SESSION_ARCHIVE.md + remove from SESSION.md
-- Pipeline completion → archive entire Active Tasks table + reset
-- User requests cleanup → archive remaining Failed tasks
-
-**Archival Format:**
-```markdown
-## Archive — <ISO 8601 date>
-### Context: <feature name or pipeline run>
-
-| # | Task | Agent | Status | Completed |
-|---|------|-------|--------|-----------|
-<tasks>
+```python
+def invoke_cli(self, cwd, *args):
+    stdout = io.StringIO()
+    with working_directory(cwd), mock.patch.object(sys, "argv", ["arms", *args]), redirect_stdout(stdout):
+        init_arms.main()
+    return stdout.getvalue()
 ```
 
-**Archival Integrity:** SESSION_ARCHIVE.md is the ultimate record of truth. Never delete. If too large, use `compress` skill but NEVER delete history.
-
-### 10. **Safety Gates & Checkpoints**
-- **Git Checkpoint (Before major work):** `git add . && git commit -m "chore: checkpoint before [Task Name]"`
-- **Pre-Flight QA (Mandatory before Done):** Run local build, lint, type-check. Auto-fix minor issues or escalate blockers.
-- **Automated Commit (After task completion):** Formulate Conventional Commit (`feat(...)`, `fix(...)`). Request approval before committing → **HALT**
-
-### 11. **Security & Standards**
-- Never read/write `.env` — use `.env.local` or `.env.example`
-- TypeScript strict mode mandatory, no exceptions
-- OWASP enforcement via `arms-security-agent`
-- Supabase RLS policies required for all tables
-- Pre-flight validation before every commit
-- Responsive design mandate: sidebar breakpoint = `xl` (1280px), **never** `lg` (1024px)
+Always pass `--root str(ARMS_ROOT)` in tests so init uses the local engine source, not any globally installed version.
 
 ---
 
-### 1. **Workspace Isolation Rule**
-- **Read from**: `arms_engine/` (global engine logic, agents, skills, workflows) — ALWAYS install via package
-- **Write to**: `.gemini/` (project-specific session state, memory, task tables) + `.github/agents/` (Copilot agent definitions)
-- **Never reverse**: Do NOT write project state back to `arms_engine/`; do NOT read session state from anywhere except `.gemini/`
+## Development Workflow
 
-### 2. **Version Management**
-- **Dynamic Versioning**: Uses `setuptools-scm` to auto-sync git tags to `_version.py`
-- **Release Tagging**: `git tag v1.x.x && git push origin v1.x.x` automatically updates the installed package version
-- **Fallback**: Version defaults to "1.0.0-dev" if git tags are unavailable (for local development)
+1. `pip install -e .` — editable install
+2. Change agent `.md` files, `agents.yaml`, skill `SKILL.md`, or Python modules
+3. `python -m unittest discover -s tests -p "test_*.py"` — verify no regressions
+4. Manually test in a real temp project: `cd /tmp/myproject && arms init --root /path/to/arms_engine`
+5. `arms-docs` — sync README.md agent roster from agents.yaml
+6. `git tag v1.x.x && git push origin v1.x.x` — release
 
-### 3. **Agent State Management**
-- **agents.yaml** is the single source of truth for agent metadata (role, scope, skills, execution rules)
-- Agent .md files (in `agents/`) contain detailed instruction sets and are auto-synced to `.github/agents/` for Copilot CLI discovery
-- **Critical Rules from agents.yaml**:
-  - **arms-frontend-agent**: Mobile-First Mandate — override default UI sizes to `h-11` min, hide dense tables on mobile (`hidden md:block`), provide stacked card layouts (`block md:hidden`)
-  - **arms-data-agent**: Must use Supabase CLI (`supabase init/start`) for local schema testing before remote execution
-  - **arms-qa-agent**: Must run Vitest and the configured E2E suite before marking tasks `Done`; prefer Cypress and only use Playwright when the project explicitly requires it
-  - **arms-security-agent**: Must audit all database migrations and auth logic, ensure zero PII/secret exposure
-
-### 4. **Skill Discovery & Validation**
-- Only directories containing `SKILL.md` are registered as valid skills
-- Skills are discovered and logged during `arms init` for reference
-- `arms-orchestrator` remains the default `[Active]` skill marker in compact session views; full skill discovery lives in generated registries
-
-### 5. **Documentation Automation**
-- **`arms-docs` command** auto-updates README.md agent roster from agents.yaml
-- Uses markers: `<!-- AGENT_ROSTER_START -->` and `<!-- AGENT_ROSTER_END -->`
-- Parses agent role and scope from YAML and generates formatted markdown
-
-### 6. **Package Data Management** (`pyproject.toml`)
-- Included in distribution: `agents/*.md`, `agents.yaml`, `skills/**/*`, `workflow/*`, `ENGINE.md`, `AGENTS.md`
-- These files are vendored into the installed package so ARMS works offline and from any directory
-
-### 7. **Naming Conventions**
-- **Agent names**: kebab-case with `arms-` prefix (e.g., `arms-backend-agent`, `arms-security-agent`)
-- **Skill directories**: kebab-case (e.g., `arms-orchestrator`, `frontend-design`)
-- **Project folders**: `.gemini/` (execution environment), `.github/agents/` (Copilot integration)
+### Useful Diagnostic Commands
+```bash
+arms doctor               # Check workspace health
+arms doctor --fix         # Resync engine-owned files before reporting issues
+arms release check        # Pre-release gate (non-zero exit on blocking issues)
+arms init --monitor       # Live HTML debug HUD during init
+```
 
 ---
 
-## Typical Development Workflow
+## ARMS Protocol Quick Reference
 
-1. **Install in editable mode**: `pip install -e .` during local development
-2. **Make changes**: Modify agents.yaml, add/update skills, update instruction sets in agent .md files
-3. **Test with a real project**:
-   ```bash
-   cd /path/to/test-project
-   arms init
-   # Verify .gemini/ and .github/agents/ are created and populated correctly
-   ```
-4. **Update documentation**: Run `arms-docs` to auto-sync README.md with latest agent roster
-5. **Tag & release**: `git tag v1.x.x && git push origin v1.x.x` for version bump
-6. **Deploy globally**: `pipx upgrade arms-engine` (for users with pipx installation)
+> Full specification: `arms_engine/skills/arms-orchestrator/SKILL.md`
 
----
+### CLI Commands
+| Command | Action |
+|---------|--------|
+| `arms init` | Bootstrap workspace; halt for plan approval |
+| `arms init yolo` | Full automation, skip initial approval |
+| `arms init compress` | Bootstrap + compact SESSION/MEMORY |
+| `arms run review` | Audit via QA, Security, Frontend |
+| `arms fix issues` | Parse review report, generate tasks, delegate |
+| `arms run deploy` | Pre-flight, sync DB, deploy |
+| `arms run pipeline` | REVIEW → FIX → DEPLOY with gates |
+| `arms run status` | Dump current tasks and blockers |
+| `arms task log --task "..."` | Add a task row to SESSION.md |
+| `arms task update --task-id N` | Update an existing task row |
+| `arms task done --task-id N` | Archive a completed task |
+| `arms memory draft` | Stage a MEMORY.md lesson for approval |
+| `arms memory append` | Approve a staged draft and refresh SESSION.md |
 
-## When to Call Which Agent via `/agent`
+### Session Bootstrap Files (Never Overwrite)
+- `.arms/SESSION.md` — task table + execution mode
+- `.arms/MEMORY.md` — append-only lessons
+- `.arms/BRAND.md` — visual identity
+- `.arms/RULES.md` — project conventions
+- Project-owned: `GEMINI.md`, `.github/copilot-instructions.md` — read only, never modify
 
-Use Copilot CLI's `/agent` command to invoke specialized agents (available in `.github/agents/` after `arms init`):
-
-- **arms-main-agent**: Orchestration, planning, delegation, session state management
-- **arms-product-agent**: Requirements gathering, user stories, PRD generation
-- **arms-backend-agent**: APIs, models, auth, database schemas
-- **arms-frontend-agent**: UI components, routing, state, styling (mobile-first)
-- **arms-devops-agent**: CI/CD pipelines, deployment strategies, tech stack initialization
-- **arms-seo-agent**: Meta tags, semantic HTML, Core Web Vitals optimization
-- **arms-media-agent**: Asset creation, design, media generation
-- **arms-data-agent**: Database design, migrations, query optimization (via Supabase CLI)
-- **arms-qa-agent**: Unit/E2E test writing, pre-flight validation, regression testing
----
-
-## Accessing Skills in Copilot CLI
-
-Skills are fully discoverable in the Copilot CLI. After `arms init`, all skill files are synced to `.agents/skills/` with proper metadata for CLI discovery.
-
-### Skills Registry & Index
-
-Three files support skill discovery:
-- **`.agents/skills/`** – Directory containing all skill folders with `SKILL.md`
-- **`.agents/skills.yaml`** – Auto-generated YAML registry of all available skills with metadata
-- **`.agents/skills-index.md`** – Markdown index with quick reference and usage examples
-
-### Available Skills (Post-Init)
-
-Reference any skill in `.agents/skills/`:
-
-- **`arms-orchestrator/SKILL.md`** – Full-stack project orchestration, multi-agent workflows, approval gates
-- **`backend-system-architect/SKILL.md`** – Backend architecture, API design, database schemas
-- **`frontend-design/SKILL.md`** – Production-grade UI components with distinctive aesthetics
-- **`devops-orchestrator/SKILL.md`** – CI/CD, deployment automation, and zero-drift infrastructure workflows
-- **`security-code-review/SKILL.md`** – OWASP audits, auth validation, RLS configuration, secret scanning
-- **`qa-automation-testing/SKILL.md`** – Unit/E2E test generation, stable QA strategy, Cypress-first with Playwright when required
-- **`seo-web-performance-expert/SKILL.md`** – Meta tags, semantic HTML, Core Web Vitals, schema markup
-- **`logo-designer/SKILL.md`** – Logo creation and asset design
-- **`nano-banana-pro/SKILL.md`** – Specialized image generation and media handling
-- **`arms-docs-generator/SKILL.md`** – Automatic documentation generation and updates
-- **`caveman-compressor/SKILL.md`** – Session and memory compression for token efficiency
-
-### How to Use Skills
-
-**Method 1: Copilot CLI `/skills` slash command (if available):**
-```
-/skills
-[Select from list of available skills]
-```
-
-**Method 2: File reference in conversation:**
-```
-@skills/frontend-design/SKILL.md
-Build me a hero section with a bold brutalist aesthetic
-```
-
-**Method 3: Inline skill adoption in agent context:**
-When delegating to an agent, include the skill path in the task definition (see Task Table Schema in Section 3.3).
-
-Skills are composable — a single agent may adopt multiple skills for complex work.
+### Agent/Skill Discovery (Post-Init)
+- Agents: `.github/agents/` (Copilot), `.gemini/agents/` (Gemini)
+- Skills: `.agents/skills/` + `.agents/skills.yaml` + `.agents/skills-index.md`
+- `arms-docs` auto-updates README.md agent roster from `arms_engine/agents.yaml`

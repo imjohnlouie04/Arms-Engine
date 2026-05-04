@@ -216,6 +216,44 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertNotEqual(agent_source, "stale agent\n")
             self.assertEqual(project_instruction_path.read_text(encoding="utf-8"), "project-owned instructions\n")
 
+    def test_doctor_warns_when_project_owned_instructions_lack_task_intake_guidance(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nProject instruction drift.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            project_instruction_path = project_root / ".github" / "copilot-instructions.md"
+            project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
+            project_instruction_path.write_text("project-owned instructions\n", encoding="utf-8")
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Project-owned instruction files are missing ARMS task-intake guidance", output)
+            self.assertIn("`arms task log` / `arms task update` semantics", output)
+
+    def test_doctor_ok_when_project_owned_instructions_include_task_intake_guidance(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nProject instruction aligned.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            project_instruction_path = project_root / ".github" / "copilot-instructions.md"
+            project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
+            project_instruction_path.write_text(
+                "Read .arms/SESSION.md first and use arms task log semantics for durable asks.\n",
+                encoding="utf-8",
+            )
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Project-owned instruction files include ARMS task-intake guidance for normal chat.", output)
+
     def test_doctor_fix_reports_removed_obsolete_skill_artifacts(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
@@ -288,6 +326,88 @@ class DoctorCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertIn("`--fix` is only supported with `arms doctor`", output)
+
+
+class BrandDriftTests(unittest.TestCase):
+    """Unit tests for check_brand_drift in doctor.py."""
+
+    def _make_brand(self, tmpdir, content):
+        arms_dir = Path(tmpdir) / ".arms"
+        arms_dir.mkdir(exist_ok=True)
+        (arms_dir / "BRAND.md").write_text(content, encoding="utf-8")
+
+    def test_no_drift_when_brand_md_missing(self):
+        with TemporaryDirectory() as tmp:
+            warnings = doctor_module.check_brand_drift(tmp)
+            self.assertEqual(warnings, [])
+
+    def test_no_drift_when_brand_fully_answered(self):
+        brand_content = (
+            "# Brand Context\n"
+            "- **Project Name:** MyProject\n"
+            "- **Mission:** Build great things.\n"
+            "- **Vision:** World domination.\n"
+            "- **Personality:** Bold.\n"
+            "- **Voice & Tone:** Direct.\n"
+            "- **Primary Audience:** Developers.\n"
+            "- **Core Values:** Quality.\n"
+            "- **Differentiation:** Speed.\n"
+            "- **Color Palette:** Blue.\n"
+            "- **Typography:** Inter.\n"
+            "- **Logo Status:** Done.\n"
+            "- **Visual Direction:** Clean.\n"
+            "- **Experience Type:** SaaS.\n"
+            "- **Technical Constraints:** None.\n"
+            "- **Preferred Tech Stack:** Next.js.\n"
+            "- **Authentication Requirement:** JWT.\n"
+            "- **Deployment Target:** Vercel.\n"
+        )
+        with TemporaryDirectory() as tmp:
+            self._make_brand(tmp, brand_content)
+            warnings = doctor_module.check_brand_drift(tmp)
+            self.assertEqual(warnings, [])
+
+    def test_warns_on_tbd_fields_with_pyproject_present(self):
+        brand_content = (
+            "# Brand Context\n"
+            "> New project detected.\n"
+            "- **Project Name:** TBD\n"
+            "- **Mission:** TBD\n"
+        )
+        with TemporaryDirectory() as tmp:
+            self._make_brand(tmp, brand_content)
+            Path(tmp, "pyproject.toml").write_text(
+                '[project]\nname = "myproject"\ndescription = "Test"\n', encoding="utf-8"
+            )
+            warnings = doctor_module.check_brand_drift(tmp)
+            self.assertTrue(any("unanswered" in w for w in warnings))
+
+    def test_warns_on_project_name_mismatch(self):
+        brand_content = (
+            "# Brand Context\n"
+            "- **Project Name:** old-name\n"
+        )
+        with TemporaryDirectory() as tmp:
+            self._make_brand(tmp, brand_content)
+            Path(tmp, "pyproject.toml").write_text(
+                '[project]\nname = "new-name"\ndescription = "Test"\n', encoding="utf-8"
+            )
+            warnings = doctor_module.check_brand_drift(tmp)
+            self.assertTrue(any("does not match" in w for w in warnings))
+
+    def test_no_mismatch_when_names_agree(self):
+        brand_content = (
+            "# Brand Context\n"
+            "- **Project Name:** MyProject\n"
+        )
+        with TemporaryDirectory() as tmp:
+            self._make_brand(tmp, brand_content)
+            Path(tmp, "pyproject.toml").write_text(
+                '[project]\nname = "MyProject"\ndescription = "Test"\n', encoding="utf-8"
+            )
+            warnings = doctor_module.check_brand_drift(tmp)
+            mismatch_warnings = [w for w in warnings if "does not match" in w]
+            self.assertEqual(mismatch_warnings, [])
 
 
 if __name__ == "__main__":

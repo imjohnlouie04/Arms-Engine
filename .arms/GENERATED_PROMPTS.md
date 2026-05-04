@@ -6,7 +6,9 @@
 ## Usage
 - Read `.arms/CONTEXT_SYNTHESIS.md` first.
 - These prompts stay intentionally thin so the synthesis file remains the single dense context source.
+- When a user sends a new issue or durable work request through CLI/IDE chat, first run `arms task log --task "<normalized ask>"` (or refresh the matching open row) before substantive planning or implementation.
 - Use the listed specialist agent for each prompt.
+- If the user is already replying inside one of these generated/custom specialist prompts, treat clarifying questions and issue follow-ups as continuation of that active task unless they introduce a net-new ask.
 - Do not run specialist implementation prompts with `arms-main-agent`; keep `arms-main-agent` for orchestration only.
 
 ## Orchestrator Prompt
@@ -15,6 +17,7 @@
 **Copilot CLI:** `/agent arms-main-agent`
 ```text
 Read `.arms/CONTEXT_SYNTHESIS.md` first.
+If the user's latest chat message is a new durable issue or work request, log or refresh it in `.arms/SESSION.md` with `arms task log --task "<normalized ask>"` before substantive planning.
 For arms-engine, review the current implementation and ship the highest-impact next improvement.
 Use Next.js (latest stable) + shadcn/ui.
 Honor: No hard constraints captured / No additional content or visual non-negotiables captured.
@@ -87,4 +90,5 @@ Check Next.js + Supabase + shadcn/ui / Email/password or OAuth via Supabase Auth
 Read `.arms/CONTEXT_SYNTHESIS.md`.
 Prepare the pre-flight validation plan for arms-engine.
 Validate the primary initial product experience and core flows tied to Core features not yet captured; focus on regression risk and current production-critical flows.
+Prefer Cypress for browser E2E. Escalate to Playwright only if the project is already configured for it or the flow explicitly needs cross-browser, multi-tab, multi-origin, or OAuth coverage.
 ```

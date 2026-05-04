@@ -5,6 +5,7 @@ from collections import OrderedDict
 from contextlib import redirect_stdout
 
 from . import __version__
+from .paths import WorkspacePaths
 from .prompts import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
 from .protocols import collect_recent_commit_subjects, find_latest_report, parse_actionable_issues
 from .session import (
@@ -27,6 +28,12 @@ from .skills import (
     sync_root_agents_guide,
     sync_skills_copilot,
     sync_workflow,
+)
+from .brand import (
+    extract_brand_field,
+    get_missing_new_project_brand_fields,
+    is_new_project_brand_questionnaire,
+    parse_pyproject_metadata,
 )
 from .update_docs import get_agent_docs
 from .versioning import collect_version_diagnostics
@@ -77,7 +84,63 @@ PROJECT_INSTRUCTION_FILES = (
     os.path.join(".gemini", "GEMINI.md"),
     os.path.join(".github", "copilot-instructions.md"),
 )
+TASK_INTAKE_GUIDANCE_MARKERS = (
+    "arms task log",
+    ".arms/session.md",
+)
 ACTIVE_TASKS_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
+
+
+def check_brand_drift(project_root):
+    """Analyse BRAND.md for staleness and return a list of drift warning strings.
+
+    Checks performed:
+    - Unanswered TBD fields that a ``pyproject.toml`` or ``package.json`` could fill.
+    - ``Project Name`` in BRAND.md does not match the name in ``pyproject.toml``.
+    """
+    wp = WorkspacePaths(project_root)
+    brand_path = wp.brand
+    if not os.path.isfile(brand_path):
+        return []
+
+    brand_content = read_text_file(brand_path)
+    if not brand_content.strip():
+        return []
+
+    warnings = []
+
+    # --- unanswered fields while project metadata exists ----------------------
+    missing_fields = get_missing_new_project_brand_fields(brand_content)
+    if missing_fields:
+        has_package_json = os.path.isfile(os.path.join(project_root, "package.json"))
+        has_pyproject = os.path.isfile(os.path.join(project_root, "pyproject.toml"))
+        if has_package_json or has_pyproject:
+            warnings.append(
+                "BRAND.md still has {} unanswered field(s) ({}) but the project has metadata files — "
+                "run `arms init` to infer missing values.".format(
+                    len(missing_fields),
+                    ", ".join(f"`{f}`" for f in missing_fields[:3])
+                    + (" …" if len(missing_fields) > 3 else ""),
+                )
+            )
+
+    # --- project-name mismatch ------------------------------------------------
+    brand_project_name = extract_brand_field(brand_content, "Project Name").strip().lower()
+    if brand_project_name and brand_project_name not in {"tbd", "unknown", ""}:
+        pyproject_path = os.path.join(project_root, "pyproject.toml")
+        if os.path.isfile(pyproject_path):
+            pyproject_meta = parse_pyproject_metadata(read_text_file(pyproject_path))
+            pkg_name = pyproject_meta.get("name", "").strip().lower()
+            if pkg_name and pkg_name != brand_project_name:
+                warnings.append(
+                    "BRAND.md `Project Name` (`{}`) does not match `pyproject.toml` name (`{}`). "
+                    "Update BRAND.md or re-run `arms init` to resync.".format(
+                        extract_brand_field(brand_content, "Project Name").strip(),
+                        pyproject_meta["name"].strip(),
+                    )
+                )
+
+    return warnings
 
 
 def identify_doctor_command(command_parts):
@@ -161,7 +224,28 @@ def build_doctor_report(project_root, arms_root):
             "Required workspace files are present.",
         )
 
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    brand_drift_warnings = check_brand_drift(project_root)
+    if brand_drift_warnings:
+        for drift_warning in brand_drift_warnings:
+            add_check(
+                categories,
+                counts,
+                "Workspace Health",
+                "warn",
+                drift_warning,
+            )
+    else:
+        brand_path = WorkspacePaths(project_root).brand
+        if os.path.isfile(brand_path):
+            add_check(
+                categories,
+                counts,
+                "Workspace Health",
+                "ok",
+                "BRAND.md has no detected drift against project metadata.",
+            )
+
+    session_path = WorkspacePaths(project_root).session
     if os.path.isfile(session_path):
         session_content = read_text_file(session_path)
         _, parsed_sections = parse_markdown_sections(session_content)
@@ -299,7 +383,7 @@ def build_doctor_report(project_root, arms_root):
     validate_synced_file(
         project_root,
         os.path.join(arms_root, "ENGINE.md"),
-        os.path.join(project_root, ".arms", "ENGINE.md"),
+        WorkspacePaths(project_root).engine,
         "Ownership Safety",
         "Engine instructions",
         categories,
@@ -341,6 +425,30 @@ def build_doctor_report(project_root, arms_root):
             "ok",
             "Detected project-owned instruction files: {}.".format(", ".join(f"`{path}`" for path in detected_instruction_files)),
         )
+        missing_task_intake_files = [
+            relative_path
+            for relative_path in detected_instruction_files
+            if not project_instruction_has_task_intake_guidance(project_root, relative_path)
+        ]
+        if missing_task_intake_files:
+            add_check(
+                categories,
+                counts,
+                "Ownership Safety",
+                "warn",
+                "Project-owned instruction files are missing ARMS task-intake guidance: {}.".format(
+                    ", ".join(f"`{path}`" for path in missing_task_intake_files)
+                ),
+                "Add the normal-chat rule that durable asks must create or refresh `.arms/SESSION.md` rows using `arms task log` / `arms task update` semantics.",
+            )
+        else:
+            add_check(
+                categories,
+                counts,
+                "Ownership Safety",
+                "ok",
+                "Project-owned instruction files include ARMS task-intake guidance for normal chat.",
+            )
     else:
         add_check(
             categories,
@@ -351,6 +459,7 @@ def build_doctor_report(project_root, arms_root):
         )
 
     review_prereqs = []
+    wp = WorkspacePaths(project_root)
     for relative_path in (
         ".arms/SESSION.md",
         ".arms/reports",
@@ -411,10 +520,10 @@ def build_doctor_report(project_root, arms_root):
             )
 
     deploy_prereqs = []
-    deploy_workflow_path = os.path.join(project_root, ".arms", "workflow", "DEPLOY_PROTOCOL.md")
+    deploy_workflow_path = WorkspacePaths(project_root).workflow_file("DEPLOY_PROTOCOL.md")
     if not os.path.isfile(deploy_workflow_path):
         deploy_prereqs.append(".arms/workflow/DEPLOY_PROTOCOL.md")
-    if not os.path.isdir(os.path.join(project_root, ".arms", "reports")):
+    if not os.path.isdir(WorkspacePaths(project_root).reports_dir):
         deploy_prereqs.append(".arms/reports")
     if deploy_prereqs:
         add_check(
@@ -458,7 +567,7 @@ def build_doctor_report(project_root, arms_root):
 
 
 def apply_safe_doctor_repairs(project_root, arms_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.isfile(session_path):
         return [], [
             "Skipped automatic repair because `.arms/SESSION.md` is missing. Run `arms init` before using `arms doctor --fix`."
@@ -632,7 +741,7 @@ def validate_workflow_mirror(project_root, arms_root, categories, counts):
         name for name in os.listdir(source_workflow_dir)
         if os.path.isfile(os.path.join(source_workflow_dir, name))
     } if os.path.isdir(source_workflow_dir) else set()
-    mirror_dir = os.path.join(project_root, ".arms", "workflow")
+    mirror_dir = WorkspacePaths(project_root).workflow_dir
     mirrored_files = {
         name for name in os.listdir(mirror_dir)
         if os.path.isfile(os.path.join(mirror_dir, name))
@@ -851,6 +960,11 @@ def validate_engine_repo_readme_roster(project_root, arms_root, categories, coun
 def has_environment_key(environment_content, key):
     pattern = r"^- {}: .+$".format(re.escape(key))
     return bool(re.search(pattern, environment_content or "", re.MULTILINE))
+
+
+def project_instruction_has_task_intake_guidance(project_root, relative_path):
+    content = read_text_file(os.path.join(project_root, relative_path)).lower()
+    return all(marker in content for marker in TASK_INTAKE_GUIDANCE_MARKERS)
 
 
 def add_check(categories, counts, category, status, summary, fix=""):

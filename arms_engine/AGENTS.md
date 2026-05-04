@@ -52,6 +52,13 @@ Skills are mirrored from `arms_engine/skills/` into `.agents/skills/` and `.gith
 
 3. **Check Project State:** Review `.arms/SESSION.md` for current active tasks, agents, and skills
 
+## Normal Chat Intake
+
+- A plain CLI or IDE chat message can still be a task intake event. Do **not** require the user to type `arms task log` manually after they already described the work.
+- If a normal message, pasted issue body, screenshot, or image attachment starts or materially changes durable work, summarize the ask in text, then create or refresh the matching `.arms/SESSION.md` row using `arms task log --task "<normalized ask>"` semantics before substantive planning or implementation.
+- Route that row to the correct specialist agent and auto-fill the bound skill from the ARMS registry.
+- If the message is only a clarification, approval, status nudge, or continuation of an already-open task, keep it attached to the current row and use `arms task update` semantics only when the ledger entry itself materially changes.
+
 ## Project Instructions
 
 For ARMS orchestration logic and system architecture details, see `.arms/ENGINE.md`.

@@ -83,7 +83,7 @@ def _read_version_file(package_dir):
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)
-    except Exception:
+    except (ImportError, SyntaxError, OSError, AttributeError):
         return ""
     return getattr(module, "version", "") or getattr(module, "__version__", "") or ""
 

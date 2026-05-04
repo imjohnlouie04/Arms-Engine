@@ -26,7 +26,7 @@ packages = ["arms_engine"]
 
 [tool.setuptools.package-data]
 # Ship the engine-owned source instructions as ENGINE.md; arms init deploys this file into projects as .arms/ENGINE.md.
-arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "ENGINE.md", "AGENTS.md"]
+arms_engine = ["agents/*.md", "agents.yaml", "skills/**/*", "workflow/*", "ENGINE.md", "AGENTS.md", "routing.yaml"]
 
 [tool.setuptools_scm]
 write_to = "arms_engine/_version.py"

@@ -252,7 +252,11 @@ def sync_skills_copilot(arms_root, project_root):
             skill_md_path = os.path.join(skill_path, "SKILL.md")
 
             if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
-                metadata = parse_skill_metadata(skill_md_path, skill_name)
+                try:
+                    metadata = parse_skill_metadata(skill_md_path, skill_name)
+                except ValueError as exc:
+                    print(f"⚠️  Skipping skill '{skill_name}': invalid SKILL.md ({exc})")
+                    continue
                 for target_dir in target_dirs:
                     legacy_dest = os.path.join(target_dir, f"{skill_name}.md")
                     if os.path.isfile(legacy_dest):
@@ -300,7 +304,11 @@ def build_skills_data(arms_root):
             skill_md_path = os.path.join(skill_path, "SKILL.md")
 
             if os.path.isdir(skill_path) and os.path.exists(skill_md_path):
-                metadata = parse_skill_metadata(skill_md_path, skill_name)
+                try:
+                    metadata = parse_skill_metadata(skill_md_path, skill_name)
+                except ValueError as exc:
+                    print(f"⚠️  Skipping skill '{skill_name}': invalid SKILL.md ({exc})")
+                    continue
                 canonical_name = metadata["name"]
                 skills_data[canonical_name] = {
                     "name": canonical_name,

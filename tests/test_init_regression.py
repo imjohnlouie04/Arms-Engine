@@ -85,6 +85,8 @@ class InitRegressionTests(unittest.TestCase):
 
             self.assertIn("Strict Init Rule", engine_instructions)
             self.assertEqual(root_gemini, "# Project-specific Gemini instructions\n")
+            self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
+            self.assertFalse((project_root / ".github" / "copilot-instructions.md").exists())
 
     def test_init_migrates_legacy_root_archive_when_managed_archive_is_missing(self):
         with TemporaryDirectory() as tmp:
@@ -169,6 +171,12 @@ class InitRegressionTests(unittest.TestCase):
                 "# Project instructions\nKeep the existing deployment workflow.\n",
             )
             self.assertTrue((project_root / "AGENTS.md").exists())
+            self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
+            agents_guide = (project_root / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("## Normal Chat Intake", agents_guide)
+            self.assertIn("plain CLI or IDE chat message can still be a task intake event", agents_guide)
+            self.assertIn('arms task log --task "<normalized ask>"', agents_guide)
+            self.assertIn("pasted issue body, screenshot, or image attachment", agents_guide)
 
     def test_python_module_entrypoint_runs_init(self):
         with TemporaryDirectory() as tmp:
@@ -380,10 +388,14 @@ Generated: 2026-05-03T00:00:00Z
             self.assertIn("Must ask for explicit user approval before updating `.arms/MEMORY.md`.", gemini_agent)
             self.assertIn("Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work", gemini_agent)
             self.assertIn("Only prompts that start or materially change durable work should create or update a row in `.arms/SESSION.md`", gemini_agent)
+            self.assertIn("This applies to normal Copilot CLI and IDE chat messages", gemini_agent)
             self.assertIn("First check whether the message belongs to an existing custom prompt / generated specialist prompt", gemini_agent)
+            self.assertIn('immediately run `arms task log --task "<normalized ask>"`', gemini_agent)
             self.assertIn("Before appending to or editing `.arms/MEMORY.md`, ask the user explicitly.", engine_instructions)
             self.assertIn("Every new user prompt after bootstrap that starts or materially changes durable work must be reflected in the task table", engine_instructions)
+            self.assertIn("This applies to plain chat messages in Copilot CLI and IDE chat", engine_instructions)
             self.assertIn("First check whether the message is inside an existing custom prompt / generated specialist prompt", engine_instructions)
+            self.assertIn('immediately run `arms task log --task "<normalized ask>"`', engine_instructions)
             self.assertIn("UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`", engine_instructions)
             self.assertIn("Ask the user for approval before updating `.arms/MEMORY.md`", rules)
             self.assertIn("Read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before any task work.", rules)
@@ -1310,6 +1322,7 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("**Assigned Agent:** `arms-main-agent`", prompts)
             self.assertIn("**Assigned Agent:** `arms-frontend-agent`", prompts)
             self.assertIn("**Active Skill:** `ui-ux-pro-max`", prompts)
+            self.assertIn('arms task log --task "<normalized ask>"', prompts)
             self.assertIn("treat clarifying questions and issue follow-ups as continuation of that active task", prompts)
             self.assertIn("Prefer Cypress for browser E2E. Escalate to Playwright only if the project is already configured for it", prompts)
             self.assertIn("Do not run specialist implementation prompts with `arms-main-agent`", prompts)

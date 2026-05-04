@@ -24,6 +24,7 @@ Brand bootstrap behavior during `init`:
 ## Execution Commands (Post-Init)
 | Command | Action |
 |---|---|
+| Chat issue / work request in CLI or IDE | ARMS should immediately create or refresh the matching `.arms/SESSION.md` row using `arms task log --task "<normalized ask>"` semantics before substantive planning or implementation. |
 | `yolo` | Activates **Fast-Track Execution** for the currently approved Task Table. |
 | `run status` | Dumps the current pipeline phase, active tasks, and blockers from `SESSION.md`. |
 | `run review` | Triggers a full audit (QA, Security, Frontend) and generates a report. |

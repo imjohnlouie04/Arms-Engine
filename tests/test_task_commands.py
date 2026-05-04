@@ -175,5 +175,124 @@ class TaskCommandTests(unittest.TestCase):
         self.assertEqual(init_arms.infer_agent_from_task("Document attestation flow"), "arms-main-agent")
 
 
+class DependencyCycleTests(unittest.TestCase):
+    """Unit tests for parse_dependency_ids and detect_dependency_cycle."""
+
+    def _rows(self, *dep_pairs):
+        """Build a minimal rows list from (id, dep_value) tuples."""
+        return [{"#": rid, "Dependencies": dep} for rid, dep in dep_pairs]
+
+    def test_parse_empty_dep_value(self):
+        from arms_engine.tasks import parse_dependency_ids
+        self.assertEqual(parse_dependency_ids("—"), set())
+        self.assertEqual(parse_dependency_ids(""), set())
+        self.assertEqual(parse_dependency_ids("-"), set())
+
+    def test_parse_single_dep(self):
+        from arms_engine.tasks import parse_dependency_ids
+        self.assertEqual(parse_dependency_ids("1"), {"1"})
+
+    def test_parse_multiple_deps(self):
+        from arms_engine.tasks import parse_dependency_ids
+        self.assertEqual(parse_dependency_ids("1, 2, 3"), {"1", "2", "3"})
+
+    def test_no_cycle_when_deps_are_empty(self):
+        from arms_engine.tasks import detect_dependency_cycle
+        rows = self._rows(("1", "—"), ("2", "1"))
+        self.assertEqual(detect_dependency_cycle(rows, "3", {"2"}), [])
+
+    def test_direct_cycle_detected(self):
+        from arms_engine.tasks import detect_dependency_cycle
+        # Task 2 depends on 1; if we make task 1 depend on 2 → cycle 1→2→1
+        rows = self._rows(("1", "—"), ("2", "1"))
+        cycle = detect_dependency_cycle(rows, "1", {"2"})
+        self.assertTrue(cycle, "Expected a cycle to be detected")
+
+    def test_transitive_cycle_detected(self):
+        from arms_engine.tasks import detect_dependency_cycle
+        # 2→1, 3→2; making 1→3 creates 1→3→2→1
+        rows = self._rows(("1", "—"), ("2", "1"), ("3", "2"))
+        cycle = detect_dependency_cycle(rows, "1", {"3"})
+        self.assertTrue(cycle)
+
+    def test_no_false_positive_for_valid_deps(self):
+        from arms_engine.tasks import detect_dependency_cycle
+        rows = self._rows(("1", "—"), ("2", "1"), ("3", "1"))
+        # Task 4 depending on 2 and 3 is fine
+        self.assertEqual(detect_dependency_cycle(rows, "4", {"2", "3"}), [])
+
+
+class PipeEscapeRoundTripTests(unittest.TestCase):
+    """Verify that task text containing | survives a render→parse round-trip."""
+
+    def _make_rows(self, task_text):
+        return [
+            {
+                "#": "1",
+                "Task": task_text,
+                "Assigned Agent": "arms-main-agent",
+                "Active Skill": "—",
+                "Dependencies": "—",
+                "Status": "Pending",
+            }
+        ]
+
+    def _round_trip(self, task_text, arms_root):
+        from arms_engine.protocols import parse_task_rows, render_task_table
+        rendered = render_task_table(self._make_rows(task_text), str(arms_root))
+        rows = parse_task_rows(rendered)
+        return rows[0]["Task"] if rows else None
+
+    def test_plain_task_text_survives(self):
+        ARMS_ROOT = Path(__file__).resolve().parents[1] / "arms_engine"
+        result = self._round_trip("Deploy the API", ARMS_ROOT)
+        self.assertEqual(result, "Deploy the API")
+
+    def test_pipe_in_task_text_survives(self):
+        ARMS_ROOT = Path(__file__).resolve().parents[1] / "arms_engine"
+        result = self._round_trip("Evaluate option A | option B", ARMS_ROOT)
+        self.assertEqual(result, "Evaluate option A | option B")
+
+    def test_multiple_pipes_survive(self):
+        ARMS_ROOT = Path(__file__).resolve().parents[1] / "arms_engine"
+        result = self._round_trip("A | B | C", ARMS_ROOT)
+        self.assertEqual(result, "A | B | C")
+
+
+class TaskListCommandTests(unittest.TestCase):
+    """Arms task list/status is a read-only introspection command."""
+
+    def test_identify_task_list_command(self):
+        from arms_engine.tasks import identify_task_command
+        self.assertEqual(identify_task_command(("task", "list")), "list")
+
+    def test_identify_task_status_alias(self):
+        from arms_engine.tasks import identify_task_command
+        self.assertEqual(identify_task_command(("task", "status")), "list")
+
+    def test_list_rows_returns_table_string(self):
+        from arms_engine.tasks import list_task_rows
+        ARMS_ROOT = Path(__file__).resolve().parents[1] / "arms_engine"
+        rows = [
+            {
+                "#": "1",
+                "Task": "Write tests",
+                "Assigned Agent": "arms-qa-agent",
+                "Active Skill": "qa-automation-testing",
+                "Dependencies": "—",
+                "Status": "In Progress",
+            }
+        ]
+        result = list_task_rows(rows, str(ARMS_ROOT))
+        self.assertIn("Write tests", result)
+        self.assertIn("arms-qa-agent", result)
+
+    def test_list_rows_empty_returns_message(self):
+        from arms_engine.tasks import list_task_rows
+        ARMS_ROOT = Path(__file__).resolve().parents[1] / "arms_engine"
+        result = list_task_rows([], str(ARMS_ROOT))
+        self.assertIn("No active tasks", result)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 import io
+import os
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -208,6 +209,84 @@ class CompressionTests(unittest.TestCase):
             self.assertNotIn("Completed setup task", session)
             self.assertIn("Remaining setup task", session)
             self.assertIn(str(project_root / ".arms" / "SESSION_ARCHIVE.md"), output)
+
+    def test_compress_workspace_consolidates_legacy_protocol_reports(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            reports_dir = project_root / ".arms" / "reports"
+            reports_dir.mkdir(parents=True)
+            reports_dir.joinpath("review-2026-04-27.md").write_text("# Review A\n", encoding="utf-8")
+            reports_dir.joinpath("review-2026-04-28.md").write_text("# Review B\n", encoding="utf-8")
+
+            result = compression_module.compact_reports_directory(str(project_root))
+
+            latest_report = reports_dir / "review-latest.md"
+            history = reports_dir / "REPORT_HISTORY.md"
+            self.assertEqual(result["archived_reports"], 1)
+            self.assertTrue(latest_report.exists())
+            self.assertFalse((reports_dir / "review-2026-04-27.md").exists())
+            self.assertFalse((reports_dir / "review-2026-04-28.md").exists())
+            self.assertIn("# Review B", latest_report.read_text(encoding="utf-8"))
+            self.assertIn("# Review A", history.read_text(encoding="utf-8"))
+
+    def test_compress_workspace_compacts_agent_outputs_per_agent(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            agent_dir = project_root / ".arms" / "agent-outputs" / "arms-qa-agent"
+            agent_dir.mkdir(parents=True)
+            old_file = agent_dir / "report-old.md"
+            new_file = agent_dir / "report-new.md"
+            old_file.write_text("old output\n", encoding="utf-8")
+            new_file.write_text("new output\n", encoding="utf-8")
+            os.utime(old_file, (1, 1))
+            os.utime(new_file, (2, 2))
+
+            result = compression_module.compact_agent_outputs(str(project_root))
+
+            latest_file = agent_dir / "latest.md"
+            history_file = agent_dir / "history.md"
+            self.assertEqual(result["removed_files"], 2)
+            self.assertEqual(result["groups_compacted"], 1)
+            self.assertTrue(latest_file.exists())
+            self.assertTrue(history_file.exists())
+            self.assertEqual(latest_file.read_text(encoding="utf-8"), "new output\n")
+            self.assertIn("old output", history_file.read_text(encoding="utf-8"))
+
+
+class CompressMemoryGuardTests(unittest.TestCase):
+    """compress_memory_file must not overwrite MEMORY.md with an empty result."""
+
+    MEMORY_CONTENT = """# ARMS Project Memory
+
+> Managed by ARMS Engine.
+
+## Known Bugs & Fixes
+- [APPROVED][memory-20240101-01]: Always check for null before dereferencing.
+"""
+
+    def test_valid_memory_is_compacted(self):
+        import arms_engine.compression as compression_module
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            (project_root / ".arms" / "MEMORY.md").write_text(self.MEMORY_CONTENT, encoding="utf-8")
+            result = compression_module.compress_memory_file(str(project_root))
+            self.assertGreater(result["entries"], 0)
+            self.assertNotIn("skipped", result)
+
+    def test_empty_memory_sections_not_overwritten(self):
+        import arms_engine.compression as compression_module
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms").mkdir()
+            empty_memory = "# ARMS Project Memory\n\n> Managed by ARMS Engine.\n\n## Known Bugs & Fixes\n"
+            memory_path = project_root / ".arms" / "MEMORY.md"
+            memory_path.write_text(empty_memory, encoding="utf-8")
+            result = compression_module.compress_memory_file(str(project_root))
+            self.assertEqual(result.get("entries"), 0)
+            self.assertEqual(result.get("skipped"), "empty_result")
+            # File content must not have changed
+            self.assertEqual(memory_path.read_text(encoding="utf-8"), empty_memory)
 
 
 if __name__ == "__main__":

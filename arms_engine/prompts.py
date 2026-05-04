@@ -12,6 +12,8 @@ from .brand import (
     read_text_file,
     resolve_stack_recommendation,
 )
+from .budgets import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
+from .paths import WorkspacePaths
 from .session import assess_token_budget, format_token_budget_message, write_text_atomic
 
 
@@ -25,8 +27,6 @@ CONTEXT_SYNTHESIS_HEADER = """# ARMS Context Synthesis
 > Managed by ARMS Engine. Regenerated from `.arms/BRAND.md` during `arms init`.
 > This file condenses the approved brand and stack answers into an AI-ready project brief.
 """
-CONTEXT_SYNTHESIS_TOKEN_BUDGET = 2200
-GENERATED_PROMPTS_TOKEN_BUDGET = 1600
 
 
 def render_markdown_bullets(items, empty_message):
@@ -149,6 +149,8 @@ def render_startup_tasks_content(data):
         "|---|------|----------------|--------------|--------------|--------|",
     ]
     for index, row in enumerate(rows, start=1):
+        if not row.get("task") or not row.get("agent"):
+            continue
         lines.append(
             f"| {index} | {row['task']} | {row['agent']} | — | {row['dependencies']} | Pending |"
         )
@@ -156,7 +158,7 @@ def render_startup_tasks_content(data):
 
 
 def build_context_synthesis_data(project_root):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+    brand_path = WorkspacePaths(project_root).brand
     brand_content = read_text_file(brand_path)
     if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
         return None
@@ -426,7 +428,7 @@ def maybe_print_budget_warning(label, content, budget):
 
 
 def sync_context_synthesis(project_root):
-    synthesis_path = os.path.join(project_root, ".arms/CONTEXT_SYNTHESIS.md")
+    synthesis_path = WorkspacePaths(project_root).context_synthesis
     synthesis_content = render_context_synthesis(project_root)
 
     if synthesis_content is None:
@@ -457,6 +459,7 @@ def render_generated_prompts(project_root):
     master_prompt = textwrap.dedent(
         f"""\
         Read `.arms/CONTEXT_SYNTHESIS.md` first.
+        If the user's latest chat message is a new durable issue or work request, log or refresh it in `.arms/SESSION.md` with `arms task log --task "<normalized ask>"` before substantive planning.
         For {data['project_name']}, {build_action}.
         Use {stack_profile['framework']} + {stack_profile['ui_system']}.
         Honor: {data['technical_constraints']} / {data['content_non_negotiables']}.
@@ -495,6 +498,7 @@ def render_generated_prompts(project_root):
             "## Usage\n"
             "- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n"
             "- These prompts stay intentionally thin so the synthesis file remains the single dense context source.\n"
+            "- When a user sends a new issue or durable work request through CLI/IDE chat, first run `arms task log --task \"<normalized ask>\"` (or refresh the matching open row) before substantive planning or implementation.\n"
             "- Use the listed specialist agent for each prompt.\n"
             "- If the user is already replying inside one of these generated/custom specialist prompts, treat clarifying questions and issue follow-ups as continuation of that active task unless they introduce a net-new ask.\n"
             "- Do not run specialist implementation prompts with `arms-main-agent`; keep `arms-main-agent` for orchestration only."
@@ -601,7 +605,7 @@ def render_generated_prompts(project_root):
 
 
 def sync_generated_prompts(project_root):
-    prompts_path = os.path.join(project_root, ".arms/GENERATED_PROMPTS.md")
+    prompts_path = WorkspacePaths(project_root).generated_prompts
     prompts_content = render_generated_prompts(project_root)
 
     if prompts_content is None:

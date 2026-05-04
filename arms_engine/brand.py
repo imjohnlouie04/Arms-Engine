@@ -2,6 +2,8 @@ import json
 import os
 import re
 
+from .paths import WorkspacePaths
+
 
 NEW_PROJECT_BRAND_MARKER = "> New project detected."
 NEW_PROJECT_BRAND_FIELDS = (
@@ -358,7 +360,8 @@ STACK_RECOMMENDATIONS = {
 }
 
 
-def read_text_file(path, max_chars=40000):
+def read_text_file(path: str, max_chars: int = 40000) -> str:
+    """Read up to *max_chars* bytes from *path*; return empty string on any error."""
     if not os.path.exists(path):
         return ""
     try:
@@ -368,7 +371,11 @@ def read_text_file(path, max_chars=40000):
         return ""
 
 
-def read_project_signal_file(path, max_chars=PROJECT_SIGNAL_FILE_CHAR_CAP):
+def read_project_signal_file(path: str, max_chars: int = PROJECT_SIGNAL_FILE_CHAR_CAP) -> tuple:
+    """Read a project signal file, returning (content, status).
+
+    Status values: ``"ok"``, ``"missing"``, ``"too_large"``, ``"unreadable"``.
+    """
     if not os.path.exists(path):
         return "", "missing"
     try:
@@ -383,21 +390,25 @@ def read_project_signal_file(path, max_chars=PROJECT_SIGNAL_FILE_CHAR_CAP):
         return "", "unreadable"
 
 
-def is_new_project_brand_questionnaire(content):
+def is_new_project_brand_questionnaire(content: str) -> bool:
+    """Return True if *content* contains the new-project brand questionnaire marker."""
     return NEW_PROJECT_BRAND_MARKER in content
 
 
-def extract_brand_field(content, field_name):
+def extract_brand_field(content: str, field_name: str) -> str:
+    """Extract the value of a ``- **Field:** value`` line from *content*."""
     pattern = rf"(?m)^- \*\*{re.escape(field_name)}:\*\* (.*)$"
     match = re.search(pattern, content)
     return match.group(1).strip() if match else ""
 
 
-def normalize_answer_key(value):
+def normalize_answer_key(value: str) -> str:
+    """Normalise a field label to a lowercase, collapsed-whitespace key for dict lookups."""
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
-def build_answer_field_aliases():
+def build_answer_field_aliases() -> dict:
+    """Build a mapping of normalised label variants → canonical BRAND.md field names."""
     aliases = {}
     direct_fields = ("Project Name",) + NEW_PROJECT_BRAND_FIELDS + NOTE_DRIVEN_INTAKE_FIELDS
 
@@ -428,7 +439,8 @@ def build_answer_field_aliases():
     return aliases
 
 
-def normalize_structured_answer(field_name, value):
+def normalize_structured_answer(field_name: str, value: str) -> str:
+    """Resolve single-letter choice aliases and normalise whitespace in *value*."""
     normalized_value = " ".join(value.split()).strip()
     if not normalized_value:
         return normalized_value
@@ -444,7 +456,11 @@ def normalize_structured_answer(field_name, value):
     return normalized_value
 
 
-def update_brand_field(content, field_name, value, overwrite=False):
+def update_brand_field(content: str, field_name: str, value: str, overwrite: bool = False) -> tuple:
+    """Set *field_name* to *value* in *content* if the field exists and is unanswered (or *overwrite* is True).
+
+    Returns ``(updated_content, changed: bool)``.
+    """
     pattern = rf"(?m)^- \*\*{re.escape(field_name)}:\*\* .*$"
     if not re.search(pattern, content):
         return content, False
@@ -457,13 +473,18 @@ def update_brand_field(content, field_name, value, overwrite=False):
     return re.sub(pattern, updated_line, content, count=1), True
 
 
-def extract_note_entry(content, label):
+def extract_note_entry(content: str, label: str) -> str:
+    """Extract the value of a ``- label: value`` note line from *content*."""
     pattern = rf"(?m)^- {re.escape(label)}: (.*)$"
     match = re.search(pattern, content)
     return match.group(1).strip() if match else ""
 
 
-def upsert_note_entry(content, label, value):
+def upsert_note_entry(content: str, label: str, value: str) -> tuple:
+    """Insert or update a ``- label: value`` note line in the ``## Notes`` section.
+
+    Returns ``(updated_content, changed: bool)``.
+    """
     pattern = rf"(?m)^- {re.escape(label)}: .*$"
     note_line = f"- {label}: {value}"
 
@@ -477,24 +498,28 @@ def upsert_note_entry(content, label, value):
     return content.rstrip() + f"\n\n## Notes\n{note_line}\n", True
 
 
-def brand_field_is_unanswered(value):
+def brand_field_is_unanswered(value: str) -> bool:
+    """Return True if *value* represents an unanswered placeholder (empty, TBD, unknown, etc.)."""
     normalized = value.strip().lower()
     return normalized in {"", "tbd", "unknown", "undecided", "unsure"}
 
 
-def brand_field_is_not_applicable(value):
+def brand_field_is_not_applicable(value: str) -> bool:
+    """Return True if *value* explicitly marks a field as not applicable (N/A, na, etc.)."""
     normalized = value.strip().lower()
     return normalized in {"n/a", "na", "not applicable", "none"}
 
 
-def normalize_brand_value(value, fallback):
+def normalize_brand_value(value: str, fallback: str) -> str:
+    """Return *value* if it is answered, otherwise *fallback*."""
     stripped = value.strip()
     if brand_field_is_unanswered(stripped):
         return fallback
     return stripped
 
 
-def get_missing_new_project_brand_fields(content):
+def get_missing_new_project_brand_fields(content: str) -> list:
+    """Return a list of NEW_PROJECT_BRAND_FIELDS that are still unanswered in *content*."""
     missing_fields = []
     for field_name in NEW_PROJECT_BRAND_FIELDS:
         value = extract_brand_field(content, field_name)
@@ -503,7 +528,8 @@ def get_missing_new_project_brand_fields(content):
     return missing_fields
 
 
-def collect_brand_context(content, project_root):
+def collect_brand_context(content: str, project_root: str) -> dict:
+    """Collect all brand fields and note-driven intake entries from *content* into a dict."""
     field_names = ("Project Name",) + NEW_PROJECT_BRAND_FIELDS
     fields = {field_name: extract_brand_field(content, field_name) for field_name in field_names}
     for field_name in NOTE_DRIVEN_INTAKE_FIELDS:
@@ -513,7 +539,8 @@ def collect_brand_context(content, project_root):
     return fields
 
 
-def infer_build_surface(context):
+def infer_build_surface(context: dict) -> str:
+    """Infer a human-readable build surface label (e.g. ``"local-service landing page"``) from *context*."""
     experience_value = context.get("Experience Type", "").strip()
     experience_type = experience_value.lower()
     project_type = context.get("Project Type", "").lower()
@@ -536,7 +563,11 @@ def infer_build_surface(context):
     return "initial product experience"
 
 
-def infer_explicit_stack_key(value):
+def infer_explicit_stack_key(value: str) -> str:
+    """Map a free-text stack preference to a ``STACK_RECOMMENDATIONS`` key (``"nextjs"``, ``"nuxt"``, ``"astro"``).
+
+    Returns an empty string if no key is recognised.
+    """
     normalized = value.strip().lower()
     if not normalized:
         return ""
@@ -549,7 +580,12 @@ def infer_explicit_stack_key(value):
     return ""
 
 
-def infer_stack_recommendation_key(context):
+def infer_stack_recommendation_key(context: dict) -> tuple:
+    """Determine the best ``STACK_RECOMMENDATIONS`` key for *context*.
+
+    Returns ``(key, inferred: bool)`` where *inferred* is True when the key was
+    auto-selected rather than explicitly requested by the user.
+    """
     preferred_stack = context.get("Preferred Tech Stack", "")
     explicit_key = infer_explicit_stack_key(preferred_stack)
     if explicit_key and "custom" not in preferred_stack.lower():
@@ -587,7 +623,8 @@ def infer_stack_recommendation_key(context):
     return "nextjs", True
 
 
-def resolve_stack_recommendation(context):
+def resolve_stack_recommendation(context: dict) -> dict:
+    """Return a fully populated stack recommendation dict for the given brand *context*."""
     stack_key, inferred = infer_stack_recommendation_key(context)
     profile = dict(STACK_RECOMMENDATIONS[stack_key])
     requested_stack = context.get("Preferred Tech Stack", "").strip()
@@ -633,7 +670,8 @@ def resolve_stack_recommendation(context):
     return profile
 
 
-def project_needs_backend_foundation(context, stack_profile):
+def project_needs_backend_foundation(context: dict, stack_profile: dict) -> bool:
+    """Return True if the project context implies a backend/data layer is required."""
     auth_requirement = context.get("Authentication Requirement", "")
     if auth_requirement and not brand_field_is_unanswered(auth_requirement) and not brand_field_is_not_applicable(auth_requirement):
         if "none" not in auth_requirement.lower():
@@ -667,11 +705,13 @@ def project_needs_backend_foundation(context, stack_profile):
     )
 
 
-def format_available_presets():
+def format_available_presets() -> str:
+    """Return a comma-separated string of available preset names."""
     return ", ".join(sorted(PROJECT_PRESETS))
 
 
-def infer_project_type_from_primary_use_case(value):
+def infer_project_type_from_primary_use_case(value: str) -> str:
+    """Map a Primary Use Case answer to a ``Project Type`` label."""
     normalized = value.strip().lower()
     if "content" in normalized or "marketing" in normalized:
         return "Content / Marketing Site"
@@ -680,7 +720,8 @@ def infer_project_type_from_primary_use_case(value):
     return value.strip()
 
 
-def infer_logo_status_from_assets(value):
+def infer_logo_status_from_assets(value: str) -> str:
+    """Infer a ``Logo Status`` string from a free-text ``Existing Brand Assets`` answer."""
     normalized = value.strip().lower()
     if not normalized:
         return ""
@@ -698,7 +739,8 @@ def infer_logo_status_from_assets(value):
     return ""
 
 
-def parse_structured_answer_line(line, aliases, question_map, question_labels):
+def parse_structured_answer_line(line: str, aliases: dict, question_map: dict, question_labels: dict) -> tuple:
+    """Parse a single answer line and return ``(field_name, value)`` or ``(None, None)``."""
     markdown_match = re.match(r"^- \*\*(.+?)\:\*\*\s*(.*)$", line)
     if markdown_match:
         label = markdown_match.group(1).strip()
@@ -727,7 +769,8 @@ def parse_structured_answer_line(line, aliases, question_map, question_labels):
     return None, None
 
 
-def collect_structured_answer_entries(text):
+def collect_structured_answer_entries(text: str) -> list:
+    """Parse *text* into a list of ``{"field_name": ..., "parts": [...]}`` entry dicts."""
     aliases = build_answer_field_aliases()
     question_map = {number: field_name for number, _, field_name in QUESTION_FIELD_SPECS}
     question_labels = {number: label for number, label, _ in QUESTION_FIELD_SPECS}
@@ -754,7 +797,8 @@ def collect_structured_answer_entries(text):
     return entries
 
 
-def parse_structured_answers(text):
+def parse_structured_answers(text: str) -> dict:
+    """Parse free-text answer *text* into a ``{field_name: value}`` dict."""
     if not text.strip():
         return {}
 
@@ -768,7 +812,11 @@ def parse_structured_answers(text):
     return answers
 
 
-def apply_project_preset(content, preset_name):
+def apply_project_preset(content: str, preset_name: str) -> tuple:
+    """Apply a named project preset to *content*, skipping already-answered fields.
+
+    Returns ``(updated_content, changed_fields)``.
+    """
     preset = PROJECT_PRESETS[preset_name]
     changed_fields = []
 
@@ -780,7 +828,12 @@ def apply_project_preset(content, preset_name):
     return content, changed_fields
 
 
-def apply_answers_to_brand_content(content, answers):
+def apply_answers_to_brand_content(content: str, answers: dict) -> tuple:
+    """Apply a parsed *answers* dict to the BRAND.md *content*.
+
+    Returns ``(updated_content, {"fields": [...], "notes": [...]})``.
+    Direct field updates overwrite; derived fields only fill unanswered slots.
+    """
     if not answers:
         return content, {"fields": [], "notes": []}
 
@@ -835,7 +888,8 @@ def apply_answers_to_brand_content(content, answers):
     return content, {"fields": changed_fields, "notes": changed_notes}
 
 
-def brand_file_requires_bootstrap(content):
+def brand_file_requires_bootstrap(content: str) -> bool:
+    """Return True if BRAND.md *content* still needs user input before design work can begin."""
     if not content.strip():
         return True
     if any(token in content for token in PLACEHOLDER_BRAND_TOKENS):
@@ -845,7 +899,8 @@ def brand_file_requires_bootstrap(content):
     return False
 
 
-def extract_first_meaningful_paragraph(text):
+def extract_first_meaningful_paragraph(text: str) -> str:
+    """Return the first non-heading, non-list prose paragraph from *text*."""
     lines = text.splitlines()
     paragraph = []
     in_code_block = False
@@ -880,7 +935,8 @@ def extract_first_meaningful_paragraph(text):
     return " ".join(paragraph).strip()
 
 
-def detect_existing_project(project_root):
+def detect_existing_project(project_root: str) -> bool:
+    """Return True if *project_root* looks like an existing (non-empty) project."""
     substantive_markers = [marker for marker in PROJECT_MARKER_FILES if marker not in {"README.md", "README.mdx"}]
     for marker in substantive_markers:
         if os.path.exists(os.path.join(project_root, marker)):
@@ -912,7 +968,8 @@ def detect_existing_project(project_root):
     return len(substantive_entries) >= 2
 
 
-def detect_workspace_mode(project_root, brand_content=""):
+def detect_workspace_mode(project_root: str, brand_content: str = "") -> str:
+    """Return ``"new-project"`` or ``"existing-project"`` based on workspace signals."""
     if brand_content and is_new_project_brand_questionnaire(brand_content):
         return "new-project"
     if detect_existing_project(project_root):
@@ -920,7 +977,8 @@ def detect_workspace_mode(project_root, brand_content=""):
     return "new-project"
 
 
-def detect_logo_status(project_root):
+def detect_logo_status(project_root: str) -> str:
+    """Scan *project_root* for logo/brand image assets and return a status string."""
     candidate_dirs = (
         project_root,
         os.path.join(project_root, "public"),
@@ -942,7 +1000,8 @@ def detect_logo_status(project_root):
     return "Pending / no explicit logo asset found"
 
 
-def parse_pyproject_metadata(content):
+def parse_pyproject_metadata(content: str) -> dict:
+    """Extract ``name``, ``description``, and ``has_scripts`` from pyproject.toml *content*."""
     name_match = re.search(r'(?m)^name\s*=\s*["\']([^"\']+)["\']', content)
     description_match = re.search(r'(?m)^description\s*=\s*["\']([^"\']+)["\']', content)
     scripts_match = re.search(r"(?m)^\[project\.scripts\]", content)
@@ -953,7 +1012,8 @@ def parse_pyproject_metadata(content):
     }
 
 
-def classify_project_type(description_blob, frameworks, has_project_scripts):
+def classify_project_type(description_blob: str, frameworks: list, has_project_scripts: bool) -> str:
+    """Classify the project as one of: ``"Developer Tooling"``, ``"Web Application"``, ``"Content / Marketing Site"``, ``"Backend Service"``, or ``"Software Project"``."""
     blob = description_blob.lower()
     framework_set = {framework.lower() for framework in frameworks}
 
@@ -970,7 +1030,8 @@ def classify_project_type(description_blob, frameworks, has_project_scripts):
     return "Software Project"
 
 
-def infer_personality(project_type):
+def infer_personality(project_type: str) -> str:
+    """Return a default personality string for the given *project_type*."""
     if project_type == "Developer Tooling":
         return "Technical, precise, efficient"
     if project_type == "Content / Marketing Site":
@@ -982,7 +1043,8 @@ def infer_personality(project_type):
     return "Focused, practical, adaptable"
 
 
-def infer_voice_tone(project_type):
+def infer_voice_tone(project_type: str) -> str:
+    """Return a default voice & tone string for the given *project_type*."""
     if project_type == "Developer Tooling":
         return "Direct, technical, low-fluff communication for builders."
     if project_type == "Content / Marketing Site":
@@ -994,7 +1056,8 @@ def infer_voice_tone(project_type):
     return "Plainspoken and pragmatic."
 
 
-def infer_primary_audience(project_type):
+def infer_primary_audience(project_type: str) -> str:
+    """Return a default primary audience string for the given *project_type*."""
     if project_type == "Developer Tooling":
         return "Developers, technical operators, and engineering teams"
     if project_type == "Content / Marketing Site":
@@ -1006,7 +1069,8 @@ def infer_primary_audience(project_type):
     return "Project stakeholders and end users"
 
 
-def infer_core_values(project_type):
+def infer_core_values(project_type: str) -> str:
+    """Return a default core values string for the given *project_type*."""
     if project_type == "Developer Tooling":
         return "Automation, consistency, maintainability"
     if project_type == "Content / Marketing Site":
@@ -1018,7 +1082,8 @@ def infer_core_values(project_type):
     return "Pragmatism, quality, adaptability"
 
 
-def infer_design_priority(project_type):
+def infer_design_priority(project_type: str) -> str:
+    """Return a default design priority string for the given *project_type*."""
     if project_type == "Developer Tooling":
         return "Clarity for technical workflows"
     if project_type == "Content / Marketing Site":
@@ -1030,7 +1095,13 @@ def infer_design_priority(project_type):
     return "Clear information hierarchy"
 
 
-def infer_brand_context_from_project(project_root):
+def infer_brand_context_from_project(project_root: str) -> dict:
+    """Scan *project_root* and return an inferred brand context dict.
+
+    Reads ``package.json``, ``pyproject.toml``, ``Cargo.toml``, ``go.mod``,
+    ``README.md``, and project instruction files to populate brand, stack,
+    and personality fields automatically.
+    """
     evidence = []
     frameworks = []
     package_name = ""
@@ -1210,7 +1281,8 @@ def infer_brand_context_from_project(project_root):
     }
 
 
-def render_inferred_brand_context(project_root):
+def render_inferred_brand_context(project_root: str) -> str:
+    """Render a BRAND.md template pre-filled with inferred context from *project_root*."""
     context = infer_brand_context_from_project(project_root)
     notes = "\n".join(f"- {note}" for note in context["notes"])
     return f"""# Brand Context
@@ -1246,7 +1318,8 @@ def render_inferred_brand_context(project_root):
 """
 
 
-def render_new_project_brand_questionnaire(project_root):
+def render_new_project_brand_questionnaire(project_root: str) -> str:
+    """Render a blank BRAND.md questionnaire template for a new project at *project_root*."""
     project_name = os.path.basename(os.path.abspath(project_root)) or "TBD"
     return f"""# Brand Context
 > Managed by ARMS Engine. Referenced by: Frontend, SEO, and Media agents.
@@ -1312,7 +1385,8 @@ def render_new_project_brand_questionnaire(project_root):
 """
 
 
-def render_new_project_brand_prompt(missing_fields=None):
+def render_new_project_brand_prompt(missing_fields: list = None) -> str:
+    """Build the brand-intake prompt shown to users who need to fill in BRAND.md."""
     brand_questions = "\n".join(NEW_PROJECT_BRAND_QUESTIONS)
     tech_stack_questions = "\n".join(NEW_PROJECT_TECH_STACK_QUESTIONS)
     website_brief_questions = "\n".join(NEW_PROJECT_WEBSITE_BRIEF_QUESTIONS)
@@ -1344,8 +1418,13 @@ def render_new_project_brand_prompt(missing_fields=None):
     )
 
 
-def initialize_brand_context(project_root):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+def initialize_brand_context(project_root: str) -> dict:
+    """Bootstrap or reuse BRAND.md for *project_root*.
+
+    Returns a status dict with a ``"status"`` key (``"existing"``, ``"inferred"``,
+    or ``"questions_required"``) and an optional ``"prompt"`` key.
+    """
+    brand_path = WorkspacePaths(project_root).brand
 
     existing_content = read_text_file(brand_path)
     if existing_content:
@@ -1379,8 +1458,12 @@ def initialize_brand_context(project_root):
     }
 
 
-def apply_brand_inputs(project_root, preset_name="", answers_text=""):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+def apply_brand_inputs(project_root: str, preset_name: str = "", answers_text: str = "") -> bool:
+    """Apply a *preset_name* and/or *answers_text* to BRAND.md in *project_root*.
+
+    Returns True if any changes were written to disk.
+    """
+    brand_path = WorkspacePaths(project_root).brand
     content = read_text_file(brand_path)
     if not content:
         return False

@@ -1,6 +1,8 @@
 import os
 import re
 
+import yaml
+
 from .protocols import (
     KEEP_EXISTING,
     parse_task_rows,
@@ -18,6 +20,8 @@ TASK_COMMANDS = {
     ("task", "log"): "log",
     ("task", "update"): "update",
     ("task", "done"): "done",
+    ("task", "list"): "list",
+    ("task", "status"): "list",
 }
 STATUS_ALIASES = {
     "pending": "Pending",
@@ -31,7 +35,8 @@ STATUS_ALIASES = {
     "cancelled": "Cancelled",
     "canceled": "Cancelled",
 }
-ROUTING_RULES = (
+_ROUTING_YAML = os.path.join(os.path.dirname(__file__), "routing.yaml")
+_ROUTING_RULES_FALLBACK = (
     (
         "arms-main-agent",
         (
@@ -199,6 +204,23 @@ ROUTING_RULES = (
         ),
     ),
 )
+
+
+def _load_routing_rules():
+    """Load routing rules from routing.yaml; fall back to hardcoded defaults."""
+    try:
+        with open(_ROUTING_YAML, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+        routing = data.get("routing", {})
+        return tuple(
+            (agent, tuple(kw for kw in entry.get("keywords", [])))
+            for agent, entry in routing.items()
+        )
+    except Exception:  # noqa: BLE001 — broad catch for missing/malformed YAML
+        return _ROUTING_RULES_FALLBACK
+
+
+ROUTING_RULES = _load_routing_rules()
 ROUTING_RULE_PATTERNS = tuple(
     (
         agent_name,
@@ -208,22 +230,24 @@ ROUTING_RULE_PATTERNS = tuple(
 )
 
 
-def identify_task_command(command_parts):
+def identify_task_command(command_parts: tuple) -> str:
+    """Return the normalised task sub-command name or empty string if unrecognised."""
     normalized = tuple(part.strip().lower() for part in command_parts if part.strip())
     return TASK_COMMANDS.get(normalized, "")
 
 
 def handle_task_command(
-    project_root,
-    arms_root,
-    command_name,
-    task="",
-    task_id="",
-    assigned_agent="",
-    active_skill="",
-    dependencies="",
-    status="",
-):
+    project_root: str,
+    arms_root: str,
+    command_name: str,
+    task: str = "",
+    task_id: str = "",
+    assigned_agent: str = "",
+    active_skill: str = "",
+    dependencies: str = "",
+    status: str = "",
+) -> None:
+    """Dispatch a ``task log``, ``task update``, or ``task done`` command and print a structured response."""
     try:
         _, sections = load_session_sections(project_root)
     except FileNotFoundError:
@@ -242,6 +266,19 @@ def handle_task_command(
 
     agent_names, agent_skill_bindings, skill_catalog_by_name = load_routing_context(arms_root)
     active_rows = parse_task_rows(sections.get("Active Tasks", ""))
+
+    if command_name == "list":
+        table = list_task_rows(active_rows, arms_root)
+        emit_task_response(
+            command_name,
+            project_root,
+            updates="None",
+            action_lines=["Current active task table from `.arms/SESSION.md`:"],
+            task_table=table,
+            archive_diagnostics="",
+            next_step="No changes were made. → HALT",
+        )
+        return
 
     try:
         if command_name == "log":
@@ -339,6 +376,14 @@ def log_task_row(
             validate_skill_name(row["Assigned Agent"], active_skill, agent_skill_bindings, skill_catalog_by_name)
             row["Active Skill"] = normalize_skill_value(active_skill, missing_default="—")
         if dependencies.strip():
+            dep_ids = parse_dependency_ids(normalize_dependencies(dependencies))
+            cycle = detect_dependency_cycle(rows, row["#"], dep_ids)
+            if cycle:
+                raise TaskCommandError(
+                    "Setting dependencies `{}` on task `#{}` would create a cycle: {}.".format(
+                        dependencies, row["#"], " → ".join(cycle)
+                    )
+                )
             row["Dependencies"] = normalize_dependencies(dependencies)
         if status.strip():
             row["Status"] = normalize_status(status)
@@ -362,13 +407,26 @@ def log_task_row(
 
     resolved_agent = validate_agent_name(assigned_agent, agent_names) if assigned_agent.strip() else infer_agent_from_task(normalized_task)
     validate_skill_name(resolved_agent, active_skill, agent_skill_bindings, skill_catalog_by_name)
+    new_task_id = str(len(rows) + 1)
+    normalized_dep_value = normalize_dependencies(dependencies)
+    if dependencies.strip():
+        dep_ids = parse_dependency_ids(normalized_dep_value)
+        # The new row isn't in `rows` yet; temporarily add a stub so the graph is complete.
+        stub_rows = list(rows) + [{"#": new_task_id, "Dependencies": normalized_dep_value}]
+        cycle = detect_dependency_cycle(stub_rows, new_task_id, dep_ids)
+        if cycle:
+            raise TaskCommandError(
+                "Setting dependencies `{}` on new task would create a cycle: {}.".format(
+                    dependencies, " → ".join(cycle)
+                )
+            )
     rows.append(
         {
-            "#": str(len(rows) + 1),
+            "#": new_task_id,
             "Task": normalized_task,
             "Assigned Agent": resolved_agent,
             "Active Skill": normalize_skill_value(active_skill, missing_default="—"),
-            "Dependencies": normalize_dependencies(dependencies),
+            "Dependencies": normalized_dep_value,
             "Status": normalize_status(status or "Pending"),
         }
     )
@@ -432,6 +490,14 @@ def update_task_row(
         row["Active Skill"] = normalize_skill_value(active_skill, missing_default="—")
 
     if dependencies.strip():
+        dep_ids = parse_dependency_ids(normalize_dependencies(dependencies))
+        cycle = detect_dependency_cycle(rows, row["#"], dep_ids)
+        if cycle:
+            raise TaskCommandError(
+                "Setting dependencies `{}` on task `#{}` would create a cycle: {}.".format(
+                    dependencies, row["#"], " → ".join(cycle)
+                )
+            )
         row["Dependencies"] = normalize_dependencies(dependencies)
     if status.strip():
         row["Status"] = normalize_status(status)
@@ -460,6 +526,14 @@ def update_task_row(
         ],
         "next_step": next_step,
     }
+
+
+def list_task_rows(active_rows, arms_root):
+    """Return the current active task table as a formatted string without modifying any files."""
+    rows = renumber_rows(active_rows)
+    if not rows:
+        return "No active tasks in `.arms/SESSION.md`."
+    return render_task_table(rows, arms_root)
 
 
 def complete_task_row(active_rows, task_id=""):
@@ -569,6 +643,52 @@ def normalize_dependencies(value):
     if normalized.lower() in {"", "-", "—", "none", "n/a", "na"}:
         return "—"
     return normalized
+
+
+def parse_dependency_ids(dep_value):
+    """Return a set of task-ID strings parsed from a Dependencies cell value.
+
+    Handles ``"—"``, ``"1"``, ``"1, 2"``, ``"1,2"`` and mixed whitespace.
+    """
+    if not dep_value or dep_value.strip() in {"", "-", "—"}:
+        return set()
+    return {part.strip() for part in re.split(r"[,\s]+", dep_value) if part.strip().isdigit()}
+
+
+def detect_dependency_cycle(rows, target_id, new_dep_ids):
+    """Return the offending cycle path if adding *new_dep_ids* to *target_id* creates a cycle.
+
+    Uses depth-first search over the task-row dependency graph.
+    Returns a list of task IDs forming the cycle, or an empty list if no cycle.
+    """
+    # Build a full adjacency map: task_id → set of dependency IDs
+    dep_map = {}
+    for row in rows:
+        rid = row.get("#", "").strip()
+        if rid:
+            dep_map[rid] = parse_dependency_ids(row.get("Dependencies", ""))
+
+    # Apply the proposed change
+    dep_map[target_id] = new_dep_ids
+
+    # DFS reachability: from each dep in new_dep_ids, can we reach target_id?
+    def _dfs(current, visited, path):
+        if current == target_id:
+            return path + [current]
+        if current in visited:
+            return []
+        visited.add(current)
+        for next_id in dep_map.get(current, set()):
+            result = _dfs(next_id, visited, path + [current])
+            if result:
+                return result
+        return []
+
+    for dep_id in new_dep_ids:
+        cycle = _dfs(dep_id, set(), [target_id])
+        if cycle:
+            return cycle
+    return []
 
 
 def normalize_status(value):

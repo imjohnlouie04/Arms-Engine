@@ -1,6 +1,7 @@
 import datetime
 import os
 
+from .paths import WorkspacePaths
 from .session import (
     MEMORY_APPROVED_MARKER,
     MEMORY_ENTRY_ID_RE,
@@ -13,7 +14,8 @@ from .session import (
 )
 
 
-def identify_memory_command(command_parts):
+def identify_memory_command(command_parts: tuple) -> str:
+    """Return ``"draft"`` or ``"append"`` for the given command parts, or empty string."""
     normalized = tuple(part.strip().lower() for part in command_parts if part.strip())
     if normalized == ("memory", "draft"):
         return "draft"
@@ -22,7 +24,16 @@ def identify_memory_command(command_parts):
     return ""
 
 
-def handle_memory_command(project_root, arms_root, command_name, section="", lesson="", draft_id="", from_suggestion=""):
+def handle_memory_command(
+    project_root: str,
+    arms_root: str,
+    command_name: str,
+    section: str = "",
+    lesson: str = "",
+    draft_id: str = "",
+    from_suggestion: str = "",
+) -> None:
+    """Dispatch a ``memory draft`` or ``memory append`` command and print a structured response."""
     error = validate_memory_command(project_root, command_name, section, lesson, draft_id, from_suggestion)
     if error:
         emit_memory_response(
@@ -36,12 +47,15 @@ def handle_memory_command(project_root, arms_root, command_name, section="", les
 
     if command_name == "draft":
         result = create_memory_draft(project_root, section, lesson, from_suggestion=from_suggestion)
+        is_duplicate = result.get("duplicate", False)
         emit_memory_response(
             command_name,
             project_root,
-            updates="Updated `.arms/MEMORY.md`.",
+            updates="None" if is_duplicate else "Updated `.arms/MEMORY.md`.",
             action_lines=[
-                "Memory draft recorded under `{}.`".format(result["section"]),
+                "Duplicate draft detected — entry already pending under `{}`.".format(result["section"])
+                if is_duplicate
+                else "Memory draft recorded under `{}.`".format(result["section"]),
                 "- Draft ID: `{}`".format(result["draft_id"]),
                 "- Status: pending approval",
                 "- Entry: `{}`".format(result["entry_text"]),
@@ -68,9 +82,18 @@ def handle_memory_command(project_root, arms_root, command_name, section="", les
     )
 
 
-def validate_memory_command(project_root, command_name, section, lesson, draft_id, from_suggestion):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+def validate_memory_command(
+    project_root: str,
+    command_name: str,
+    section: str,
+    lesson: str,
+    draft_id: str,
+    from_suggestion: str,
+) -> str:
+    """Validate inputs for a memory command; return an error message string or empty string on success."""
+    wp = WorkspacePaths(project_root)
+    session_path = wp.session
+    memory_path = wp.memory
     if not os.path.isfile(session_path) or not os.path.isfile(memory_path):
         return "Structured memory commands require an initialized workspace. Run `arms init` first."
     if command_name == "draft":
@@ -90,7 +113,8 @@ def validate_memory_command(project_root, command_name, section, lesson, draft_i
     return ""
 
 
-def create_memory_draft(project_root, section, lesson, from_suggestion=""):
+def create_memory_draft(project_root: str, section: str, lesson: str, from_suggestion: str = "") -> dict:
+    """Append a ``[PENDING APPROVAL]`` memory entry to MEMORY.md and return draft metadata."""
     preamble, sections = load_memory_sections(project_root)
     if from_suggestion.strip():
         suggestion = resolve_memory_suggestion(project_root, from_suggestion)
@@ -102,6 +126,14 @@ def create_memory_draft(project_root, section, lesson, from_suggestion=""):
         normalized_section = normalize_section_name(section)
         normalized_lesson = normalize_lesson_text(lesson)
     draft_id = next_memory_entry_id(sections)
+    existing = find_pending_entry_by_text(sections, normalized_section, normalized_lesson)
+    if existing is not None:
+        return {
+            "section": existing["section"],
+            "draft_id": existing["draft_id"],
+            "entry_text": normalized_lesson,
+            "duplicate": True,
+        }
     entry = render_memory_entry(MEMORY_PENDING_MARKER, draft_id, normalized_lesson)
     append_section_entry(sections, normalized_section, entry)
     write_memory_sections(project_root, preamble, sections)
@@ -112,7 +144,8 @@ def create_memory_draft(project_root, section, lesson, from_suggestion=""):
     }
 
 
-def append_memory_entry(project_root, arms_root, section, lesson, draft_id):
+def append_memory_entry(project_root: str, arms_root: str, section: str, lesson: str, draft_id: str) -> dict:
+    """Approve and promote a pending memory draft (or write a new approved entry) to MEMORY.md."""
     preamble, sections = load_memory_sections(project_root)
     normalized_section = normalize_section_name(section) if section.strip() else ""
     normalized_lesson = normalize_lesson_text(lesson) if lesson.strip() else ""
@@ -196,12 +229,12 @@ def emit_memory_response(command_name, project_root, updates, action_lines, next
 
 
 def load_memory_sections(project_root):
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    memory_path = WorkspacePaths(project_root).memory
     return parse_markdown_sections(read_text_file(memory_path))
 
 
 def write_memory_sections(project_root, preamble, sections):
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    memory_path = WorkspacePaths(project_root).memory
     write_markdown_sections(memory_path, preamble, sections)
 
 
@@ -333,7 +366,7 @@ def approved_entry_text_exists(sections, section, lesson):
 
 
 def refresh_memory_session(project_root, arms_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     session_content = read_text_file(session_path)
     yolo_enabled = "YOLO Mode: Enabled" in session_content
     update_session(project_root, arms_root, yolo=yolo_enabled)

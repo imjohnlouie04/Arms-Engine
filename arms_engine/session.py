@@ -9,12 +9,12 @@ from collections import OrderedDict
 
 from . import __version__
 from .brand import infer_brand_context_from_project
+from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
+from .paths import WorkspacePaths
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
 from .versioning import resolve_version
 
 TOKEN_RE = re.compile(r"\S+")
-DEFAULT_TOKEN_BUDGET_WARN_RATIO = 0.9
-SESSION_TOKEN_BUDGET = 1400
 MEMORY_ENTRY_ID_RE = re.compile(r"\[(memory-\d{8}-\d+)\]")
 MEMORY_ENTRY_PREFIX_RE = re.compile(r"^\[(APPROVED|PENDING APPROVAL)\](?:\[(memory-\d{8}-\d+)\])?:\s*")
 MEMORY_APPROVED_MARKER = "[APPROVED]"
@@ -110,109 +110,99 @@ def write_file_if_missing(path, content, label):
 
 
 def bootstrap_runtime_files(project_root):
-    write_file_if_missing(
-        os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
-        SESSION_ARCHIVE_TEMPLATE,
-        ".arms/SESSION_ARCHIVE.md",
-    )
-    write_file_if_missing(
-        os.path.join(project_root, ".arms/MEMORY.md"),
-        MEMORY_TEMPLATE,
-        ".arms/MEMORY.md",
-    )
-    write_file_if_missing(
-        os.path.join(project_root, ".arms/RULES.md"),
-        RULES_TEMPLATE,
-        ".arms/RULES.md",
-    )
+    wp = WorkspacePaths(project_root)
+    write_file_if_missing(wp.archive, SESSION_ARCHIVE_TEMPLATE, ".arms/SESSION_ARCHIVE.md")
+    write_file_if_missing(wp.memory, MEMORY_TEMPLATE, ".arms/MEMORY.md")
+    write_file_if_missing(wp.rules, RULES_TEMPLATE, ".arms/RULES.md")
 
 
 def migrate_legacy_state(project_root):
+    wp = WorkspacePaths(project_root)
     migrations = [
         (
             "session log",
             os.path.join(project_root, ".gemini/SESSION.md"),
-            os.path.join(project_root, ".arms/SESSION.md"),
+            wp.session,
         ),
         (
             "session log",
             os.path.join(project_root, "SESSION.md"),
-            os.path.join(project_root, ".arms/SESSION.md"),
+            wp.session,
         ),
         (
             "session log",
             os.path.join(project_root, "session.md"),
-            os.path.join(project_root, ".arms/SESSION.md"),
+            wp.session,
         ),
         (
             "session archive",
             os.path.join(project_root, ".gemini/SESSION_ARCHIVE.md"),
-            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+            wp.archive,
         ),
         (
             "session archive",
             os.path.join(project_root, "SESSION_ARCHIVE.md"),
-            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+            wp.archive,
         ),
         (
             "session archive",
             os.path.join(project_root, "session_archive.md"),
-            os.path.join(project_root, ".arms/SESSION_ARCHIVE.md"),
+            wp.archive,
         ),
         (
             "brand context",
             os.path.join(project_root, "brand-context.md"),
-            os.path.join(project_root, ".arms/BRAND.md"),
+            wp.brand,
         ),
         (
             "brand context",
             os.path.join(project_root, ".gemini/brand-context.md"),
-            os.path.join(project_root, ".arms/BRAND.md"),
+            wp.brand,
         ),
         (
             "brand context",
             os.path.join(project_root, ".gemini/BRAND.md"),
-            os.path.join(project_root, ".arms/BRAND.md"),
+            wp.brand,
         ),
         (
             "brand context",
             os.path.join(project_root, "BRAND.md"),
-            os.path.join(project_root, ".arms/BRAND.md"),
+            wp.brand,
         ),
         (
             "brand context",
             os.path.join(project_root, "brand.md"),
-            os.path.join(project_root, ".arms/BRAND.md"),
+            wp.brand,
         ),
         (
             "project memory",
             os.path.join(project_root, ".gemini/MEMORY.md"),
-            os.path.join(project_root, ".arms/MEMORY.md"),
+            wp.memory,
         ),
         (
             "project memory",
             os.path.join(project_root, "MEMORY.md"),
-            os.path.join(project_root, ".arms/MEMORY.md"),
+            wp.memory,
         ),
         (
             "project memory",
             os.path.join(project_root, "memory.md"),
-            os.path.join(project_root, ".arms/MEMORY.md"),
+            wp.memory,
         ),
         (
             "project rules",
             os.path.join(project_root, ".gemini/RULES.md"),
-            os.path.join(project_root, ".arms/RULES.md"),
+            wp.rules,
         ),
         (
             "project rules",
             os.path.join(project_root, "RULES.md"),
-            os.path.join(project_root, ".arms/RULES.md"),
+            wp.rules,
         ),
         (
             "project rules",
             os.path.join(project_root, "rules.md"),
-            os.path.join(project_root, ".arms/RULES.md"),
+            wp.rules,
         ),
         (
             "agent registry",
@@ -222,17 +212,17 @@ def migrate_legacy_state(project_root):
         (
             "workflow mirror",
             os.path.join(project_root, ".gemini/workflow"),
-            os.path.join(project_root, ".arms/workflow"),
+            wp.workflow_dir,
         ),
         (
             "agent outputs",
             os.path.join(project_root, ".gemini/agent-outputs"),
-            os.path.join(project_root, ".arms/agent-outputs"),
+            wp.outputs_dir,
         ),
         (
             "reports",
             os.path.join(project_root, ".gemini/reports"),
-            os.path.join(project_root, ".arms/reports"),
+            wp.reports_dir,
         ),
     ]
 
@@ -355,7 +345,16 @@ def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catal
     if not stripped:
         return f"{new_header}\n{new_divider}"
 
-    lines = stripped.splitlines()
+    # Strip any non-table preamble lines (e.g. "### Priority 1" subheadings)
+    # so the first table row lands at index 0 as expected.
+    all_lines = stripped.splitlines()
+    first_table_index = next(
+        (i for i, ln in enumerate(all_lines) if ln.strip().startswith("|")),
+        0,
+    )
+    lines = all_lines[first_table_index:]
+    if not lines:
+        return f"{new_header}\n{new_divider}"
 
     def normalize_row(line):
         row = line.strip()
@@ -529,7 +528,7 @@ def normalize_memory_signal(text, limit=180):
 
 
 def collect_memory_signals(project_root, limit=4):
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    memory_path = WorkspacePaths(project_root).memory
     if not os.path.isfile(memory_path):
         return []
 
@@ -713,7 +712,7 @@ def render_memory_suggestions(active_task_rows, blockers_text="None"):
 
 
 def load_session_rows_and_blockers(project_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.isfile(session_path):
         return [], "None"
     _, sections = parse_markdown_sections(read_text_file(session_path))
@@ -733,7 +732,7 @@ def resolve_memory_suggestion(project_root, suggestion_ref):
 
 
 def read_existing_memory_signals(project_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.isfile(session_path):
         return ""
     _, sections = parse_markdown_sections(read_text_file(session_path))
@@ -945,7 +944,7 @@ def build_local_engine_rerun_command(project_root, arms_root, existing_engine_ve
 
 
 def enforce_engine_version_guard(project_root, arms_root, allow_engine_downgrade=False):
-    session_path = os.path.join(project_root, ".arms/SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.exists(session_path):
         return
 
@@ -1099,7 +1098,7 @@ def read_existing_session_context(session_path):
 
 def extract_current_project_name(project_root, existing_name=""):
     current_name = ""
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+    brand_path = WorkspacePaths(project_root).brand
     if os.path.exists(brand_path):
         with open(brand_path, "r", encoding="utf-8", errors="ignore") as f:
             brand_content = f.read()
@@ -1117,7 +1116,7 @@ def extract_current_project_name(project_root, existing_name=""):
     inferred_name = ""
     try:
         inferred_name = (infer_brand_context_from_project(project_root).get("project_name") or "").strip()
-    except Exception:
+    except (OSError, ValueError, AttributeError, KeyError):
         inferred_name = ""
     if inferred_name and inferred_name.lower() not in {"unknown", "tbd"}:
         return inferred_name
@@ -1128,7 +1127,8 @@ def extract_current_project_name(project_root, existing_name=""):
 
 def update_session(project_root, arms_root, skills_list="", agents_list="", yolo=False, startup_tasks_content="", context_overwrite=None):
     print("📄 Updating session log...")
-    session_path = os.path.join(project_root, ".arms/SESSION.md")
+    wp = WorkspacePaths(project_root)
+    session_path = wp.session
 
     existing_content, existing_root, existing_name = read_existing_session_context(session_path)
     current_name = extract_current_project_name(project_root, existing_name=existing_name or "")

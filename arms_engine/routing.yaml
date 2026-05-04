@@ -1,0 +1,151 @@
+# ARMS Task Routing Rules
+# Maps agent names to keyword patterns used for auto-routing plain-text task descriptions.
+# Patterns are matched as whole words (case-insensitive) against the task text.
+# First matching rule wins; agents listed earlier have higher priority.
+
+routing:
+  arms-main-agent:
+    keywords:
+      - session.md
+      - task table
+      - task ledger
+      - agent routing
+      - memory workflow
+      - orchestration
+      - orchestrator
+      - protocol command
+      - arms init
+      - engine workflow
+
+  arms-product-agent:
+    keywords:
+      - requirements
+      - scope
+      - prd
+      - user story
+      - user stories
+      - prioritization
+      - prioritize
+      - roadmap
+      - success metric
+      - product charter
+      - feature brief
+
+  arms-media-agent:
+    keywords:
+      - logo
+      - wordmark
+      - brand icon
+      - image
+      - images
+      - illustration
+      - graphic
+      - hero image
+      - asset
+      - assets
+
+  arms-security-agent:
+    keywords:
+      - security
+      - owasp
+      - vulnerability
+      - vulnerabilities
+      - secret
+      - secrets
+      - pii
+      - csrf
+      - xss
+      - injection
+      - auth audit
+      - security audit
+      - permission audit
+      - rls policy
+
+  arms-qa-agent:
+    keywords:
+      - test
+      - tests
+      - testing
+      - qa
+      - e2e
+      - integration test
+      - regression
+      - a11y
+      - accessibility
+      - pre-flight
+
+  arms-devops-agent:
+    keywords:
+      - deploy
+      - deployment
+      - ci
+      - cd
+      - pipeline
+      - workflow
+      - infra
+      - infrastructure
+      - docker
+      - container
+      - kubernetes
+      - vercel
+      - release build
+
+  arms-seo-agent:
+    keywords:
+      - seo
+      - meta tag
+      - metadata
+      - open graph
+      - structured data
+      - schema markup
+      - core web vitals
+      - lighthouse
+      - performance
+      - web vitals
+
+  arms-data-agent:
+    keywords:
+      - database
+      - schema
+      - migration
+      - migrations
+      - query
+      - postgres
+      - sql
+      - supabase
+      - table
+      - index
+
+  arms-frontend-agent:
+    keywords:
+      - ui
+      - ux
+      - frontend
+      - component
+      - components
+      - page
+      - layout
+      - responsive
+      - mobile
+      - sidebar
+      - navbar
+      - hero
+      - theme
+      - styling
+      - css
+      - visual polish
+
+  arms-backend-agent:
+    keywords:
+      - backend
+      - api
+      - endpoint
+      - service
+      - auth
+      - login
+      - logout
+      - session
+      - token
+      - model
+      - business logic
+      - server

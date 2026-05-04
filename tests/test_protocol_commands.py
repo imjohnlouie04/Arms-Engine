@@ -99,13 +99,13 @@ class ProtocolCommandTests(unittest.TestCase):
             output = self.invoke_cli(project_root, "--root", str(ARMS_ROOT), "run", "review")
 
             session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            reports = sorted((project_root / ".arms" / "reports").glob("review-*.md"))
+            latest_report = project_root / ".arms" / "reports" / "review-latest.md"
 
             self.assertIn("Review protocol staged and logged", output)
             self.assertIn("Existing task", session)
             self.assertIn("Review: audit architecture, validation, and code quality", session)
-            self.assertEqual(len(reports), 1)
-            self.assertIn("## Actionable Issues", reports[0].read_text(encoding="utf-8"))
+            self.assertTrue(latest_report.exists())
+            self.assertIn("## Actionable Issues", latest_report.read_text(encoding="utf-8"))
 
     def test_fix_issues_parses_actionable_review_items_into_task_plan(self):
         with TemporaryDirectory() as tmp:
@@ -127,15 +127,15 @@ class ProtocolCommandTests(unittest.TestCase):
             output = self.invoke_cli(project_root, "--root", str(ARMS_ROOT), "fix", "issues")
 
             session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            fix_plans = sorted(reports_dir.glob("fix-plan-*.md"))
+            latest_fix_plan = reports_dir / "fix-plan-latest.md"
 
             self.assertIn("Task plan generated and logged", output)
             self.assertIn("arms-frontend-agent", session)
             self.assertIn("arms-devops-agent", session)
             self.assertIn("arms-backend-agent", session)
             self.assertIn("Fix: Patch token validation for API sessions", session)
-            self.assertEqual(len(fix_plans), 1)
-            self.assertIn("## Parsed Issues", fix_plans[0].read_text(encoding="utf-8"))
+            self.assertTrue(latest_fix_plan.exists())
+            self.assertIn("## Parsed Issues", latest_fix_plan.read_text(encoding="utf-8"))
 
     def test_fix_issues_sets_blocker_when_no_actionable_items_exist(self):
         with TemporaryDirectory() as tmp:
@@ -182,12 +182,12 @@ class ProtocolCommandTests(unittest.TestCase):
                 output = self.invoke_cli(project_root, "--root", str(ARMS_ROOT), "run", "deploy")
 
             session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            notes = sorted((project_root / ".arms" / "reports").glob("release-notes-*.md"))
+            latest_notes = project_root / ".arms" / "reports" / "release-notes-latest.md"
 
             self.assertIn("Pre-flight tasks staged and release notes generated", output)
             self.assertIn("Deploy: verify clean working tree and production build readiness", session)
-            self.assertEqual(len(notes), 1)
-            release_notes = notes[0].read_text(encoding="utf-8")
+            self.assertTrue(latest_notes.exists())
+            release_notes = latest_notes.read_text(encoding="utf-8")
             self.assertIn("Added protocol command handlers.", release_notes)
             self.assertIn("Fixed blockers.", release_notes)
 

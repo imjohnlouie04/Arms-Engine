@@ -222,5 +222,70 @@ class MemoryCommandTests(unittest.TestCase):
             self.assertIn("Draft ID:", output)
 
 
+class MemoryDedupTests(unittest.TestCase):
+    """create_memory_draft must not create duplicate pending entries."""
+
+    MEMORY_TEMPLATE = """# ARMS Project Memory
+
+> Managed by ARMS Engine.
+
+## Known Bugs & Fixes
+"""
+    SESSION_TEMPLATE = """# ARMS Session
+
+## Environment
+- Engine Version: test
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Blockers
+- None
+
+## Memory Signals
+"""
+
+    def _setup_project(self, tmp_dir):
+        project_root = Path(tmp_dir)
+        arms_dir = project_root / ".arms"
+        arms_dir.mkdir()
+        (arms_dir / "MEMORY.md").write_text(self.MEMORY_TEMPLATE, encoding="utf-8")
+        (arms_dir / "SESSION.md").write_text(self.SESSION_TEMPLATE, encoding="utf-8")
+        return str(project_root)
+
+    def test_draft_creates_pending_entry(self):
+        from arms_engine.memory import create_memory_draft
+        with TemporaryDirectory() as tmp:
+            project_root = self._setup_project(tmp)
+            result = create_memory_draft(project_root, "Known Bugs & Fixes", "Always sanitize user input.")
+            self.assertNotIn("duplicate", result)
+            memory = (Path(tmp) / ".arms" / "MEMORY.md").read_text(encoding="utf-8")
+            self.assertIn("PENDING APPROVAL", memory)
+            self.assertIn("Always sanitize user input.", memory)
+
+    def test_duplicate_draft_not_written_twice(self):
+        from arms_engine.memory import create_memory_draft
+        with TemporaryDirectory() as tmp:
+            project_root = self._setup_project(tmp)
+            result1 = create_memory_draft(project_root, "Known Bugs & Fixes", "Always sanitize user input.")
+            result2 = create_memory_draft(project_root, "Known Bugs & Fixes", "Always sanitize user input.")
+            self.assertTrue(result2.get("duplicate"))
+            self.assertEqual(result1["draft_id"], result2["draft_id"])
+            memory = (Path(tmp) / ".arms" / "MEMORY.md").read_text(encoding="utf-8")
+            self.assertEqual(memory.count("Always sanitize user input."), 1)
+
+    def test_different_lessons_both_written(self):
+        from arms_engine.memory import create_memory_draft
+        with TemporaryDirectory() as tmp:
+            project_root = self._setup_project(tmp)
+            create_memory_draft(project_root, "Known Bugs & Fixes", "Lesson A")
+            result2 = create_memory_draft(project_root, "Known Bugs & Fixes", "Lesson B")
+            self.assertNotIn("duplicate", result2)
+            memory = (Path(tmp) / ".arms" / "MEMORY.md").read_text(encoding="utf-8")
+            self.assertIn("Lesson A", memory)
+            self.assertIn("Lesson B", memory)
+
+
 if __name__ == "__main__":
     unittest.main()

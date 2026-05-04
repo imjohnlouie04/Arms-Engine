@@ -5,6 +5,7 @@ import subprocess
 from collections import OrderedDict
 
 from .compression import ARCHIVABLE_STATUSES, append_archive_entry, format_archive_diagnostics_lines
+from .paths import WorkspacePaths
 from .session import (
     filter_hot_task_rows,
     parse_active_task_rows,
@@ -28,6 +29,10 @@ PROTOCOL_BLOCKER_PREFIXES = (
     "No review report found",
     "No actionable issues found",
 )
+REPORT_HISTORY_HEADER = """# ARMS Report History
+
+> Consolidated by ARMS. Older protocol report revisions are appended here while the latest revision stays in its stable `*-latest.md` file.
+"""
 
 
 def identify_protocol_command(command_parts):
@@ -79,8 +84,7 @@ def run_review_protocol(project_root, arms_root):
         blockers=clear_protocol_blockers(sections.get("Blockers", "None")),
     )
 
-    report_path = dated_report_path(project_root, "review")
-    write_text_atomic(report_path, render_review_report(project_root, "run review"))
+    report_path = write_report_artifact(project_root, "review", render_review_report(project_root, "run review"))
     emit_protocol_response(
         "SESSION.md updated; {} written".format(relative_to_project(project_root, report_path)),
         "\n".join(
@@ -110,8 +114,7 @@ def run_pipeline_protocol(project_root, arms_root):
         blockers=clear_protocol_blockers(sections.get("Blockers", "None")),
     )
 
-    report_path = dated_report_path(project_root, "review")
-    write_text_atomic(report_path, render_review_report(project_root, "run pipeline"))
+    report_path = write_report_artifact(project_root, "review", render_review_report(project_root, "run pipeline"))
     emit_protocol_response(
         "SESSION.md updated; {} written".format(relative_to_project(project_root, report_path)),
         "\n".join(
@@ -172,8 +175,11 @@ def run_fix_issues_protocol(project_root, arms_root):
     blockers = clear_protocol_blockers(sections.get("Blockers", "None"))
     archive_diagnostics = update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
 
-    plan_path = dated_report_path(project_root, "fix-plan")
-    write_text_atomic(plan_path, render_fix_plan_report(project_root, review_path, fix_rows, arms_root))
+    plan_path = write_report_artifact(
+        project_root,
+        "fix-plan",
+        render_fix_plan_report(project_root, review_path, fix_rows, arms_root),
+    )
     emit_protocol_response(
         "SESSION.md updated; {} written".format(relative_to_project(project_root, plan_path)),
         "\n".join(
@@ -199,8 +205,7 @@ def run_deploy_protocol(project_root, arms_root):
     blockers = clear_protocol_blockers(sections.get("Blockers", "None"))
     archive_diagnostics = update_protocol_session(project_root, arms_root, combined_rows, blockers=blockers)
 
-    release_notes_path = dated_report_path(project_root, "release-notes")
-    write_text_atomic(release_notes_path, render_release_notes(project_root))
+    release_notes_path = write_report_artifact(project_root, "release-notes", render_release_notes(project_root))
     migration_summary = summarize_migrations(project_root)
     emit_protocol_response(
         "SESSION.md updated; {} written".format(relative_to_project(project_root, release_notes_path)),
@@ -392,17 +397,22 @@ def renumber_rows(rows):
     return normalized
 
 
+def _escape_pipe(value):
+    """Escape literal ``|`` characters in a table cell so round-trip parsing is safe."""
+    return str(value).replace("|", "&#124;")
+
+
 def render_task_table(rows, arms_root):
     lines = [TASK_TABLE_HEADER, TASK_TABLE_DIVIDER]
     for row in renumber_rows(rows):
         lines.append(
             "| {index} | {task} | {agent} | {skill} | {deps} | {status} |".format(
                 index=row["#"],
-                task=row["Task"],
-                agent=row["Assigned Agent"],
-                skill=row["Active Skill"],
-                deps=row["Dependencies"],
-                status=row["Status"],
+                task=_escape_pipe(row["Task"]),
+                agent=_escape_pipe(row["Assigned Agent"]),
+                skill=_escape_pipe(row["Active Skill"]),
+                deps=_escape_pipe(row["Dependencies"]),
+                status=_escape_pipe(row["Status"]),
             )
         )
     task_content = "\n".join(lines)
@@ -420,7 +430,7 @@ def parse_task_rows(content):
         line = raw_line.strip()
         if not (line.startswith("|") and line.endswith("|")):
             continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        cells = [cell.strip().replace("&#124;", "|") for cell in line.strip("|").split("|")]
         if len(cells) != 6:
             continue
         first_cell = cells[0].replace(" ", "")
@@ -453,7 +463,7 @@ def extract_last_completed(project_root, completed_content):
             continue
         return line
 
-    archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
+    archive_path = WorkspacePaths(project_root).archive
     if not os.path.exists(archive_path):
         return "None"
 
@@ -510,7 +520,7 @@ def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_
         render_memory_suggestions(hot_task_rows, blockers_text=current_blockers),
         after_title="Memory Signals",
     )
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     write_markdown_sections(session_path, preamble, ordered_sections)
     return archive_diagnostics
 
@@ -546,21 +556,62 @@ def split_archivable_rows(rows):
 
 
 def load_session_sections(project_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.exists(session_path):
         raise FileNotFoundError(session_path)
     return parse_markdown_sections(read_text_file(session_path))
 
 
-def dated_report_path(project_root, prefix):
-    reports_dir = os.path.join(project_root, ".arms", "reports")
+def latest_report_path(project_root, prefix):
+    reports_dir = WorkspacePaths(project_root).reports_dir
     os.makedirs(reports_dir, exist_ok=True)
-    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    return os.path.join(reports_dir, "{}-{}.md".format(prefix, stamp))
+    return os.path.join(reports_dir, "{}-latest.md".format(prefix))
+
+
+def report_history_path(project_root):
+    reports_dir = WorkspacePaths(project_root).reports_dir
+    os.makedirs(reports_dir, exist_ok=True)
+    return os.path.join(reports_dir, "REPORT_HISTORY.md")
+
+
+def append_report_history_entry(project_root, prefix, source_name, content):
+    if not content.strip():
+        return
+    history_path = report_history_path(project_root)
+    if os.path.exists(history_path):
+        history_content = read_text_file(history_path).rstrip()
+    else:
+        history_content = REPORT_HISTORY_HEADER.rstrip()
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = "\n".join(
+        [
+            "## Archived Report — {}".format(timestamp),
+            "### Type: {}".format(prefix),
+            "### Source: {}".format(source_name),
+            "",
+            "```md",
+            content.rstrip(),
+            "```",
+        ]
+    )
+    write_text_atomic(history_path, "{}\n\n{}\n".format(history_content, block))
+
+
+def write_report_artifact(project_root, prefix, content):
+    path = latest_report_path(project_root, prefix)
+    if os.path.exists(path):
+        previous = read_text_file(path)
+        if previous != content:
+            append_report_history_entry(project_root, prefix, os.path.basename(path), previous)
+    write_text_atomic(path, content)
+    return path
 
 
 def find_latest_report(project_root, prefix):
-    reports_dir = os.path.join(project_root, ".arms", "reports")
+    latest_path = latest_report_path(project_root, prefix)
+    if os.path.isfile(latest_path):
+        return latest_path
+    reports_dir = WorkspacePaths(project_root).reports_dir
     if not os.path.isdir(reports_dir):
         return ""
     matches = []

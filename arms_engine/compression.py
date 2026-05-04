@@ -1,7 +1,16 @@
 import datetime
 import os
 import re
+import shutil
 
+from .budgets import (
+    ARCHIVE_TOKEN_LIMIT,
+    AUTO_COMPACT_AGENT_OUTPUT_FILE_LIMIT,
+    AUTO_COMPACT_MEMORY_CHAR_LIMIT,
+    AUTO_COMPACT_REPORT_FILE_LIMIT,
+    AUTO_COMPACT_SESSION_CHAR_LIMIT,
+)
+from .paths import WorkspacePaths
 from .session import (
     SESSION_ARCHIVE_TEMPLATE,
     normalize_active_tasks_table,
@@ -12,12 +21,14 @@ from .session import (
 )
 
 
-ARCHIVE_TOKEN_LIMIT = 20000
-AUTO_COMPACT_SESSION_CHAR_LIMIT = 12000
-AUTO_COMPACT_MEMORY_CHAR_LIMIT = 12000
 TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
 TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|--------------|--------|"
 ARCHIVABLE_STATUSES = {"done", "cancelled", "canceled"}
+PROTOCOL_REPORT_PREFIXES = ("review", "fix-plan", "release-notes", "release-check")
+REPORT_HISTORY_HEADER = """# ARMS Report History
+
+> Consolidated by ARMS. Older protocol report revisions are appended here while the latest revision stays in its stable `*-latest.md` file.
+"""
 STATUS_PRIORITY = {
     "blocked": 0,
     "in progress": 1,
@@ -64,6 +75,8 @@ def compress_workspace(project_root):
     session_summary = compress_session_state(project_root)
     memory_summary = compress_memory_file(project_root)
     history_summary = maintain_archive_summary(project_root)
+    report_summary = compact_reports_directory(project_root)
+    agent_output_summary = compact_agent_outputs(project_root)
     archive_diagnostics = session_summary["archive_diagnostics"]
     if archive_diagnostics and history_summary["history_summary_path"]:
         archive_diagnostics["history_summary_path"] = history_summary["history_summary_path"]
@@ -75,6 +88,10 @@ def compress_workspace(project_root):
         "history_summary_updated": history_summary["updated"],
         "history_summary_sections": history_summary["sections"],
         "history_summary_path": history_summary["history_summary_path"],
+        "reports_compacted": report_summary["archived_reports"],
+        "report_history_path": report_summary["history_path"],
+        "agent_outputs_compacted": agent_output_summary["removed_files"],
+        "agent_output_groups_compacted": agent_output_summary["groups_compacted"],
         "archive_diagnostics": archive_diagnostics,
     }
 
@@ -88,6 +105,20 @@ def format_compression_summary(summary):
     ]
     if summary["archived_notes"]:
         lines.append("   - Archived {} completed note line(s).".format(summary["archived_notes"]))
+    if summary["reports_compacted"]:
+        lines.append(
+            "   - Consolidated {} older report revision(s) into `{}`.".format(
+                summary["reports_compacted"],
+                summary["report_history_path"],
+            )
+        )
+    if summary["agent_outputs_compacted"]:
+        lines.append(
+            "   - Compacted {} older agent output file(s) across {} group(s).".format(
+                summary["agent_outputs_compacted"],
+                summary["agent_output_groups_compacted"],
+            )
+        )
     if summary["history_summary_updated"]:
         lines.append(
             "   - Refreshed `.arms/HISTORY_SUMMARY.md` from {} archive section(s).".format(
@@ -107,9 +138,10 @@ def workspace_compression_reasons(
     memory_char_limit=AUTO_COMPACT_MEMORY_CHAR_LIMIT,
 ):
     reasons = []
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
-    archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
+    wp = WorkspacePaths(project_root)
+    session_path = wp.session
+    memory_path = wp.memory
+    archive_path = wp.archive
 
     if os.path.exists(session_path) and len(read_text_file(session_path)) > session_char_limit:
         reasons.append(".arms/SESSION.md")
@@ -117,11 +149,45 @@ def workspace_compression_reasons(
         reasons.append(".arms/MEMORY.md")
     if os.path.exists(archive_path) and count_tokens(read_text_file(archive_path)) > ARCHIVE_TOKEN_LIMIT:
         reasons.append(".arms/SESSION_ARCHIVE.md")
+    if count_protocol_report_candidates(project_root) > AUTO_COMPACT_REPORT_FILE_LIMIT:
+        reasons.append(".arms/reports")
+    if count_agent_output_candidates(project_root) > AUTO_COMPACT_AGENT_OUTPUT_FILE_LIMIT:
+        reasons.append(".arms/agent-outputs")
     return reasons
 
 
+def count_protocol_report_candidates(project_root):
+    reports_dir = WorkspacePaths(project_root).reports_dir
+    if not os.path.isdir(reports_dir):
+        return 0
+    count = 0
+    for name in os.listdir(reports_dir):
+        if not name.endswith(".md"):
+            continue
+        if name == "REPORT_HISTORY.md":
+            continue
+        if any(name == "{}-latest.md".format(prefix) for prefix in PROTOCOL_REPORT_PREFIXES):
+            continue
+        if any(name.startswith(prefix + "-") for prefix in PROTOCOL_REPORT_PREFIXES):
+            count += 1
+    return count
+
+
+def count_agent_output_candidates(project_root):
+    outputs_dir = WorkspacePaths(project_root).outputs_dir
+    if not os.path.isdir(outputs_dir):
+        return 0
+    count = 0
+    for root, _, files in os.walk(outputs_dir):
+        for name in files:
+            if name == "history.md":
+                continue
+            count += 1
+    return count
+
+
 def compress_session_state(project_root):
-    session_path = os.path.join(project_root, ".arms", "SESSION.md")
+    session_path = WorkspacePaths(project_root).session
     if not os.path.exists(session_path):
         raise FileNotFoundError(session_path)
 
@@ -155,7 +221,7 @@ def compress_session_state(project_root):
 
 
 def compress_memory_file(project_root):
-    memory_path = os.path.join(project_root, ".arms", "MEMORY.md")
+    memory_path = WorkspacePaths(project_root).memory
     if not os.path.exists(memory_path):
         raise FileNotFoundError(memory_path)
 
@@ -173,12 +239,15 @@ def compress_memory_file(project_root):
         total_entries += len(entries)
         compressed_sections[title] = "\n".join(entries)
 
+    if total_entries == 0:
+        return {"entries": 0, "skipped": "empty_result"}
     write_markdown_sections(memory_path, preamble, compressed_sections)
     return {"entries": total_entries}
 
 
 def maintain_archive_summary(project_root):
-    archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
+    wp = WorkspacePaths(project_root)
+    archive_path = wp.archive
     if not os.path.exists(archive_path):
         return {"updated": False, "sections": 0, "history_summary_path": ""}
 
@@ -206,7 +275,7 @@ def maintain_archive_summary(project_root):
             )
         )
 
-    history_summary_path = os.path.join(project_root, ".arms", "HISTORY_SUMMARY.md")
+    history_summary_path = WorkspacePaths(project_root).history_summary
     history_summary_content = """# ARMS History Summary
 
 > Generated by `arms init compress`. Older archive slices are summarized here while full records remain in `.arms/SESSION_ARCHIVE.md`.
@@ -220,8 +289,168 @@ def maintain_archive_summary(project_root):
     return {"updated": True, "sections": len(summarized_sections), "history_summary_path": history_summary_path}
 
 
+def compact_reports_directory(project_root):
+    reports_dir = WorkspacePaths(project_root).reports_dir
+    if not os.path.isdir(reports_dir):
+        return {"archived_reports": 0, "history_path": ""}
+
+    history_path = os.path.join(reports_dir, "REPORT_HISTORY.md")
+    archived_reports = 0
+    for prefix in PROTOCOL_REPORT_PREFIXES:
+        latest_path = os.path.join(reports_dir, "{}-latest.md".format(prefix))
+        dated_paths = sorted(
+            os.path.join(reports_dir, name)
+            for name in os.listdir(reports_dir)
+            if name.endswith(".md")
+            and name != "{}-latest.md".format(prefix)
+            and name.startswith(prefix + "-")
+        )
+        if not dated_paths:
+            continue
+        newest_path = dated_paths[-1]
+        newest_content = read_text_file(newest_path)
+        if os.path.exists(latest_path):
+            latest_content = read_text_file(latest_path)
+            if latest_content != newest_content:
+                append_report_history_entry(history_path, prefix, os.path.basename(latest_path), latest_content)
+                archived_reports += 1
+        for old_path in dated_paths[:-1]:
+            append_report_history_entry(history_path, prefix, os.path.basename(old_path), read_text_file(old_path))
+            os.remove(old_path)
+            archived_reports += 1
+        write_text_atomic(latest_path, newest_content)
+        os.remove(newest_path)
+    return {"archived_reports": archived_reports, "history_path": history_path}
+
+
+def append_report_history_entry(history_path, prefix, source_name, content):
+    if not content.strip():
+        return
+    if os.path.exists(history_path):
+        history_content = read_text_file(history_path).rstrip()
+    else:
+        history_content = REPORT_HISTORY_HEADER.rstrip()
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = "\n".join(
+        [
+            "## Archived Report — {}".format(timestamp),
+            "### Type: {}".format(prefix),
+            "### Source: {}".format(source_name),
+            "",
+            "```md",
+            content.rstrip(),
+            "```",
+        ]
+    )
+    write_text_atomic(history_path, "{}\n\n{}\n".format(history_content, block))
+
+
+def compact_agent_outputs(project_root):
+    outputs_dir = WorkspacePaths(project_root).outputs_dir
+    if not os.path.isdir(outputs_dir):
+        return {"removed_files": 0, "groups_compacted": 0}
+
+    groups = []
+    for name in sorted(os.listdir(outputs_dir)):
+        path = os.path.join(outputs_dir, name)
+        if os.path.isdir(path):
+            groups.append((name, path, True))
+    shared_files = [
+        os.path.join(outputs_dir, name)
+        for name in sorted(os.listdir(outputs_dir))
+        if os.path.isfile(os.path.join(outputs_dir, name))
+    ]
+    if shared_files:
+        shared_dir = os.path.join(outputs_dir, "shared")
+        os.makedirs(shared_dir, exist_ok=True)
+        for path in shared_files:
+            shutil.move(path, os.path.join(shared_dir, os.path.basename(path)))
+        groups.append(("shared", shared_dir, True))
+
+    removed_files = 0
+    groups_compacted = 0
+    for group_name, group_dir, is_directory in groups:
+        if not is_directory:
+            continue
+        candidate_files = collect_group_files(group_dir)
+        if len(candidate_files) <= 1:
+            continue
+        newest_path = max(candidate_files, key=os.path.getmtime)
+        latest_ext = os.path.splitext(newest_path)[1]
+        latest_path = os.path.join(group_dir, "latest{}".format(latest_ext))
+        if os.path.abspath(newest_path) != os.path.abspath(latest_path):
+            os.makedirs(os.path.dirname(latest_path), exist_ok=True)
+            shutil.copy2(newest_path, latest_path)
+        history_path = os.path.join(group_dir, "history.md")
+        older_paths = [path for path in candidate_files if os.path.abspath(path) != os.path.abspath(newest_path)]
+        if os.path.exists(latest_path) and os.path.abspath(newest_path) != os.path.abspath(latest_path):
+            older_paths.append(newest_path)
+        unique_older_paths = []
+        seen = set()
+        for path in older_paths:
+            normalized = os.path.abspath(path)
+            if normalized in seen or normalized == os.path.abspath(latest_path):
+                continue
+            seen.add(normalized)
+            unique_older_paths.append(path)
+        for old_path in unique_older_paths:
+            append_agent_output_history(group_name, group_dir, old_path, history_path)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+                removed_files += 1
+        prune_empty_dirs(group_dir)
+        groups_compacted += 1
+    return {"removed_files": removed_files, "groups_compacted": groups_compacted}
+
+
+def collect_group_files(group_dir):
+    candidate_files = []
+    for root, _, files in os.walk(group_dir):
+        for name in files:
+            if name == "history.md":
+                continue
+            candidate_files.append(os.path.join(root, name))
+    return candidate_files
+
+
+def append_agent_output_history(group_name, group_dir, path, history_path):
+    if os.path.exists(history_path):
+        history_content = read_text_file(history_path).rstrip()
+    else:
+        history_content = "# {} Output History\n\n> Consolidated by `arms init compress`.\n".format(group_name)
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    relative_path = os.path.relpath(path, group_dir)
+    block_lines = [
+        "## Archived Output — {}".format(timestamp),
+        "- Source: `{}`".format(relative_path),
+        "- Size: {} bytes".format(os.path.getsize(path)),
+    ]
+    text_content = read_text_if_possible(path)
+    if text_content is None:
+        block_lines.append("- Content: binary artifact omitted during consolidation.")
+    else:
+        block_lines.extend(["", "```text", text_content.rstrip(), "```"])
+    write_text_atomic(history_path, "{}\n\n{}\n".format(history_content, "\n".join(block_lines)))
+
+
+def read_text_if_possible(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    except (UnicodeDecodeError, OSError):
+        return None
+
+
+def prune_empty_dirs(root_dir):
+    for current_root, dirnames, _ in os.walk(root_dir, topdown=False):
+        for dirname in dirnames:
+            path = os.path.join(current_root, dirname)
+            if os.path.isdir(path) and not os.listdir(path):
+                os.rmdir(path)
+
+
 def append_archive_entry(project_root, archived_rows, completed_notes, context="Compression pass"):
-    archive_path = os.path.join(project_root, ".arms", "SESSION_ARCHIVE.md")
+    archive_path = WorkspacePaths(project_root).archive
     archive_existed = os.path.exists(archive_path)
     if archive_existed:
         archive_content = read_text_file(archive_path).rstrip()

@@ -43,10 +43,11 @@ from .skills import (
     sync_skills_copilot,
     sync_workflow,
 )
+from .budgets import WATCH_POLL_INTERVAL_SECONDS
+from .paths import WorkspacePaths
 from .versioning import is_unresolved_version
 
 
-WATCH_POLL_INTERVAL_SECONDS = 2.0
 CURRENT_PROJECT_ROOT_MARKERS = (".git", ".arms", ".gemini", "package.json")
 LEGACY_PROJECT_ROOT_STRONG_MARKERS = (
     "SESSION.md",
@@ -141,7 +142,7 @@ def capture_file_signature(path):
 
 
 def wait_for_brand_change(project_root, previous_signature, poll_interval=WATCH_POLL_INTERVAL_SECONDS):
-    brand_path = os.path.join(project_root, ".arms/BRAND.md")
+    brand_path = WorkspacePaths(project_root).brand
     print()
     print(f"👀 Watch mode active. Waiting for changes to {brand_path} ...")
     print("   Press Ctrl+C to stop watching.")
@@ -281,7 +282,7 @@ def run_init_once(
             monitor.finish("failed", "Session refresh aborted to preserve workspace state.")
         return {
             "status": "aborted",
-            "brand_signature": capture_file_signature(os.path.join(project_root, ".arms/BRAND.md")),
+            "brand_signature": capture_file_signature(WorkspacePaths(project_root).brand),
         }
 
     def sync_managed_instructions():
@@ -313,7 +314,7 @@ def run_init_once(
             )
         )
 
-    brand_signature = capture_file_signature(os.path.join(project_root, ".arms/BRAND.md"))
+    brand_signature = capture_file_signature(WorkspacePaths(project_root).brand)
     if brand_context_state and brand_context_state.get("status") == "questions_required":
         if monitor is not None:
             monitor.finish("awaiting_input", "Awaiting brand answers in .arms/BRAND.md.")
@@ -430,6 +431,14 @@ def main():
     parser.add_argument("--version", action="version", version=f"ARMS Engine {__version__}")
     args = parser.parse_args()
 
+    # Early validation of argument values
+    if args.task_id and not args.task_id.strip().isdigit():
+        print(f"❌ ERROR: `--task-id` must be a positive integer, got '{args.task_id}'.")
+        raise SystemExit(1)
+    if args.section is not None and not args.section.strip():
+        print("❌ ERROR: `--section` cannot be empty.")
+        raise SystemExit(1)
+
     full_command = " ".join(args.command)
     is_yolo = "yolo" in full_command.lower()
     project_root = get_project_root()
@@ -523,6 +532,10 @@ def main():
             pending_context_overwrite = True
             show_banner = False
             continue
+        except ValueError as exc:
+            print(f"❌ ERROR: {exc}")
+            print("   Fix the YAML file and rerun `arms init`.")
+            raise SystemExit(1)
         if result["status"] == "aborted":
             raise SystemExit(1)
         pending_context_overwrite = None

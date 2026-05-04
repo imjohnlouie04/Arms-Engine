@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import __version__
 from .brand import brand_file_requires_bootstrap
+from .paths import WorkspacePaths
 from .session import parse_active_task_rows, parse_markdown_sections, read_text_file
 
 
@@ -150,12 +151,12 @@ def parse_task_rows(content):
 
 
 def summarize_workspace(project_root):
-    arms_dir = os.path.join(project_root, ".arms")
-    session_path = os.path.join(arms_dir, "SESSION.md")
-    brand_path = os.path.join(arms_dir, "BRAND.md")
-    context_path = os.path.join(arms_dir, "CONTEXT_SYNTHESIS.md")
-    prompts_path = os.path.join(arms_dir, "GENERATED_PROMPTS.md")
-    memory_path = os.path.join(arms_dir, "MEMORY.md")
+    wp = WorkspacePaths(project_root)
+    session_path = wp.session
+    brand_path = wp.brand
+    context_path = wp.context_synthesis
+    prompts_path = wp.generated_prompts
+    memory_path = wp.memory
 
     session_content = read_text(session_path)
     environment = extract_section(session_content, "Environment")
@@ -340,12 +341,12 @@ def extract_environment_value(content, label):
 
 
 def summarize_workspace_state(project_root):
-    arms_dir = os.path.join(project_root, ".arms")
-    session_path = os.path.join(arms_dir, "SESSION.md")
-    brand_path = os.path.join(arms_dir, "BRAND.md")
-    context_path = os.path.join(arms_dir, "CONTEXT_SYNTHESIS.md")
-    prompts_path = os.path.join(arms_dir, "GENERATED_PROMPTS.md")
-    memory_path = os.path.join(arms_dir, "MEMORY.md")
+    wp = WorkspacePaths(project_root)
+    session_path = wp.session
+    brand_path = wp.brand
+    context_path = wp.context_synthesis
+    prompts_path = wp.generated_prompts
+    memory_path = wp.memory
 
     session_content = read_text_file(session_path) if os.path.exists(session_path) else ""
     _, sections = parse_markdown_sections(session_content) if session_content else ("", {})
@@ -579,9 +580,10 @@ def run_terminal_viewer(snapshot_path):
 class InitActivityMonitor:
     def __init__(self, project_root):
         self.project_root = os.path.abspath(project_root)
-        self.report_path = os.path.join(self.project_root, ".arms", "reports", "init-monitor-latest.html")
-        self.snapshot_path = os.path.join(self.project_root, ".arms", "reports", "init-monitor-latest.json")
-        self.viewer_script_path = os.path.join(self.project_root, ".arms", "reports", VIEWER_SCRIPT_NAME)
+        wp = WorkspacePaths(self.project_root)
+        self.report_path = wp.report_file("init-monitor-latest.html")
+        self.snapshot_path = wp.report_file("init-monitor-latest.json")
+        self.viewer_script_path = wp.report_file(VIEWER_SCRIPT_NAME)
         self.command = "init"
         self.arms_root = ""
         self.is_yolo = False
@@ -649,7 +651,7 @@ class InitActivityMonitor:
         self._write_report()
         try:
             result = func(*args, **kwargs)
-        except Exception as exc:
+        except Exception as exc:  # broad catch intentional: wrapper must log any failure from arbitrary step funcs
             step["status"] = "failed"
             step["finished_at"] = time.time()
             step["details"] = summarize_exception(exc)

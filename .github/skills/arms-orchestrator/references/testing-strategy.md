@@ -46,7 +46,7 @@ export default defineConfig({
 import '@testing-library/jest-dom'
 ```
 
-Use Cypress as the default browser E2E runner. Choose Playwright only for cross-browser, multi-tab, multi-origin, OAuth, or other flows that Cypress cannot cover cleanly.
+Use Cypress as the default browser E2E runner. Choose Playwright only for cross-browser, multi-tab, multi-origin, OAuth, or other flows that Cypress cannot cover cleanly. Do not install or configure Playwright by default when the project does not already depend on it.
 
 ### Cypress
 ```bash
@@ -66,6 +66,8 @@ export default defineConfig({
 ```
 
 ### Playwright (opt-in)
+Only use this setup when the project is already configured for Playwright or when the test scope explicitly requires Playwright-only capabilities. If browser E2E is failing due to setup instability, de-escalate back to Cypress.
+
 ```bash
 npm install -D @playwright/test
 npx playwright install chromium
