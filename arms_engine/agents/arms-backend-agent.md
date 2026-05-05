@@ -16,6 +16,7 @@ You are the Backend Specialist for the ARMS project.
 
 ## Standards
 - Always use TypeScript with strict typing.
+- **Memory First:** Before starting any task, read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` if they exist. Use `## Memory Signals` in SESSION.md as a quick digest of prior lessons, then open MEMORY.md directly if prior bugs, architectural decisions, or preferences are relevant to your work.
 - Leverage Supabase RLS for data protection.
 - Ensure all Server Actions use Zod for input validation.
 - Follow the "Local-First DB" mandate using Supabase CLI.

@@ -25,6 +25,8 @@
 
 **Memory Suggestion Rule:** `## Memory Suggestions` in `.arms/SESSION.md` should be derived from active tasks and blockers so deeper sessions still surface candidate lessons worth capturing. Suggestions are advisory only; they do not update `.arms/MEMORY.md` until the user approves a draft.
 
+**Memory First Universal Rule:** ALL agents (arms-main-agent, arms-backend-agent, arms-frontend-agent, arms-data-agent, arms-devops-agent, arms-qa-agent, arms-security-agent, arms-seo-agent, arms-media-agent, arms-product-agent) enforce the **"Memory First"** standard in their instruction files. This means: **Yes, `.arms/MEMORY.md` IS read on EVERY session.** Every agent is instructed to read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task execution. The system does NOT automatically inject MEMORY context into prompts — instead, agents follow the protocol rule to consult it. This is enforcement via instruction, not automation. Memory Signals in `.arms/SESSION.md` provide a quick digest; full MEMORY.md is consulted when relevant to the work.
+
 ---
 
 ## Boot Sequence & Initialization
