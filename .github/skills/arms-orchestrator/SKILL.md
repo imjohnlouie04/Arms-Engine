@@ -1,7 +1,7 @@
 ---
 name: arms-orchestrator
 description: >
-  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'task log', 'task update', 'task done', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Use for any coordinated full-stack development requiring specialized subagents.
+  Full-stack project orchestration system for Next.js, Nuxt, or Astro projects with Supabase, Firebase, or custom backends. Manages multi-agent workflows with explicit approval gates at every critical decision. Activate this skill when the user types 'init', 'start', 'doctor', 'task log', 'task update', 'task done', 'release check', 'run review', 'fix issues', 'run deploy', 'run status', or 'run pipeline'; when managing session state, memory, and task delegation; when enforcing standards across frontend, backend, DevOps, security, SEO, and QA; when building SaaS, content/marketing, or mobile-first apps with coordinated subagents; or when the user mentions agents, orchestration, tech stack selection, or MVP planning. Also activate for ANY request that creates durable work: feature requests, bug fixes, audits, code reviews, refactors, improvements, or any message containing 'fix', 'add', 'build', 'audit', 'improve', 'implement', 'review', 'update', or 'create' directed at project code or features. Use for any coordinated full-stack development requiring specialized subagents. IMPORTANT: For all such requests, log the task with 'arms task log' before executing.
 ---
 
 # ARMS — Architectural Runtime Management System
@@ -74,7 +74,7 @@ When `./.arms/` or `./.gemini/` does not exist or is missing required files, `ar
 
 If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** begin with generic planning, repo triage, linting, or `git status`. Boot ARMS first.
 
-If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. It opens the local activity HUD at `.arms/reports/init-monitor-latest.html` and keeps a durable HTML step log for debugging.
+If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Python CLI — **not** `npm run arms:init`). It opens the local activity HUD at `.arms/reports/init-monitor-latest.html` and keeps a durable HTML step log for debugging.
 
 ### Bootstrap Sequence
 
@@ -84,7 +84,18 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. It o
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
 4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`.
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to `./.gemini/agents/` and `./.github/agents/`, ensure `tools: ["*"]` is present, and inject canonical per-agent runtime rules from `agents.yaml`.
-6. Execute Global Linker: Run `bash $ARMS_ROOT/init-arms.sh` (this preserves the caller's `PYTHONPATH`, prepends the engine checkout, and executes `python3 -m arms_engine.init_arms`)
+6. Execute the ARMS CLI. **`arms` is a Python CLI tool installed via pip/pipx — it is NOT an npm script. Never run `npm run arms:*`.**
+
+   Pick the first option that works:
+   ```bash
+   # Option A — installed CLI (preferred when `arms` is in PATH):
+   arms init [flags]          # e.g. arms init --monitor, arms init yolo
+
+   # Option B — shell linker (use when `arms` not in PATH):
+   bash $ARMS_ROOT/init-arms.sh [flags]
+   ```
+
+   The linker (`init-arms.sh`) automatically locates the correct Python interpreter and forwards all flags to `python -m arms_engine.init_arms`. Do **not** substitute `npm run`, `npx`, or any Node.js invocation.
 7. Scaffold `.arms/SESSION.md` and `.arms/MEMORY.md`. For `.arms/BRAND.md`, branch as follows:
    - Existing project with missing or placeholder brand file: inspect repository signals and auto-generate a first-pass `BRAND.md`
    - New / empty project with missing brand file: create a question-driven `BRAND.md` that must be completed from user answers

@@ -2,6 +2,24 @@
 
 This file helps Copilot CLI discover available agents and their capabilities in this ARMS-managed workspace.
 
+---
+
+## ⚠️ MANDATORY TASK INTAKE GATE
+
+**Every request that creates durable work MUST be logged before execution.** This rule applies to ALL plain chat messages — not only explicit `arms task log` commands.
+
+**Classify every incoming message before acting:**
+
+| Message type | Action |
+|---|---|
+| Feature request, bug fix, audit, code review, improvement, refactor, "fix X", "add X", "build X" | Run `arms task log --task "<normalized 1-line ask>"` → route to specialist → execute |
+| Clarification, approval, status nudge, follow-up on open task | Stay attached to current SESSION.md row — no new log entry |
+| Protocol / orchestration (`arms init`, `arms doctor`, session state) | `arms-main-agent` handles directly |
+
+> **Non-negotiable:** Executing a work request without logging it first is a protocol violation.
+
+---
+
 ## Available Agents
 
 ARMS automatically manages the following specialized agents. Use `/agent <agent-name>` in Copilot CLI to invoke them:
