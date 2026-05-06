@@ -38,3 +38,89 @@ def parse_task_rows(content):
             }
         )
     return rows
+
+
+def normalize_task_text(task_text):
+    """Normalize task text for deduplication comparison (lowercase, single spaces)."""
+    return " ".join((task_text or "").split()).strip().casefold()
+
+
+def deduplicate_startup_tasks_against_existing(startup_tasks_content, existing_session_content):
+    """Merge startup tasks into existing SESSION.md, skipping duplicates.
+
+    If a task with the same normalized text already exists in the existing
+    session, it is NOT duplicated. Only truly new tasks are added.
+
+    Args:
+        startup_tasks_content: Markdown table of startup tasks to add.
+        existing_session_content: Full SESSION.md content.
+
+    Returns:
+        Updated startup_tasks_content with duplicates removed, or original
+        if no existing session tasks are found.
+    """
+    if not startup_tasks_content or not existing_session_content:
+        return startup_tasks_content
+
+    startup_rows = parse_task_rows(startup_tasks_content)
+    existing_rows = parse_task_rows(existing_session_content)
+
+    if not startup_rows or not existing_rows:
+        return startup_tasks_content
+
+    existing_normalized_tasks = {normalize_task_text(row["Task"]) for row in existing_rows}
+
+    new_startup_rows = [
+        row
+        for row in startup_rows
+        if normalize_task_text(row["Task"]) not in existing_normalized_tasks
+    ]
+
+    if not new_startup_rows:
+        return ""
+
+    if len(new_startup_rows) == len(startup_rows):
+        return startup_tasks_content
+
+    lines = [
+        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+        "|---|------|----------------|--------------|--------------|--------|",
+    ]
+    for index, row in enumerate(new_startup_rows, start=1):
+        lines.append(
+            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Dependencies']} | {row['Status']} |"
+        )
+    return "\n".join(lines)
+
+
+def merge_task_tables(existing_table, new_table):
+    """Merge new task rows into an existing task table, renumbering as needed.
+
+    Args:
+        existing_table: Markdown table of existing tasks.
+        new_table: Markdown table of new tasks to add.
+
+    Returns:
+        Merged table with all tasks, renumbered sequentially.
+    """
+    if not new_table:
+        return existing_table
+    if not existing_table:
+        return new_table
+
+    existing_rows = parse_task_rows(existing_table)
+    new_rows = parse_task_rows(new_table)
+
+    if not new_rows:
+        return existing_table
+
+    merged = existing_rows + new_rows
+    lines = [
+        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+        "|---|------|----------------|--------------|--------------|--------|",
+    ]
+    for index, row in enumerate(merged, start=1):
+        lines.append(
+            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Dependencies']} | {row['Status']} |"
+        )
+    return "\n".join(lines)

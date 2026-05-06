@@ -13,6 +13,7 @@ from .brand import infer_brand_context_from_project
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
 from .paths import WorkspacePaths
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
+from .tables import deduplicate_startup_tasks_against_existing, merge_task_tables
 from .versioning import resolve_version
 
 TOKEN_RE = re.compile(r"\S+")
@@ -1163,8 +1164,16 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
                             agent_skill_bindings=agent_skill_bindings,
                             skill_catalog_by_name=skill_catalog_by_name,
                         )
-                        if normalized_startup_tasks_content and not active_tasks_table_has_rows(content):
-                            content = normalized_startup_tasks_content
+                        if normalized_startup_tasks_content:
+                            if not active_tasks_table_has_rows(content):
+                                content = normalized_startup_tasks_content
+                            else:
+                                deduplicated_startup = deduplicate_startup_tasks_against_existing(
+                                    normalized_startup_tasks_content,
+                                    existing_content,
+                                )
+                                if deduplicated_startup:
+                                    content = merge_task_tables(content, deduplicated_startup)
                         active_tasks_content = content
                     if header == "Blockers":
                         blockers_content = content or "None"
