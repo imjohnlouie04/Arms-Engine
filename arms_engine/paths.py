@@ -54,6 +54,11 @@ class WorkspacePaths:
     def history_summary(self) -> str:
         return os.path.join(self.arms_dir, "HISTORY_SUMMARY.md")
 
+    @property
+    def task_log_lock(self) -> str:
+        """Temporary lock file to prevent concurrent task log calls from creating duplicates."""
+        return os.path.join(self.arms_dir, ".task-log-lock")
+
     # ── directories ─────────────────────────────────────────────────────────
 
     @property

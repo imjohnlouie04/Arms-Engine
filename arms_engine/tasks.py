@@ -1,8 +1,11 @@
+import json
 import os
 import re
+import time
 
 import yaml
 
+from .paths import WorkspacePaths
 from .protocols import (
     KEEP_EXISTING,
     parse_task_rows,
@@ -236,6 +239,65 @@ def identify_task_command(command_parts: tuple) -> str:
     return TASK_COMMANDS.get(normalized, "")
 
 
+def check_task_log_debounce(project_root: str, normalized_task: str, debounce_seconds: int = 2) -> bool:
+    """Check if a task was recently logged (within debounce window).
+
+    This prevents rapid duplicate calls from the IDE/Copilot extension from
+    creating duplicate task rows. Returns True if the task was recently logged
+    and should be skipped; False if it's safe to log it.
+
+    Args:
+        project_root: Project root directory.
+        normalized_task: Normalized task text (already lowercased/stripped).
+        debounce_seconds: Window in seconds to consider as "recent" (default 2).
+
+    Returns:
+        True if task was recently logged (skip it), False if safe to log.
+    """
+    wp = WorkspacePaths(project_root)
+    lock_path = wp.task_log_lock
+
+    if not os.path.exists(lock_path):
+        return False
+
+    try:
+        with open(lock_path, "r") as f:
+            lock_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return False
+
+    last_task = lock_data.get("task", "")
+    last_timestamp = lock_data.get("timestamp", 0)
+    elapsed = time.time() - last_timestamp
+
+    if elapsed > debounce_seconds:
+        return False
+
+    return last_task.casefold() == normalized_task.casefold()
+
+
+def update_task_log_debounce(project_root: str, normalized_task: str) -> None:
+    """Record a task log call for debounce checking.
+
+    Args:
+        project_root: Project root directory.
+        normalized_task: Normalized task text.
+    """
+    wp = WorkspacePaths(project_root)
+    lock_path = wp.task_log_lock
+
+    os.makedirs(wp.arms_dir, exist_ok=True)
+    lock_data = {
+        "task": normalized_task,
+        "timestamp": time.time(),
+    }
+    try:
+        with open(lock_path, "w") as f:
+            json.dump(lock_data, f)
+    except IOError:
+        pass  # Silently ignore lock file write errors
+
+
 def handle_task_command(
     project_root: str,
     arms_root: str,
@@ -282,6 +344,23 @@ def handle_task_command(
 
     try:
         if command_name == "log":
+            normalized_task = normalize_text(task)
+            
+            if check_task_log_debounce(project_root, normalized_task):
+                emit_task_response(
+                    command_name,
+                    project_root,
+                    updates="None",
+                    action_lines=[
+                        f"Task recently logged (within 2 seconds): `{normalized_task[:60]}...`",
+                        "Skipping duplicate to prevent rapid IDE re-execution from creating duplicates.",
+                    ],
+                    task_table=render_task_table(active_rows, arms_root),
+                    archive_diagnostics="",
+                    next_step="The task is already in the ledger. Continue work or await agent response. → HALT",
+                )
+                return
+
             result = log_task_row(
                 active_rows,
                 arms_root,
@@ -294,6 +373,8 @@ def handle_task_command(
                 dependencies=dependencies,
                 status=status,
             )
+            
+            update_task_log_debounce(project_root, normalized_task)
         elif command_name == "update":
             result = update_task_row(
                 active_rows,
