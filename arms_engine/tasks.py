@@ -2,9 +2,11 @@ import json
 import os
 import re
 import time
+from contextlib import contextmanager
 
 import yaml
 
+from .memory import auto_stage_memory_draft_from_task
 from .paths import WorkspacePaths
 from .protocols import (
     KEEP_EXISTING,
@@ -239,21 +241,25 @@ def identify_task_command(command_parts: tuple) -> str:
     return TASK_COMMANDS.get(normalized, "")
 
 
-def check_task_log_debounce(project_root: str, normalized_task: str, debounce_seconds: int = 2) -> bool:
-    """Check if a task was recently logged (within debounce window).
+def build_task_log_signature(
+    task: str = "",
+    assigned_agent: str = "",
+    active_skill: str = "",
+    dependencies: str = "",
+    status: str = "",
+) -> dict:
+    """Build a stable signature for debouncing exact duplicate `task log` calls."""
+    return {
+        "task": normalize_text(task).casefold(),
+        "assigned_agent": normalize_text(assigned_agent).casefold(),
+        "active_skill": normalize_text(active_skill).casefold(),
+        "dependencies": normalize_text(dependencies).casefold(),
+        "status": normalize_text(status).casefold(),
+    }
 
-    This prevents rapid duplicate calls from the IDE/Copilot extension from
-    creating duplicate task rows. Returns True if the task was recently logged
-    and should be skipped; False if it's safe to log it.
 
-    Args:
-        project_root: Project root directory.
-        normalized_task: Normalized task text (already lowercased/stripped).
-        debounce_seconds: Window in seconds to consider as "recent" (default 2).
-
-    Returns:
-        True if task was recently logged (skip it), False if safe to log.
-    """
+def check_task_log_debounce(project_root: str, signature: dict, debounce_seconds: int = 2) -> bool:
+    """Return True only for an *exact* duplicate `task log` call inside the debounce window."""
     wp = WorkspacePaths(project_root)
     lock_path = wp.task_log_lock
 
@@ -266,36 +272,72 @@ def check_task_log_debounce(project_root: str, normalized_task: str, debounce_se
     except (json.JSONDecodeError, IOError):
         return False
 
-    last_task = lock_data.get("task", "")
+    last_signature = lock_data.get("signature", {})
     last_timestamp = lock_data.get("timestamp", 0)
     elapsed = time.time() - last_timestamp
 
     if elapsed > debounce_seconds:
         return False
 
-    return last_task.casefold() == normalized_task.casefold()
+    return last_signature == signature
 
 
-def update_task_log_debounce(project_root: str, normalized_task: str) -> None:
-    """Record a task log call for debounce checking.
-
-    Args:
-        project_root: Project root directory.
-        normalized_task: Normalized task text.
-    """
+def update_task_log_debounce(project_root: str, signature: dict) -> None:
+    """Record a `task log` signature and timestamp for future debounce checks."""
     wp = WorkspacePaths(project_root)
     lock_path = wp.task_log_lock
 
     os.makedirs(wp.arms_dir, exist_ok=True)
     lock_data = {
-        "task": normalized_task,
+        "signature": signature,
         "timestamp": time.time(),
     }
     try:
-        with open(lock_path, "w") as f:
+        temp_lock_path = "{}.tmp".format(lock_path)
+        with open(temp_lock_path, "w") as f:
             json.dump(lock_data, f)
+        os.replace(temp_lock_path, lock_path)
     except IOError:
-        pass  # Silently ignore lock file write errors
+        pass
+
+
+@contextmanager
+def task_log_guard(project_root: str, wait_seconds: float = 2.0, stale_seconds: float = 10.0):
+    """Guard `task log` critical section across concurrent processes."""
+    wp = WorkspacePaths(project_root)
+    guard_path = "{}.guard".format(wp.task_log_lock)
+    os.makedirs(wp.arms_dir, exist_ok=True)
+
+    deadline = time.time() + wait_seconds
+    acquired = False
+    while time.time() < deadline:
+        try:
+            fd = os.open(guard_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, str(os.getpid()).encode("utf-8"))
+            finally:
+                os.close(fd)
+            acquired = True
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(guard_path) > stale_seconds:
+                    os.remove(guard_path)
+                    continue
+            except OSError:
+                pass
+            time.sleep(0.05)
+
+    if not acquired:
+        raise TaskCommandError("`arms task log` is busy. Please retry in a moment.")
+
+    try:
+        yield
+    finally:
+        try:
+            os.remove(guard_path)
+        except OSError:
+            pass
 
 
 def handle_task_command(
@@ -344,37 +386,47 @@ def handle_task_command(
 
     try:
         if command_name == "log":
-            normalized_task = normalize_text(task)
-            
-            if check_task_log_debounce(project_root, normalized_task):
-                emit_task_response(
-                    command_name,
-                    project_root,
-                    updates="None",
-                    action_lines=[
-                        f"Task recently logged (within 2 seconds): `{normalized_task[:60]}...`",
-                        "Skipping duplicate to prevent rapid IDE re-execution from creating duplicates.",
-                    ],
-                    task_table=render_task_table(active_rows, arms_root),
-                    archive_diagnostics="",
-                    next_step="The task is already in the ledger. Continue work or await agent response. → HALT",
-                )
-                return
-
-            result = log_task_row(
-                active_rows,
-                arms_root,
-                agent_names,
-                agent_skill_bindings,
-                skill_catalog_by_name,
+            signature = build_task_log_signature(
                 task=task,
                 assigned_agent=assigned_agent,
                 active_skill=active_skill,
                 dependencies=dependencies,
                 status=status,
             )
-            
-            update_task_log_debounce(project_root, normalized_task)
+            with task_log_guard(project_root):
+                # Refresh rows inside the guard so debounce and row updates observe
+                # the latest on-disk state across concurrent IDE/Copilot calls.
+                _, latest_sections = load_session_sections(project_root)
+                latest_rows = parse_task_rows(latest_sections.get("Active Tasks", ""))
+
+                if check_task_log_debounce(project_root, signature):
+                    emit_task_response(
+                        command_name,
+                        project_root,
+                        updates="None",
+                        action_lines=[
+                            "Skipped duplicate `arms task log` call received within debounce window.",
+                            "Exact same task payload was already applied.",
+                        ],
+                        task_table=render_task_table(latest_rows, arms_root),
+                        archive_diagnostics="",
+                        next_step="No duplicate row was added. Continue work. → HALT",
+                    )
+                    return
+
+                result = log_task_row(
+                    latest_rows,
+                    arms_root,
+                    agent_names,
+                    agent_skill_bindings,
+                    skill_catalog_by_name,
+                    task=task,
+                    assigned_agent=assigned_agent,
+                    active_skill=active_skill,
+                    dependencies=dependencies,
+                    status=status,
+                )
+                update_task_log_debounce(project_root, signature)
         elif command_name == "update":
             result = update_task_row(
                 active_rows,
@@ -414,6 +466,35 @@ def handle_task_command(
         archive_context=result["archive_context"],
     )
     remaining_rows, _ = split_archivable_rows(result["rows"])
+
+    memory_candidate = result.get("memory_candidate")
+    if memory_candidate:
+        try:
+            memory_result = auto_stage_memory_draft_from_task(
+                project_root,
+                task_text=memory_candidate.get("task", ""),
+                status=memory_candidate.get("status", ""),
+                blockers_text=sections.get("Blockers", "None"),
+                dependencies=memory_candidate.get("dependencies", ""),
+            )
+            if memory_result:
+                if memory_result.get("duplicate"):
+                    result["action_lines"].append(
+                        "Auto-memory draft already pending in `{}` (draft `{}`).".format(
+                            memory_result["section"],
+                            memory_result["draft_id"],
+                        )
+                    )
+                else:
+                    result["action_lines"].append(
+                        "Auto-memory draft staged in `{}` (draft `{}`). Approve with `arms memory append --draft-id {}`.".format(
+                            memory_result["section"],
+                            memory_result["draft_id"],
+                            memory_result["draft_id"],
+                        )
+                    )
+        except Exception:  # noqa: BLE001 - auto-memory must not block task updates
+            result["action_lines"].append("Auto-memory staging skipped due to an internal error.")
 
     emit_task_response(
         command_name,
@@ -528,6 +609,7 @@ def log_task_row(
             finalized_row["#"],
             finalized_row["#"],
         ),
+        "memory_candidate": memory_candidate_from_row(finalized_row),
     }
 
 
@@ -606,6 +688,7 @@ def update_task_row(
             "- Status: `{}`".format(finalized_row["Status"]),
         ],
         "next_step": next_step,
+        "memory_candidate": memory_candidate_from_row(finalized_row),
     }
 
 
@@ -640,6 +723,7 @@ def complete_task_row(active_rows, task_id=""):
             "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
         ],
         "next_step": "Task archived. Continue with the next active row or log a new task when more work appears. → HALT",
+        "memory_candidate": memory_candidate_from_row(finalized_row),
     }
 
 
@@ -717,6 +801,17 @@ def normalize_text(value):
 def normalize_skill_value(value, missing_default=""):
     normalized = normalize_text(value)
     return normalized or missing_default
+
+
+def memory_candidate_from_row(row):
+    status = (row.get("Status", "") or "").strip()
+    if status.lower() not in {"done", "blocked", "failed"}:
+        return None
+    return {
+        "task": row.get("Task", ""),
+        "status": status,
+        "dependencies": row.get("Dependencies", ""),
+    }
 
 
 def normalize_dependencies(value):

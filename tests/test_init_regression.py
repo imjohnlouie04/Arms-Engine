@@ -223,10 +223,20 @@ class InitRegressionTests(unittest.TestCase):
     def test_init_monitor_opens_browser_and_writes_complete_hud(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
+            reports_dir = project_root / ".arms" / "reports"
+            reports_dir.mkdir(parents=True)
             (project_root / "pyproject.toml").write_text(
                 """[project]
 name = "orbitops"
 description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+            (reports_dir / "review-latest.md").write_text(
+                """# ARMS Review Report
+
+## Actionable Issues
+- Fix the auth redirect loop
 """,
                 encoding="utf-8",
             )
@@ -251,6 +261,8 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("Setup workspace folders", hud)
             self.assertIn("Sync agents, skills, and workflow", hud)
             self.assertIn("ARMS Engine ready. Fleet mode activated.", hud)
+            self.assertIn("Next Recommended Step", hud)
+            self.assertIn("Command: `arms fix issues`", hud)
 
     def test_init_monitor_prefers_terminal_hud_on_macos(self):
         with TemporaryDirectory() as tmp:
@@ -321,6 +333,80 @@ Generated: 2026-05-03T00:00:00Z
             self.assertIn("Parallel", dashboard)
             self.assertIn("Waiting on QA sign-off", dashboard)
             self.assertIn("Ship live task monitor", dashboard)
+
+    def test_terminal_dashboard_includes_next_recommended_step(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            reports_dir = arms_dir / "reports"
+            reports_dir.mkdir(parents=True)
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: 2026-05-03T00:00:00Z
+
+## Environment
+- ARMS Root: /tmp/arms-engine
+- Engine Version: 1.7.4+dirty
+- Project Root: /tmp/demo
+- Project Name: demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Next Recommended Step
+- Command: `arms fix issues`
+- Why: The latest review report already contains 1 actionable issue(s).
+- Source: `.arms/reports/review-latest.md`
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Review blocker behavior | arms-qa-agent | qa-automation-testing | — | Blocked |
+
+## Completed Tasks
+- None
+
+## Blockers
+- Waiting on QA sign-off
+""",
+                encoding="utf-8",
+            )
+            (arms_dir / "BRAND.md").write_text("Project Name: Demo\nMission: Test monitor\n", encoding="utf-8")
+            (arms_dir / "CONTEXT_SYNTHESIS.md").write_text("ready\n", encoding="utf-8")
+            (arms_dir / "GENERATED_PROMPTS.md").write_text("ready\n", encoding="utf-8")
+            (arms_dir / "MEMORY.md").write_text("# Memory\n", encoding="utf-8")
+
+            monitor = init_arms.InitActivityMonitor(str(project_root))
+            monitor.prepare()
+            dashboard = init_arms.render_terminal_dashboard(monitor._snapshot_payload(), width=120)
+
+            self.assertIn("Next    : Command: `arms fix issues`", dashboard)
+
+    def test_init_output_surfaces_next_recommended_step(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            reports_dir = project_root / ".arms" / "reports"
+            reports_dir.mkdir(parents=True)
+            (project_root / "pyproject.toml").write_text(
+                """[project]
+name = "orbitops"
+description = "Automate operational approvals and audit workflows."
+""",
+                encoding="utf-8",
+            )
+            (reports_dir / "review-latest.md").write_text(
+                """# ARMS Review Report
+
+## Actionable Issues
+- Fix the auth redirect loop
+""",
+                encoding="utf-8",
+            )
+
+            output = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertIn("👉 Next Recommended Step", output)
+            self.assertIn("Command: `arms fix issues`", output)
+            self.assertIn("Source: `.arms/reports/review-latest.md`", output)
 
     def test_init_arms_shell_script_preserves_pythonpath_and_runs_init(self):
         with TemporaryDirectory() as tmp:
@@ -1149,6 +1235,280 @@ None
             self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | None | Pending |", session_content)
             self.assertNotIn("Seeded task", session_content)
             self.assertIn(f"- Engine Version: {init_arms.__version__}", session_content)
+
+    def test_update_session_does_not_reseed_startup_tasks_when_archive_has_history(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            arms_dir.mkdir()
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+            (arms_dir / "SESSION_ARCHIVE.md").write_text(
+                "# ARMS Session Archive\n\n## 2026-05-07\n- Finished initial discovery\n",
+                encoding="utf-8",
+            )
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+                startup_tasks_content=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Seeded task | arms-main-agent | arms-orchestrator | — | Pending |"
+                ),
+            )
+
+            session_content = (arms_dir / "SESSION.md").read_text(encoding="utf-8")
+            self.assertNotIn("Seeded task", session_content)
+
+    def test_update_session_does_not_reseed_startup_tasks_when_reports_exist(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            reports_dir = arms_dir / "reports"
+            reports_dir.mkdir(parents=True)
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+            (reports_dir / "review-latest.md").write_text("# ARMS Review Report\n", encoding="utf-8")
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+                startup_tasks_content=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Seeded task | arms-main-agent | arms-orchestrator | — | Pending |"
+                ),
+            )
+
+            session_content = (arms_dir / "SESSION.md").read_text(encoding="utf-8")
+            self.assertNotIn("Seeded task", session_content)
+
+    def test_update_session_writes_startup_seed_marker_after_first_seed(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            arms_dir.mkdir()
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+                startup_tasks_content=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Seeded task | arms-main-agent | arms-orchestrator | — | Pending |"
+                ),
+                startup_seed_key="existing-project",
+            )
+
+            marker_content = (arms_dir / "startup-task-seeding.json").read_text(encoding="utf-8")
+            self.assertIn('"seeded_modes": [', marker_content)
+            self.assertIn('"existing-project"', marker_content)
+
+    def test_update_session_marker_prevents_reseed_without_history_signals(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            arms_dir.mkdir()
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+            (arms_dir / "startup-task-seeding.json").write_text(
+                '{\n  "seeded_modes": [\n    "existing-project"\n  ]\n}\n',
+                encoding="utf-8",
+            )
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+                startup_tasks_content=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Seeded task | arms-main-agent | arms-orchestrator | — | Pending |"
+                ),
+                startup_seed_key="existing-project",
+            )
+
+            session_content = (arms_dir / "SESSION.md").read_text(encoding="utf-8")
+            self.assertNotIn("Seeded task", session_content)
+
+    def test_update_session_surfaces_fix_issues_when_review_report_has_actionable_items(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            reports_dir = arms_dir / "reports"
+            reports_dir.mkdir(parents=True)
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+            (reports_dir / "review-latest.md").write_text(
+                """# ARMS Review Report
+
+## Actionable Issues
+- Fix the auth redirect loop
+- Patch the stale session token handling
+""",
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+            )
+
+            session_content = (arms_dir / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("## Next Recommended Step", session_content)
+            self.assertIn("- Command: `arms fix issues`", session_content)
+            self.assertIn("latest review report already contains 2 actionable issue(s)", session_content)
+            self.assertIn("- Source: `.arms/reports/review-latest.md`", session_content)
+
+    def test_update_session_surfaces_fix_execution_when_fix_plan_is_latest(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            reports_dir = arms_dir / "reports"
+            reports_dir.mkdir(parents=True)
+            (arms_dir / "BRAND.md").write_text("# Brand Context\n- **Project Name:** Demo\n", encoding="utf-8")
+            (reports_dir / "fix-plan-latest.md").write_text("# ARMS Fix Plan\n", encoding="utf-8")
+            (arms_dir / "SESSION.md").write_text(
+                """# ARMS Session Log
+Generated: old
+
+## Environment
+- ARMS Root: /tmp/fake
+- Engine Version: 1.0.0
+- Project Root: {root}
+- Project Name: Demo
+- Execution Mode: Parallel
+- YOLO Mode: Disabled
+
+## Active Agents
+- arms-main-agent
+
+## Active Skills
+- arms-orchestrator [Active]
+
+## Active Tasks
+| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+|---|------|----------------|--------------|--------------|--------|
+| 1 | Fix: patch auth redirect loop | arms-backend-agent | backend-system-architect | — | Pending |
+
+## Completed Tasks
+- None
+
+## Blockers
+None
+""".format(root=project_root),
+                encoding="utf-8",
+            )
+
+            init_arms.update_session(
+                str(project_root),
+                str(ARMS_ROOT),
+                "- arms-orchestrator [Active]",
+                "- arms-main-agent",
+            )
+
+            session_content = (arms_dir / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("## Next Recommended Step", session_content)
+            self.assertIn("- Action: Continue executing the open `Fix:` rows in `.arms/SESSION.md`.", session_content)
+            self.assertIn("latest fix plan is already staged", session_content)
+            self.assertIn("- Source: `.arms/reports/fix-plan-latest.md`", session_content)
 
     def test_update_session_falls_back_to_existing_session_name_when_brand_name_is_missing(self):
         with TemporaryDirectory() as tmp:

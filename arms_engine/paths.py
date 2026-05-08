@@ -55,6 +55,14 @@ class WorkspacePaths:
         return os.path.join(self.arms_dir, "HISTORY_SUMMARY.md")
 
     @property
+    def memory_index(self) -> str:
+        return os.path.join(self.arms_dir, "memory-index.json")
+
+    @property
+    def startup_seed_marker(self) -> str:
+        return os.path.join(self.arms_dir, "startup-task-seeding.json")
+
+    @property
     def task_log_lock(self) -> str:
         """Temporary lock file to prevent concurrent task log calls from creating duplicates."""
         return os.path.join(self.arms_dir, ".task-log-lock")

@@ -6,6 +6,8 @@ from .session import (
     MEMORY_APPROVED_MARKER,
     MEMORY_ENTRY_ID_RE,
     MEMORY_PENDING_MARKER,
+    build_memory_suggestion_lesson,
+    choose_memory_suggestion_section,
     parse_markdown_sections,
     read_text_file,
     resolve_memory_suggestion,
@@ -141,6 +143,32 @@ def create_memory_draft(project_root: str, section: str, lesson: str, from_sugge
         "section": normalized_section,
         "draft_id": draft_id,
         "entry_text": normalized_lesson,
+    }
+
+
+def auto_stage_memory_draft_from_task(
+    project_root: str,
+    task_text: str,
+    status: str,
+    blockers_text: str = "None",
+    dependencies: str = "",
+) -> dict | None:
+    """Auto-stage a pending memory draft for important task lifecycle outcomes.
+
+    This captures lessons automatically so the user only needs to approve later.
+    """
+    normalized_status = (status or "").strip().lower()
+    if normalized_status not in {"done", "blocked", "failed"}:
+        return None
+
+    section = choose_memory_suggestion_section(task_text, status, blockers_text, dependencies)
+    lesson = build_memory_suggestion_lesson(task_text, status, blockers_text, dependencies)
+    result = create_memory_draft(project_root, section, lesson)
+    return {
+        "section": result["section"],
+        "draft_id": result["draft_id"],
+        "entry_text": result["entry_text"],
+        "duplicate": result.get("duplicate", False),
     }
 
 

@@ -29,6 +29,7 @@ from .session import (
     SessionContextMismatchError,
     bootstrap_runtime_files,
     enforce_engine_version_guard,
+    load_next_recommended_step,
     migrate_legacy_state,
     setup_folders,
     update_session,
@@ -264,8 +265,10 @@ def run_init_once(
 
     synthesis_data = build_context_synthesis_data(project_root)
     startup_tasks_content = ""
+    startup_seed_key = ""
     if synthesis_data is not None:
         startup_tasks_content = render_startup_tasks_content(synthesis_data)
+        startup_seed_key = synthesis_data.get("workspace_mode", "")
 
     session_updated = run_monitored_step(
         monitor,
@@ -275,6 +278,7 @@ def run_init_once(
         arms_root,
         yolo=is_yolo,
         startup_tasks_content=startup_tasks_content,
+        startup_seed_key=startup_seed_key,
         context_overwrite=context_overwrite,
     )
     if not session_updated:
@@ -314,12 +318,25 @@ def run_init_once(
             )
         )
 
+    def print_next_recommended_step():
+        recommendation = load_next_recommended_step(project_root)
+        if not recommendation.get("label") or not recommendation.get("value"):
+            return
+        print("👉 Next Recommended Step")
+        print("   {}: {}".format(recommendation["label"], recommendation["value"]))
+        if recommendation.get("reason"):
+            print("   Why: {}".format(recommendation["reason"]))
+        if recommendation.get("source"):
+            print("   Source: {}".format(recommendation["source"]))
+
     brand_signature = capture_file_signature(WorkspacePaths(project_root).brand)
     if brand_context_state and brand_context_state.get("status") == "questions_required":
         if monitor is not None:
             monitor.finish("awaiting_input", "Awaiting brand answers in .arms/BRAND.md.")
         print()
         print(brand_context_state["prompt"])
+        print()
+        print_next_recommended_step()
         print("\n✅ ARMS Engine sequence complete. Awaiting Brand Context answers. → HALT")
         return {
             "status": "questions_required",
@@ -332,6 +349,7 @@ def run_init_once(
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
+        print_next_recommended_step()
         print("\n✅ ARMS Engine ready. Fleet mode activated.")
     else:
         if monitor is not None:
@@ -340,6 +358,7 @@ def run_init_once(
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
+        print_next_recommended_step()
         print("\n✅ ARMS Engine sequence complete. → HALT")
     return {
         "status": "complete",

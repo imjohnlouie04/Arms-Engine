@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import re
 import shlex
@@ -13,7 +14,6 @@ from .brand import infer_brand_context_from_project
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
 from .paths import WorkspacePaths
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
-from .tables import deduplicate_startup_tasks_against_existing, merge_task_tables
 from .versioning import resolve_version
 
 TOKEN_RE = re.compile(r"\S+")
@@ -68,6 +68,7 @@ MEMORY_SIGNAL_EMPTY = "- No approved memory lessons recorded yet."
 MEMORY_SUGGESTIONS_PREFIX = "- Review session-derived memory candidates before appending to `.arms/MEMORY.md`."
 MEMORY_SUGGESTIONS_SUFFIX = "- Stage one with `arms memory draft --from-suggestion <n>` after review and approval."
 MEMORY_SUGGESTIONS_EMPTY = "- No session-derived memory suggestions right now."
+MEMORY_INDEX_VERSION = 1
 
 
 class SessionContextMismatchError(RuntimeError):
@@ -394,6 +395,257 @@ def active_tasks_table_has_rows(content):
     return False
 
 
+def completed_tasks_section_has_entries(content):
+    normalized = (content or "").strip()
+    return normalized not in {"", "- None", "None"}
+
+
+def workspace_has_prior_task_history(project_root, existing_content):
+    if not (existing_content or "").strip():
+        return False
+
+    _, sections = parse_markdown_sections(existing_content)
+    if active_tasks_table_has_rows(sections.get("Active Tasks", "")):
+        return True
+    if completed_tasks_section_has_entries(sections.get("Completed Tasks", "")):
+        return True
+
+    archive_path = WorkspacePaths(project_root).archive
+    if os.path.isfile(archive_path):
+        archive_content = read_text_file(archive_path).strip()
+        if archive_content and archive_content != SESSION_ARCHIVE_TEMPLATE.strip():
+            return True
+
+    reports_dir = WorkspacePaths(project_root).reports_dir
+    if os.path.isdir(reports_dir):
+        for name in os.listdir(reports_dir):
+            if name == "REPORT_HISTORY.md" or name.endswith("-latest.md"):
+                return True
+
+    return False
+
+
+def read_startup_seed_marker(project_root):
+    marker_path = WorkspacePaths(project_root).startup_seed_marker
+    if not os.path.isfile(marker_path):
+        return {"seeded_modes": []}
+    try:
+        payload = json.loads(read_text_file(marker_path))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {"seeded_modes": []}
+    seeded_modes = payload.get("seeded_modes", [])
+    if not isinstance(seeded_modes, list):
+        seeded_modes = []
+    normalized = []
+    for item in seeded_modes:
+        value = str(item or "").strip()
+        if value and value not in normalized:
+            normalized.append(value)
+    return {"seeded_modes": normalized}
+
+
+def write_startup_seed_marker(project_root, startup_seed_key):
+    normalized_key = (startup_seed_key or "").strip()
+    if not normalized_key:
+        return
+    payload = read_startup_seed_marker(project_root)
+    seeded_modes = list(payload.get("seeded_modes", []))
+    if normalized_key in seeded_modes:
+        return
+    seeded_modes.append(normalized_key)
+    write_text_atomic(
+        WorkspacePaths(project_root).startup_seed_marker,
+        json.dumps({"seeded_modes": seeded_modes}, indent=2, sort_keys=True) + "\n",
+    )
+
+
+def should_seed_startup_tasks(project_root, existing_content, startup_tasks_content, startup_seed_key=""):
+    if not startup_tasks_content:
+        return False
+    normalized_key = (startup_seed_key or "").strip()
+    if normalized_key and normalized_key in read_startup_seed_marker(project_root).get("seeded_modes", []):
+        return False
+    return not workspace_has_prior_task_history(project_root, existing_content)
+
+
+def parse_actionable_issues_from_report(content):
+    match = re.search(
+        r"^## Actionable Issues\s*$\n?([\s\S]*?)(?=^## |\Z)",
+        content or "",
+        re.MULTILINE,
+    )
+    if not match:
+        return []
+
+    issues = []
+    for raw_line in match.group(1).splitlines():
+        line = raw_line.strip()
+        if not line.startswith(("- ", "* ")):
+            continue
+        issue = line[2:].strip()
+        if not issue or issue.lower() in {"none", "none yet"}:
+            continue
+        issues.append(issue)
+    return issues
+
+
+def has_open_phase_rows(rows, prefix):
+    normalized_prefix = (prefix or "").strip().lower()
+    terminal_statuses = {"done", "completed", "cancelled", "canceled"}
+    for row in rows:
+        task = (row.get("Task") or row.get("task") or "").strip().lower()
+        status = (row.get("Status") or row.get("status") or "").strip().lower()
+        if task.startswith(normalized_prefix) and status not in terminal_statuses:
+            return True
+    return False
+
+
+def latest_report_snapshots(project_root):
+    reports_dir = WorkspacePaths(project_root).reports_dir
+    if not os.path.isdir(reports_dir):
+        return []
+
+    snapshots = []
+    for prefix in ("review", "fix-plan", "release-notes"):
+        path = os.path.join(reports_dir, f"{prefix}-latest.md")
+        if not os.path.isfile(path):
+            continue
+        snapshots.append(
+            {
+                "prefix": prefix,
+                "path": path,
+                "mtime": os.path.getmtime(path),
+            }
+        )
+    snapshots.sort(key=lambda item: item["mtime"], reverse=True)
+    return snapshots
+
+
+def format_relative_project_path(project_root, absolute_path):
+    return os.path.relpath(absolute_path, project_root)
+
+
+def build_next_recommended_step(project_root, active_rows, blockers_text="None"):
+    report_snapshots = latest_report_snapshots(project_root)
+    latest_report = report_snapshots[0] if report_snapshots else None
+    normalized_blockers = (blockers_text or "None").strip() or "None"
+
+    if latest_report:
+        relative_path = format_relative_project_path(project_root, latest_report["path"])
+        if latest_report["prefix"] == "review":
+            issues = parse_actionable_issues_from_report(read_text_file(latest_report["path"]))
+            if issues:
+                return {
+                    "label": "Command",
+                    "value": "`arms fix issues`",
+                    "reason": "The latest review report already contains {} actionable issue(s).".format(len(issues)),
+                    "source": f"`{relative_path}`",
+                }
+            if has_open_phase_rows(active_rows, "review:"):
+                return {
+                    "label": "Action",
+                    "value": "Populate the open review findings and actionable bullets before advancing.",
+                    "reason": "The review phase is active, but the latest review report does not contain actionable issues yet.",
+                    "source": f"`{relative_path}`",
+                }
+
+        if latest_report["prefix"] == "fix-plan" and has_open_phase_rows(active_rows, "fix:"):
+            return {
+                "label": "Action",
+                "value": "Continue executing the open `Fix:` rows in `.arms/SESSION.md`.",
+                "reason": "The latest fix plan is already staged and remediation work is still active.",
+                "source": f"`{relative_path}`",
+            }
+
+        if latest_report["prefix"] == "release-notes" and has_open_phase_rows(active_rows, "deploy:"):
+            return {
+                "label": "Action",
+                "value": "Review the staged `Deploy:` checklist before any remote production push.",
+                "reason": "Release notes already exist and the deploy phase is currently staged.",
+                "source": f"`{relative_path}`",
+            }
+
+    if has_open_phase_rows(active_rows, "review:"):
+        return {
+            "label": "Command",
+            "value": "`arms run review`",
+            "reason": "Review-phase tasks are active, but no latest review report is available yet.",
+            "source": "`.arms/SESSION.md`",
+        }
+
+    if has_open_phase_rows(active_rows, "fix:"):
+        return {
+            "label": "Action",
+            "value": "Continue executing the open `Fix:` rows in `.arms/SESSION.md`.",
+            "reason": "Fix work is still active in the session ledger.",
+            "source": "`.arms/SESSION.md`",
+        }
+
+    if has_open_phase_rows(active_rows, "deploy:"):
+        return {
+            "label": "Action",
+            "value": "Work through the active `Deploy:` checklist in `.arms/SESSION.md`.",
+            "reason": "Deploy-phase tasks are currently staged.",
+            "source": "`.arms/SESSION.md`",
+        }
+
+    if normalized_blockers != "None":
+        return {
+            "label": "Command",
+            "value": "`arms run status`",
+            "reason": "The session currently records blockers that should be reviewed before new work starts.",
+            "source": "`.arms/SESSION.md`",
+        }
+
+    return {
+        "label": "Command",
+        "value": "`arms run status`",
+        "reason": "No report-driven follow-up is ready yet, so inspect the current session state before choosing the next task.",
+        "source": "`.arms/SESSION.md`",
+    }
+
+
+def render_next_recommended_step(project_root, active_rows, blockers_text="None"):
+    recommendation = build_next_recommended_step(project_root, active_rows, blockers_text=blockers_text)
+    return "\n".join(
+        [
+            "- {}: {}".format(recommendation["label"], recommendation["value"]),
+            "- Why: {}".format(recommendation["reason"]),
+            "- Source: {}".format(recommendation["source"]),
+        ]
+    )
+
+
+def parse_next_recommended_step_section(content):
+    recommendation = {"label": "", "value": "", "reason": "", "source": ""}
+    for raw_line in (content or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("- "):
+            continue
+        body = line[2:].strip()
+        if body.startswith("Why:"):
+            recommendation["reason"] = body[len("Why:"):].strip()
+            continue
+        if body.startswith("Source:"):
+            recommendation["source"] = body[len("Source:"):].strip()
+            continue
+        if ":" not in body:
+            continue
+        label, value = body.split(":", 1)
+        recommendation["label"] = label.strip()
+        recommendation["value"] = value.strip()
+    return recommendation
+
+
+def load_next_recommended_step(project_root):
+    session_path = WorkspacePaths(project_root).session
+    if not os.path.isfile(session_path):
+        return {"label": "", "value": "", "reason": "", "source": ""}
+    session_content = read_text_file(session_path)
+    _, sections = parse_markdown_sections(session_content)
+    return parse_next_recommended_step_section(sections.get("Next Recommended Step", ""))
+
+
 def parse_active_task_rows(content):
     rows = []
     for raw_line in content.splitlines():
@@ -710,6 +962,199 @@ def resolve_memory_suggestion(project_root, suggestion_ref):
         if suggestion["index"] == normalized_ref:
             return suggestion
     return None
+
+
+def parse_memory_entries(project_root):
+    memory_path = WorkspacePaths(project_root).memory
+    if not os.path.isfile(memory_path):
+        return []
+
+    _, sections = parse_markdown_sections(read_text_file(memory_path))
+    entries = []
+    for section, body in sections.items():
+        section_name = " ".join((section or "").split()).strip()
+        for raw_line in (body or "").splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            core = re.sub(r"^[-*]\s*", "", stripped)
+            marker = "plain"
+            if MEMORY_PENDING_MARKER in core:
+                marker = "pending"
+            elif MEMORY_APPROVED_MARKER in core:
+                marker = "approved"
+            if marker in {"approved", "pending"}:
+                normalized = MEMORY_ENTRY_PREFIX_RE.sub("", core).strip()
+            else:
+                normalized = normalize_memory_signal(stripped, limit=500)
+            if not normalized:
+                continue
+            if normalized == section_name:
+                continue
+            entry_id_match = MEMORY_ENTRY_ID_RE.search(stripped)
+            entry_id = entry_id_match.group(1) if entry_id_match else ""
+            entries.append(
+                {
+                    "id": entry_id or "{}::{}".format(section_name, normalized.casefold()),
+                    "section": section_name,
+                    "text": normalized,
+                    "status": marker,
+                }
+            )
+    return entries
+
+
+def load_memory_index(project_root):
+    index_path = WorkspacePaths(project_root).memory_index
+    if not os.path.isfile(index_path):
+        return {"version": MEMORY_INDEX_VERSION, "entries": []}
+    try:
+        data = json.loads(read_text_file(index_path))
+    except (json.JSONDecodeError, OSError):
+        return {"version": MEMORY_INDEX_VERSION, "entries": []}
+    if not isinstance(data, dict):
+        return {"version": MEMORY_INDEX_VERSION, "entries": []}
+    entries = data.get("entries", [])
+    if not isinstance(entries, list):
+        entries = []
+    return {
+        "version": MEMORY_INDEX_VERSION,
+        "generated_at": data.get("generated_at", ""),
+        "entries": entries,
+    }
+
+
+def build_memory_index(project_root, existing_index):
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    existing_lookup = {}
+    for entry in existing_index.get("entries", []):
+        key = "{}::{}".format(entry.get("section", ""), entry.get("text", ""))
+        existing_lookup[key] = entry
+
+    entries = []
+    for parsed in parse_memory_entries(project_root):
+        key = "{}::{}".format(parsed["section"], parsed["text"])
+        prior = existing_lookup.get(key, {})
+        seen_count = int(prior.get("seen_count", 0) or 0) + 1
+        confidence = float(prior.get("confidence", 0.0) or 0.0)
+        if confidence <= 0.0:
+            if parsed["status"] == "approved":
+                confidence = 0.95
+            elif parsed["status"] == "pending":
+                confidence = 0.25
+            else:
+                confidence = 0.7
+        elif parsed["status"] == "pending":
+            confidence = min(confidence, 0.4)
+        elif parsed["status"] == "approved":
+            confidence = min(0.99, confidence + 0.02)
+
+        entries.append(
+            {
+                "id": parsed["id"],
+                "section": parsed["section"],
+                "text": parsed["text"],
+                "status": parsed["status"],
+                "confidence": round(confidence, 3),
+                "seen_count": seen_count,
+                "last_validated": now,
+            }
+        )
+
+    return {
+        "version": MEMORY_INDEX_VERSION,
+        "generated_at": now,
+        "entries": entries,
+    }
+
+
+def compile_memory_index(project_root):
+    existing = load_memory_index(project_root)
+    compiled = build_memory_index(project_root, existing)
+    write_json_atomic(WorkspacePaths(project_root).memory_index, compiled)
+    return compiled
+
+
+def write_json_atomic(path, payload):
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    temp_path = None
+    handle = None
+    try:
+        handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=directory, delete=False)
+        temp_path = handle.name
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        handle.close()
+        handle = None
+        os.replace(temp_path, path)
+    finally:
+        if handle is not None:
+            handle.close()
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def score_memory_entry_for_tasks(entry, task_rows, blockers_text):
+    if entry.get("status") == "pending":
+        return -1
+
+    base = float(entry.get("confidence", 0.0) or 0.0) * 10.0
+    section = (entry.get("section") or "").lower()
+    text = entry.get("text", "")
+    blocker_text = (blockers_text or "").strip()
+    score = base
+    if task_rows:
+        for row in task_rows:
+            task_text = row.get("task", "")
+            score = max(score, base + _bm25_score_tokens(task_text, section, text))
+            status = (row.get("status", "") or "").strip().lower()
+            if status in {"blocked", "failed"} and section == "known bugs & fixes":
+                score += 1.5
+    if blocker_text and blocker_text.lower() not in {"none", ""}:
+        score += _bm25_score_tokens(blocker_text, section, text) * 0.5
+    return score
+
+
+def render_memory_packet(project_root, active_task_rows, blockers_text="None", limit=4):
+    index = compile_memory_index(project_root)
+    entries = index.get("entries", [])
+    if not entries:
+        return "- No indexed memory packet yet."
+
+    scored = []
+    for entry in entries:
+        score = score_memory_entry_for_tasks(entry, active_task_rows, blockers_text)
+        if score < 0:
+            continue
+        scored.append((score, entry))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    selected = []
+    seen = set()
+    for _, entry in scored:
+        key = "{}::{}".format(entry.get("section", ""), entry.get("text", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(entry)
+        if len(selected) >= limit:
+            break
+
+    if not selected:
+        return "- No approved memory entries are available for task-scoped retrieval."
+
+    lines = []
+    for entry in selected:
+        lines.append(
+            "- [{}] {} (confidence: {:.2f})".format(
+                entry.get("section", "Memory"),
+                entry.get("text", ""),
+                float(entry.get("confidence", 0.0) or 0.0),
+            )
+        )
+    return "\n".join(lines)
 
 
 def read_existing_memory_signals(project_root):
@@ -1106,7 +1551,16 @@ def extract_current_project_name(project_root, existing_name=""):
     return directory_name or "Project"
 
 
-def update_session(project_root, arms_root, skills_list="", agents_list="", yolo=False, startup_tasks_content="", context_overwrite=None):
+def update_session(
+    project_root,
+    arms_root,
+    skills_list="",
+    agents_list="",
+    yolo=False,
+    startup_tasks_content="",
+    startup_seed_key="",
+    context_overwrite=None,
+):
     print("📄 Updating session log...")
     wp = WorkspacePaths(project_root)
     session_path = wp.session
@@ -1143,6 +1597,13 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
             agent_skill_bindings=agent_skill_bindings,
             skill_catalog_by_name=skill_catalog_by_name,
         )
+    seed_startup_tasks = should_seed_startup_tasks(
+        project_root,
+        existing_content,
+        normalized_startup_tasks_content,
+        startup_seed_key=startup_seed_key,
+    )
+    workspace_has_history = workspace_has_prior_task_history(project_root, existing_content)
 
     tasks_match = re.search(r"(## Active Tasks.*)", existing_content, re.DOTALL)
     active_tasks_content = ""
@@ -1164,23 +1625,15 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
                             agent_skill_bindings=agent_skill_bindings,
                             skill_catalog_by_name=skill_catalog_by_name,
                         )
-                        if normalized_startup_tasks_content:
-                            if not active_tasks_table_has_rows(content):
-                                content = normalized_startup_tasks_content
-                            else:
-                                deduplicated_startup = deduplicate_startup_tasks_against_existing(
-                                    normalized_startup_tasks_content,
-                                    existing_content,
-                                )
-                                if deduplicated_startup:
-                                    content = merge_task_tables(content, deduplicated_startup)
+                        if seed_startup_tasks and not active_tasks_table_has_rows(content):
+                            content = normalized_startup_tasks_content
                         active_tasks_content = content
                     if header == "Blockers":
                         blockers_content = content or "None"
                     new_tasks_content.append(f"## {header}\n{content}")
                 else:
                     if header == "Active Tasks":
-                        active_tasks_content = normalized_startup_tasks_content or (
+                        active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else (
                             "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
                             "|---|------|----------------|--------------|--------------|--------|"
                         )
@@ -1195,7 +1648,7 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
         for req in ["Active Tasks", "Completed Tasks", "Blockers"]:
             if req not in seen_headers:
                 if req == "Active Tasks":
-                    active_tasks_content = normalized_startup_tasks_content or (
+                    active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else (
                         "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
                         "|---|------|----------------|--------------|--------------|--------|"
                     )
@@ -1208,7 +1661,7 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
 
         tasks_content = "\n\n".join(new_tasks_content)
     else:
-        active_tasks_content = normalized_startup_tasks_content or """| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
+        active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else """| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
 |---|------|----------------|--------------|--------------|--------|"""
         tasks_content = f"""## Active Tasks
 {active_tasks_content}
@@ -1219,11 +1672,14 @@ def update_session(project_root, arms_root, skills_list="", agents_list="", yolo
 ## Blockers
 None"""
 
-    hot_task_rows = filter_hot_task_rows(parse_active_task_rows(active_tasks_content))
+    parsed_active_rows = parse_active_task_rows(active_tasks_content)
+    hot_task_rows = filter_hot_task_rows(parsed_active_rows)
     compact_agents_list = render_compact_agent_roster(hot_task_rows)
     compact_skills_list = render_compact_skill_roster_with_inactive(hot_task_rows, agent_skill_bindings)
     memory_signals = render_memory_signals(project_root)
+    memory_packet = render_memory_packet(project_root, hot_task_rows, blockers_text=blockers_content)
     memory_suggestions = render_memory_suggestions(hot_task_rows, blockers_text=blockers_content)
+    next_recommended_step = render_next_recommended_step(project_root, parsed_active_rows, blockers_text=blockers_content)
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
@@ -1248,12 +1704,20 @@ Generated: {now}
 ## Memory Signals
 {memory_signals}
 
+## Memory Packet
+{memory_packet}
+
 ## Memory Suggestions
 {memory_suggestions}
+
+## Next Recommended Step
+{next_recommended_step}
 
 {tasks_content}"""
 
     write_text_atomic(session_path, content)
+    if startup_seed_key and (seed_startup_tasks or workspace_has_history):
+        write_startup_seed_marker(project_root, startup_seed_key)
     session_budget = assess_token_budget(content, SESSION_TOKEN_BUDGET)
     if session_budget["status"] != "ok":
         print(format_token_budget_message(".arms/SESSION.md", session_budget))

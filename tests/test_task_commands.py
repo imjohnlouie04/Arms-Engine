@@ -167,12 +167,67 @@ class TaskCommandTests(unittest.TestCase):
             self.assertIn("Harden auth token validation", archive_content)
             self.assertIn("### Context: Task command: complete row", archive_content)
             self.assertIn("## Archive Diagnostics", done_output)
+            memory_content = (project_root / ".arms" / "MEMORY.md").read_text(encoding="utf-8")
+            self.assertIn("[PENDING APPROVAL][", memory_content)
+            self.assertIn("Capture the reusable implementation decision behind 'Harden auth token validation'", memory_content)
+            self.assertIn("Auto-memory draft staged", done_output)
 
     def test_task_routing_uses_word_boundaries_for_keyword_matches(self):
         self.assertEqual(init_arms.infer_agent_from_task("Add API endpoint for auth"), "arms-backend-agent")
         self.assertEqual(init_arms.infer_agent_from_task("Add QA regression coverage"), "arms-qa-agent")
         self.assertEqual(init_arms.infer_agent_from_task("Review capital allocation memo"), "arms-main-agent")
         self.assertEqual(init_arms.infer_agent_from_task("Document attestation flow"), "arms-main-agent")
+
+    def test_task_update_blocked_auto_stages_memory_once(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nBlocked task memory.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            _, log_output = self.invoke_cli(
+                project_root,
+                "task",
+                "log",
+                "--task",
+                "Fix auth token refresh race on mobile",
+                "--root",
+                str(ARMS_ROOT),
+            )
+            task_id = re.search(r"Task ID: `([^`]+)`", log_output).group(1)
+
+            exit_code, first_update = self.invoke_cli(
+                project_root,
+                "task",
+                "update",
+                "--task-id",
+                task_id,
+                "--status",
+                "Blocked",
+                "--root",
+                str(ARMS_ROOT),
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Auto-memory draft staged", first_update)
+
+            exit_code, second_update = self.invoke_cli(
+                project_root,
+                "task",
+                "update",
+                "--task-id",
+                task_id,
+                "--status",
+                "Blocked",
+                "--root",
+                str(ARMS_ROOT),
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Auto-memory draft already pending", second_update)
+
+            memory_content = (project_root / ".arms" / "MEMORY.md").read_text(encoding="utf-8")
+            self.assertEqual(
+                memory_content.count("Document the root cause and final resolution for 'Fix auth token refresh race on mobile'"),
+                1,
+            )
 
 
 class DependencyCycleTests(unittest.TestCase):

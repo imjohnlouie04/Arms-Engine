@@ -1,5 +1,7 @@
 import time
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from arms_engine.monitor import (
     extract_environment_value,
@@ -9,6 +11,7 @@ from arms_engine.monitor import (
     summarize_exception,
     truncate_text,
 )
+from arms_engine.monitor_viewer import render_terminal_dashboard, summarize_workspace
 
 
 class TruncateTextTests(unittest.TestCase):
@@ -127,6 +130,67 @@ class ViewerScriptExtractionTests(unittest.TestCase):
         content = _load_viewer_script_template()
         self.assertIn("def main()", content)
         self.assertIn('if __name__ == "__main__"', content)
+
+
+class MonitorViewerMemoryTests(unittest.TestCase):
+    def test_summarize_workspace_reads_memory_sections(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            arms_dir = project_root / ".arms"
+            arms_dir.mkdir()
+            (arms_dir / "BRAND.md").write_text("ok", encoding="utf-8")
+            (arms_dir / "CONTEXT_SYNTHESIS.md").write_text("ok", encoding="utf-8")
+            (arms_dir / "GENERATED_PROMPTS.md").write_text("ok", encoding="utf-8")
+            (arms_dir / "MEMORY.md").write_text("ok", encoding="utf-8")
+            (arms_dir / "SESSION.md").write_text(
+                "\n".join(
+                    [
+                        "# ARMS Session Log",
+                        "",
+                        "## Environment",
+                        "- Execution Mode: Parallel",
+                        "- YOLO Mode: Disabled",
+                        "",
+                        "## Active Tasks",
+                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
+                        "|---|------|----------------|--------------|--------------|--------|",
+                        "| 1 | Task A | arms-main-agent | arms-orchestrator | — | In Progress |",
+                        "",
+                        "## Blockers",
+                        "None",
+                        "",
+                        "## Memory Signals",
+                        "- Read `.arms/MEMORY.md` before task work.",
+                        "- Known Bugs & Fixes: Token refresh bug fixed via secret rotation.",
+                        "- After significant work, draft a memory lesson candidate and ask approval before appending to `.arms/MEMORY.md`.",
+                        "",
+                        "## Memory Packet",
+                        "- [Known Bugs & Fixes] Token refresh bug fixed via secret rotation. (confidence: 0.95)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            workspace = summarize_workspace(str(project_root))
+            self.assertIn("Known Bugs & Fixes: Token refresh bug fixed via secret rotation.", workspace["memory_signals"])
+            self.assertTrue(any("confidence: 0.95" in item for item in workspace["memory_packet"]))
+
+    def test_render_terminal_dashboard_includes_memory_sections(self):
+        snapshot = {
+            "status": "running",
+            "command": "init",
+            "is_yolo": False,
+            "engine_version": "1.0.0",
+            "project_root": "/tmp/demo",
+            "arms_root": "/tmp/arms_engine",
+            "report_path": "/tmp/demo/.arms/reports/init-monitor-latest.html",
+            "updated_at": "now",
+            "summary": "running",
+            "steps": [],
+        }
+        rendered = render_terminal_dashboard(snapshot, width=120)
+        self.assertIn("Memory Signals", rendered)
+        self.assertIn("Memory Packet", rendered)
 
 
 if __name__ == "__main__":

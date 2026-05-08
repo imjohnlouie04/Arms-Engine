@@ -152,6 +152,11 @@ arms release check        # Pre-release gate (non-zero exit on blocking issues)
 arms init --monitor       # Live HTML debug HUD during init
 ```
 
+### ARMS Orchestration & Intake
+- **Workflow:** This project uses the ARMS (Architectural Runtime Management System). Follow the protocols in `.arms/RULES.md`.
+- **Durable Tasks:** Every net-new issue, bug report, or feature request arriving through chat must be logged to `.arms/SESSION.md` using `arms task log` or `arms task update` before substantive execution begins. Use the standard task-table schema for all handoffs.
+- **Verification:** No task is "Done" until validated by `arms-qa-agent` and pre-flight checks (lint, build, unit tests) pass.
+
 ---
 
 ## ARMS Protocol Quick Reference

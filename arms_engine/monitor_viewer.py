@@ -111,6 +111,23 @@ def parse_task_rows(content):
     return rows
 
 
+def parse_section_bullets(content, limit=3, skip_prefixes=None):
+    skip_prefixes = tuple(skip_prefixes or ())
+    lines = []
+    for raw_line in content.splitlines():
+        cleaned = raw_line.strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("- "):
+            cleaned = cleaned[2:].strip()
+        if any(cleaned.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        lines.append(cleaned)
+        if len(lines) >= limit:
+            break
+    return lines
+
+
 def _arms_path(project_root, filename):
     return os.path.join(project_root, ".arms", filename)
 
@@ -126,6 +143,8 @@ def summarize_workspace(project_root):
     environment = extract_section(session_content, "Environment")
     active_tasks = extract_section(session_content, "Active Tasks")
     blockers_body = extract_section(session_content, "Blockers")
+    memory_signals_body = extract_section(session_content, "Memory Signals")
+    memory_packet_body = extract_section(session_content, "Memory Packet")
     task_rows = parse_task_rows(active_tasks)
 
     counts = {"pending": 0, "in_progress": 0, "blocked": 0, "other": 0}
@@ -154,6 +173,40 @@ def summarize_workspace(project_root):
     if not blockers:
         blockers = ["None"]
 
+    recommendation_body = extract_section(session_content, "Next Recommended Step")
+    recommendation = []
+    for raw_line in recommendation_body.splitlines():
+        cleaned = raw_line.strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("- "):
+            cleaned = cleaned[2:].strip()
+        recommendation.append(cleaned)
+        if len(recommendation) >= 3:
+            break
+    if not recommendation:
+        recommendation = ["No recommendation recorded yet."]
+
+    memory_signals = parse_section_bullets(
+        memory_signals_body,
+        limit=3,
+        skip_prefixes=(
+            "Read `.arms/MEMORY.md` before task work.",
+            "After significant work, draft a memory lesson candidate",
+            "No approved memory lessons recorded yet.",
+        ),
+    )
+    if not memory_signals:
+        memory_signals = ["No memory signals."]
+
+    memory_packet = parse_section_bullets(
+        memory_packet_body,
+        limit=3,
+        skip_prefixes=("No indexed memory packet yet.",),
+    )
+    if not memory_packet:
+        memory_packet = ["No memory packet entries."]
+
     brand_content = read_text(brand_path)
     brand_ready = bool(brand_content.strip()) and not any(
         token in brand_content for token in PLACEHOLDER_BRAND_TOKENS
@@ -175,6 +228,9 @@ def summarize_workspace(project_root):
             pending=counts["pending"],
         ),
         "blockers": blockers[:3],
+        "recommendation": recommendation,
+        "memory_signals": memory_signals,
+        "memory_packet": memory_packet,
         "live_tasks": live_tasks or ["No active tasks."],
     }
 
@@ -214,6 +270,17 @@ def render_terminal_dashboard(snapshot, width=TERMINAL_WIDTH):
     lines.append("| {} |".format(pad_line("Files   : BRAND={} | CONTEXT={} | PROMPTS={} | MEMORY={}".format(workspace["brand_status"], workspace["context_status"], workspace["prompts_status"], workspace["memory_status"]), inner_width)))
     lines.append("| {} |".format(pad_line("Tasks   : {}".format(workspace["task_summary"]), inner_width)))
     lines.append("| {} |".format(pad_line("Blockers: {}".format(" | ".join(workspace["blockers"])), inner_width)))
+    lines.append("| {} |".format(pad_line("Next    : {}".format(" | ".join(workspace["recommendation"])), inner_width)))
+    lines.append("| {} |".format(pad_line("", inner_width)))
+    lines.append("| {} |".format(pad_line("Memory Signals", inner_width)))
+    lines.append("| {} |".format(pad_line("-" * min(inner_width, 24), inner_width)))
+    for item in workspace["memory_signals"]:
+        lines.append("| {} |".format(pad_line(item, inner_width)))
+    lines.append("| {} |".format(pad_line("", inner_width)))
+    lines.append("| {} |".format(pad_line("Memory Packet", inner_width)))
+    lines.append("| {} |".format(pad_line("-" * min(inner_width, 24), inner_width)))
+    for item in workspace["memory_packet"]:
+        lines.append("| {} |".format(pad_line(item, inner_width)))
     lines.append("| {} |".format(pad_line("", inner_width)))
     lines.append("| {} |".format(pad_line("Live Tasks", inner_width)))
     lines.append("| {} |".format(pad_line("-" * min(inner_width, 24), inner_width)))

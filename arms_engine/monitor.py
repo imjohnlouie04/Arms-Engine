@@ -129,6 +129,20 @@ def summarize_workspace_state(project_root):
     if not blockers:
         blockers = ["None"]
 
+    recommendation = []
+    recommendation_content = sections.get("Next Recommended Step", "").strip()
+    for raw_line in recommendation_content.splitlines():
+        cleaned = raw_line.strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("- "):
+            cleaned = cleaned[2:].strip()
+        recommendation.append(cleaned)
+        if len(recommendation) >= 3:
+            break
+    if not recommendation:
+        recommendation = ["No recommendation recorded yet."]
+
     brand_content = read_text_file(brand_path) if os.path.exists(brand_path) else ""
     brand_status = "Ready"
     if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
@@ -150,6 +164,7 @@ def summarize_workspace_state(project_root):
             pending=counts["pending"],
         ),
         "blockers": blockers[:3],
+        "recommendation": recommendation,
         "live_tasks": live_tasks or ["No active tasks."],
     }
 
@@ -267,6 +282,7 @@ def render_terminal_dashboard(snapshot, width=TERMINAL_WIDTH):
     )
     lines.append("| {} |".format(pad_line("Tasks   : {}".format(workspace["task_summary"]), inner_width)))
     lines.append("| {} |".format(pad_line("Blockers: {}".format(" | ".join(workspace["blockers"])), inner_width)))
+    lines.append("| {} |".format(pad_line("Next    : {}".format(" | ".join(workspace["recommendation"])), inner_width)))
     lines.append("| {} |".format(pad_line("", inner_width)))
     lines.append("| {} |".format(pad_line("Live Tasks", inner_width)))
     lines.append("| {} |".format(pad_line("-" * min(inner_width, 24), inner_width)))
@@ -519,6 +535,16 @@ class InitActivityMonitor:
             </section>
             """.format(html.escape(self.error_message))
 
+        workspace = summarize_workspace_state(self.project_root)
+        recommendation_markup = "".join(
+            """
+            <div class="step-card">
+              <p>{}</p>
+            </div>
+            """.format(html.escape(line))
+            for line in workspace["recommendation"]
+        )
+
         return """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -756,6 +782,13 @@ class InitActivityMonitor:
     </section>
 
     <section class="panel">
+      <h2>Next Recommended Step</h2>
+      <div class="steps">
+        {recommendation_markup}
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>Step Timeline</h2>
       <div class="steps">
         {steps_markup}
@@ -778,6 +811,7 @@ class InitActivityMonitor:
             mode="YOLO" if self.is_yolo else "Standard",
             engine_version=html.escape(__version__),
             updated_at=html.escape(format_timestamp(self.updated_at)),
+            recommendation_markup=recommendation_markup,
             steps_markup="".join(steps_markup),
             error_markup=error_markup,
         )

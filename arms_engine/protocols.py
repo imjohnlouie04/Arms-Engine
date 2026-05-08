@@ -20,7 +20,7 @@ from .session import (
     write_text_atomic,
 )
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
-from .tables import parse_task_rows
+from .tables import best_semantic_row_match, parse_task_rows
 
 
 TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
@@ -373,12 +373,28 @@ def make_task_row(task, agent, active_skill, dependencies="—", status="Pending
 
 def replace_phase_rows(existing_rows, phase_prefixes, new_rows):
     filtered_rows = []
+    existing_phase_rows = []
     for row in existing_rows:
         task_text = row.get("Task", "")
         if any(task_text.startswith(prefix) for prefix in phase_prefixes):
+            existing_phase_rows.append(row)
             continue
         filtered_rows.append(row)
-    filtered_rows.extend(new_rows)
+
+    used_indexes = set()
+    refreshed_rows = []
+    for row in new_rows:
+        refreshed = dict(row)
+        match = best_semantic_row_match(row, existing_phase_rows, used_indexes=used_indexes)
+        if match is not None:
+            match_index, existing_row = match
+            used_indexes.add(match_index)
+            existing_status = (existing_row.get("Status", "") or "").strip()
+            if existing_status:
+                refreshed["Status"] = existing_status
+        refreshed_rows.append(refreshed)
+
+    filtered_rows.extend(refreshed_rows)
     return renumber_rows(filtered_rows)
 
 

@@ -239,6 +239,27 @@ class ProtocolCommandTests(unittest.TestCase):
             self.assertIn("## Archive Diagnostics", output)
             self.assertIn(str(project_root / ".arms" / "SESSION_ARCHIVE.md"), output)
 
+    def test_run_review_preserves_matching_phase_status_when_wording_drifts(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".arms" / "reports").mkdir(parents=True)
+            write_session(
+                project_root,
+                active_tasks=(
+                    "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+                    "|---|------|----------------|--------------|--------------|--------|\n"
+                    "| 1 | Review: audit responsive UI breakpoints and UX rules | arms-frontend-agent | frontend-design | — | In Progress |"
+                ),
+            )
+
+            self.invoke_cli(project_root, "--root", str(ARMS_ROOT), "run", "review")
+
+            session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "| 2 | Review: audit responsive UI, breakpoints, and UX rules | arms-frontend-agent | frontend-design | — | In Progress |",
+                session,
+            )
+
     def test_run_pipeline_replaces_existing_phase_rows_and_clears_protocol_blockers(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)

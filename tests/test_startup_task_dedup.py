@@ -48,6 +48,22 @@ class StartupTaskDedupTests(unittest.TestCase):
         result = deduplicate_startup_tasks_against_existing(startup, existing)
         self.assertEqual(result, "")
 
+    def test_deduplicate_matches_minor_wording_drift_for_same_agent(self):
+        """Minor wording drift should still deduplicate when the agent and intent match."""
+        startup = (
+            "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+            "|---|------|----------------|--------------|--------------|--------|\n"
+            "| 1 | Review the current product experience and prioritize high impact UI improvements | arms-frontend-agent | frontend-design | #1, #2 | Pending |"
+        )
+        existing = (
+            "## Active Tasks\n"
+            "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
+            "|---|------|----------------|--------------|--------------|--------|\n"
+            "| 1 | Review the current initial product experience and prioritize the first high-impact UI improvements | arms-frontend-agent | frontend-design | #1, #2 | Pending |"
+        )
+        result = deduplicate_startup_tasks_against_existing(startup, existing)
+        self.assertEqual(result, "")
+
     def test_deduplicate_returns_empty_when_all_match(self):
         """When all startup tasks exist, returns empty string."""
         startup = (
