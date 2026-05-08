@@ -77,7 +77,6 @@ Generated: 2026-05-08T08:39:05Z
 | 9 | Run QA pre-flight on the scaffold and kickoff flows | arms-qa-agent | qa-automation-testing | #3, #5, #6, #8 | Pending |
 | 10 | Automate memory drafting so users only approve suggestions | arms-main-agent | arms-orchestrator | — | Pending |
 | 11 | Display memory signals and memory packet in init monitor HUD | arms-main-agent | arms-orchestrator | — | Pending |
-| 12 | Commit and push remaining ARMS engine local changes | arms-main-agent | arms-orchestrator | — | In Progress |
 
 ## Completed Tasks
 

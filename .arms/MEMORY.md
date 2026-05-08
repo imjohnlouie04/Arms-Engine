@@ -26,3 +26,4 @@
 - [PENDING APPROVAL][memory-20260508-06]: Capture the reusable implementation decision behind 'Fix ARMS engine discrepancy audit findings' if this session establishes a pattern worth repeating.
 - [PENDING APPROVAL][memory-20260508-07]: Capture the preferred orchestration pattern that emerged while implementing 'Centralize ARMS protocol metadata and add drift tests' so future deep-dive work follows the same path.
 - [PENDING APPROVAL][memory-20260508-08]: Capture the reusable implementation decision behind 'Commit, push, and bump ARMS engine version for metadata alignment changes' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260508-09]: Capture the reusable implementation decision behind 'Commit and push remaining ARMS engine local changes' if this session establishes a pattern worth repeating.
