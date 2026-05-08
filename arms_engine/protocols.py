@@ -5,6 +5,13 @@ import subprocess
 from collections import OrderedDict
 
 from .compression import ARCHIVABLE_STATUSES, append_archive_entry, format_archive_diagnostics_lines
+from .metadata import (
+    REPORT_HISTORY_FILENAME,
+    REPORT_HISTORY_HEADER,
+    TASK_TABLE_DIVIDER,
+    TASK_TABLE_HEADER,
+    latest_report_filename,
+)
 from .paths import WorkspacePaths
 from .session import (
     filter_hot_task_rows,
@@ -23,17 +30,11 @@ from .skills import build_agent_skill_bindings, resolve_agents_with_skills
 from .tables import best_semantic_row_match, parse_task_rows
 
 
-TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
-TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|--------------|--------|"
 KEEP_EXISTING = object()
 PROTOCOL_BLOCKER_PREFIXES = (
     "No review report found",
     "No actionable issues found",
 )
-REPORT_HISTORY_HEADER = """# ARMS Report History
-
-> Consolidated by ARMS. Older protocol report revisions are appended here while the latest revision stays in its stable `*-latest.md` file.
-"""
 
 
 def identify_protocol_command(command_parts):
@@ -557,13 +558,13 @@ def load_session_sections(project_root):
 def latest_report_path(project_root, prefix):
     reports_dir = WorkspacePaths(project_root).reports_dir
     os.makedirs(reports_dir, exist_ok=True)
-    return os.path.join(reports_dir, "{}-latest.md".format(prefix))
+    return os.path.join(reports_dir, latest_report_filename(prefix))
 
 
 def report_history_path(project_root):
     reports_dir = WorkspacePaths(project_root).reports_dir
     os.makedirs(reports_dir, exist_ok=True)
-    return os.path.join(reports_dir, "REPORT_HISTORY.md")
+    return os.path.join(reports_dir, REPORT_HISTORY_FILENAME)
 
 
 def append_report_history_entry(project_root, prefix, source_name, content):

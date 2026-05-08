@@ -5,6 +5,7 @@ from collections import OrderedDict
 from contextlib import redirect_stdout
 
 from . import __version__
+from .metadata import SESSION_ENVIRONMENT_KEYS, TASK_TABLE_HEADER
 from .paths import WorkspacePaths
 from .prompts import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
 from .protocols import collect_recent_commit_subjects, find_latest_report, parse_actionable_issues
@@ -47,14 +48,8 @@ REQUIRED_SESSION_SECTIONS = (
     "Completed Tasks",
     "Blockers",
 )
-REQUIRED_ENVIRONMENT_KEYS = (
-    "ARMS Root",
-    "Engine Version",
-    "Project Root",
-    "Project Name",
-    "Execution Mode",
-    "YOLO Mode",
-)
+
+REQUIRED_ENVIRONMENT_KEYS = SESSION_ENVIRONMENT_KEYS
 REQUIRED_WORKSPACE_DIRECTORIES = (
     ".arms",
     ".arms/agent-outputs",
@@ -84,11 +79,16 @@ PROJECT_INSTRUCTION_FILES = (
     os.path.join(".gemini", "GEMINI.md"),
     os.path.join(".github", "copilot-instructions.md"),
 )
+PROJECT_OWNED_INSTRUCTION_ALIGNMENT_FILES = (
+    "GEMINI.md",
+    os.path.join(".github", "copilot-instructions.md"),
+)
+PROJECT_INSTRUCTION_ALIGNMENT_HEADING = "### ARMS Orchestration & Intake"
 TASK_INTAKE_GUIDANCE_MARKERS = (
     "arms task log",
     ".arms/session.md",
 )
-ACTIVE_TASKS_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
+ACTIVE_TASKS_HEADER = TASK_TABLE_HEADER
 
 
 def check_brand_drift(project_root):
@@ -448,6 +448,27 @@ def build_doctor_report(project_root, arms_root):
                 "Ownership Safety",
                 "ok",
                 "Project-owned instruction files include ARMS task-intake guidance for normal chat.",
+            )
+        alignment_warning = find_project_instruction_alignment_warning(project_root)
+        if alignment_warning:
+            add_check(
+                categories,
+                counts,
+                "Ownership Safety",
+                "warn",
+                alignment_warning,
+                "Keep the shared `### ARMS Orchestration & Intake` section identical in `GEMINI.md` and `.github/copilot-instructions.md`.",
+            )
+        elif all(
+            os.path.isfile(os.path.join(project_root, relative_path))
+            for relative_path in PROJECT_OWNED_INSTRUCTION_ALIGNMENT_FILES
+        ):
+            add_check(
+                categories,
+                counts,
+                "Ownership Safety",
+                "ok",
+                "Project-owned Gemini and Copilot instruction files share the same ARMS intake section.",
             )
     else:
         add_check(
@@ -965,6 +986,61 @@ def has_environment_key(environment_content, key):
 def project_instruction_has_task_intake_guidance(project_root, relative_path):
     content = read_text_file(os.path.join(project_root, relative_path)).lower()
     return all(marker in content for marker in TASK_INTAKE_GUIDANCE_MARKERS)
+
+
+def extract_heading_section(content, heading):
+    lines = content.splitlines()
+    heading_level = len(heading) - len(heading.lstrip("#"))
+    collected = []
+    capture = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not capture:
+            if stripped == heading:
+                capture = True
+                collected.append(stripped)
+            continue
+        if stripped.startswith("#"):
+            level = len(stripped) - len(stripped.lstrip("#"))
+            if level <= heading_level:
+                break
+        collected.append(line.rstrip())
+
+    return "\n".join(collected).strip()
+
+
+def find_project_instruction_alignment_warning(project_root):
+    available_files = [
+        relative_path
+        for relative_path in PROJECT_OWNED_INSTRUCTION_ALIGNMENT_FILES
+        if os.path.isfile(os.path.join(project_root, relative_path))
+    ]
+    if len(available_files) < 2:
+        return ""
+
+    sections = {
+        relative_path: extract_heading_section(
+            read_text_file(os.path.join(project_root, relative_path)),
+            PROJECT_INSTRUCTION_ALIGNMENT_HEADING,
+        )
+        for relative_path in available_files
+    }
+    missing_sections = [relative_path for relative_path, section in sections.items() if not section]
+    if missing_sections:
+        return "Project-owned instruction files are missing the shared `{}` section: {}.".format(
+            PROJECT_INSTRUCTION_ALIGNMENT_HEADING,
+            ", ".join(f"`{path}`" for path in missing_sections),
+        )
+
+    unique_sections = {section for section in sections.values()}
+    if len(unique_sections) > 1:
+        return "Project-owned instruction files disagree on the shared `{}` section: {}.".format(
+            PROJECT_INSTRUCTION_ALIGNMENT_HEADING,
+            ", ".join(f"`{path}`" for path in available_files),
+        )
+
+    return ""
 
 
 def add_check(categories, counts, category, status, summary, fix=""):

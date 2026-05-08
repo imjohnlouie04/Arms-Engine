@@ -368,7 +368,9 @@ Use `arms task done` to mark a row complete and archive it out of hot context im
 
 Notes:
 - new task rows infer the proper specialist agent from task text unless `--assigned-agent` overrides it
+- `--agent` and `--skill` are accepted aliases for `--assigned-agent` and `--active-skill`
 - `Active Skill` is auto-filled from the assigned agent's bound skills in `arms_engine/agents.yaml`
+- logging the row does not switch Copilot into that specialist by itself; hand off with `/agent <assigned-agent>` when the work should move to the sub-agent
 - `Done` / `Cancelled` rows are removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`
 - task commands require an initialized workspace, just like the memory workflow
 
@@ -652,10 +654,12 @@ arms init --answers-text "Mission: Build a conversion-focused portfolio site"
 After initialization, the `arms` CLI also accepts protocol commands that work against the local `.arms/` workspace state:
 
 - `arms run status` — reads `.arms/SESSION.md` and prints the current phase, active tasks, blockers, and last completed work
-- `arms run review` — stages review tasks in `.arms/SESSION.md` and scaffolds `./.arms/reports/review-<YYYY-MM-DD>.md`
+- `arms run review` — stages review tasks in `.arms/SESSION.md` and writes `./.arms/reports/review-latest.md`
 - `arms fix issues` — parses the latest review report's `## Actionable Issues` bullets into a fix plan and updates the task board
-- `arms run deploy` — stages deployment tasks and generates `./.arms/reports/release-notes-<YYYY-MM-DD>.md`
-- `arms run pipeline` — resets the protocol sequence to the Review phase and scaffolds the review report
+- `arms run deploy` — stages deployment tasks and generates `./.arms/reports/release-notes-latest.md`
+- `arms run pipeline` — resets the protocol sequence to the Review phase and refreshes the latest review report
+
+Protocol artifacts use stable `*-latest.md` filenames. When a latest report changes, ARMS archives the previous revision into `./.arms/reports/REPORT_HISTORY.md`.
 
 These commands deliberately stop at approval gates. They update `SESSION.md` and create protocol artifacts in `.arms/reports/`, but they do **not** yet execute full autonomous subagent remediation or remote deployment from the Python CLI alone.
 

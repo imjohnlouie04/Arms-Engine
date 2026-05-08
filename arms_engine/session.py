@@ -12,6 +12,14 @@ from . import __version__
 from .bm25 import score_tokens as _bm25_score_tokens
 from .brand import infer_brand_context_from_project
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
+from .metadata import (
+    REPORT_HISTORY_FILENAME,
+    SESSION_BOOTSTRAP_HEADINGS,
+    TASK_TABLE_DIVIDER,
+    TASK_TABLE_HEADER,
+    is_latest_report_filename,
+    render_empty_task_table,
+)
 from .paths import WorkspacePaths
 from .skills import build_agent_skill_bindings, resolve_agents_with_skills
 from .versioning import resolve_version
@@ -318,14 +326,14 @@ def choose_task_active_skill(task_text, assigned_agent, current_skill, agent_ski
 
 
 def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catalog_by_name=None):
-    new_header = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
-    new_divider = "|---|------|----------------|--------------|--------------|--------|"
+    new_header = TASK_TABLE_HEADER
+    new_divider = TASK_TABLE_DIVIDER
     legacy_header = "| # | Task | Assigned Agent | Active Skill | Status |"
     legacy_divider = "|---|------|----------------|--------------|--------|"
 
     stripped = content.strip()
     if not stripped:
-        return f"{new_header}\n{new_divider}"
+        return render_empty_task_table()
 
     # Strip any non-table preamble lines (e.g. "### Priority 1" subheadings)
     # so the first table row lands at index 0 as expected.
@@ -336,7 +344,7 @@ def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catal
     )
     lines = all_lines[first_table_index:]
     if not lines:
-        return f"{new_header}\n{new_divider}"
+        return render_empty_task_table()
 
     def normalize_row(line):
         row = line.strip()
@@ -419,7 +427,7 @@ def workspace_has_prior_task_history(project_root, existing_content):
     reports_dir = WorkspacePaths(project_root).reports_dir
     if os.path.isdir(reports_dir):
         for name in os.listdir(reports_dir):
-            if name == "REPORT_HISTORY.md" or name.endswith("-latest.md"):
+            if name == REPORT_HISTORY_FILENAME or is_latest_report_filename(name):
                 return True
 
     return False
@@ -1634,8 +1642,7 @@ def update_session(
                 else:
                     if header == "Active Tasks":
                         active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else (
-                            "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
-                            "|---|------|----------------|--------------|--------------|--------|"
+                            render_empty_task_table()
                         )
                         new_tasks_content.append(f"## {header}\n{active_tasks_content}")
                     elif header == "Completed Tasks":
@@ -1649,8 +1656,7 @@ def update_session(
             if req not in seen_headers:
                 if req == "Active Tasks":
                     active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else (
-                        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |\n"
-                        "|---|------|----------------|--------------|--------------|--------|"
+                        render_empty_task_table()
                     )
                     new_tasks_content.append(f"## {req}\n{active_tasks_content}")
                 elif req == "Completed Tasks":
@@ -1661,8 +1667,7 @@ def update_session(
 
         tasks_content = "\n\n".join(new_tasks_content)
     else:
-        active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else """| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|------|----------------|--------------|--------------|--------|"""
+        active_tasks_content = normalized_startup_tasks_content if seed_startup_tasks else render_empty_task_table()
         tasks_content = f"""## Active Tasks
 {active_tasks_content}
 
@@ -1684,10 +1689,11 @@ None"""
     exec_mode = detect_execution_mode()
     yolo_status = "Enabled" if yolo else "Disabled"
 
+    environment_heading, active_agents_heading, active_skills_heading, memory_signals_heading, memory_packet_heading, memory_suggestions_heading, next_step_heading, active_tasks_heading, completed_tasks_heading, blockers_heading = SESSION_BOOTSTRAP_HEADINGS
     content = f"""# ARMS Session Log
 Generated: {now}
 
-## Environment
+## {environment_heading}
 - ARMS Root: {arms_root}
 - Engine Version: {__version__}
 - Project Root: {project_root}
@@ -1695,22 +1701,22 @@ Generated: {now}
 - Execution Mode: {exec_mode}
 - YOLO Mode: {yolo_status}
 
-## Active Agents
+## {active_agents_heading}
 {compact_agents_list}
 
-## Active Skills
+## {active_skills_heading}
 {compact_skills_list}
 
-## Memory Signals
+## {memory_signals_heading}
 {memory_signals}
 
-## Memory Packet
+## {memory_packet_heading}
 {memory_packet}
 
-## Memory Suggestions
+## {memory_suggestions_heading}
 {memory_suggestions}
 
-## Next Recommended Step
+## {next_step_heading}
 {next_recommended_step}
 
 {tasks_content}"""

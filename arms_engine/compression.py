@@ -10,6 +10,13 @@ from .budgets import (
     AUTO_COMPACT_REPORT_FILE_LIMIT,
     AUTO_COMPACT_SESSION_CHAR_LIMIT,
 )
+from .metadata import (
+    PROTOCOL_REPORT_PREFIXES,
+    REPORT_HISTORY_FILENAME,
+    REPORT_HISTORY_HEADER,
+    TASK_TABLE_DIVIDER,
+    TASK_TABLE_HEADER,
+)
 from .paths import WorkspacePaths
 from .session import (
     SESSION_ARCHIVE_TEMPLATE,
@@ -22,14 +29,7 @@ from .session import (
 from .tables import parse_task_rows
 
 
-TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
-TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|--------------|--------|"
 ARCHIVABLE_STATUSES = {"done", "cancelled", "canceled"}
-PROTOCOL_REPORT_PREFIXES = ("review", "fix-plan", "release-notes", "release-check")
-REPORT_HISTORY_HEADER = """# ARMS Report History
-
-> Consolidated by ARMS. Older protocol report revisions are appended here while the latest revision stays in its stable `*-latest.md` file.
-"""
 STATUS_PRIORITY = {
     "blocked": 0,
     "in progress": 1,
@@ -165,7 +165,7 @@ def count_protocol_report_candidates(project_root):
     for name in os.listdir(reports_dir):
         if not name.endswith(".md"):
             continue
-        if name == "REPORT_HISTORY.md":
+        if name == REPORT_HISTORY_FILENAME:
             continue
         if any(name == "{}-latest.md".format(prefix) for prefix in PROTOCOL_REPORT_PREFIXES):
             continue
@@ -295,7 +295,7 @@ def compact_reports_directory(project_root):
     if not os.path.isdir(reports_dir):
         return {"archived_reports": 0, "history_path": ""}
 
-    history_path = os.path.join(reports_dir, "REPORT_HISTORY.md")
+    history_path = os.path.join(reports_dir, REPORT_HISTORY_FILENAME)
     archived_reports = 0
     for prefix in PROTOCOL_REPORT_PREFIXES:
         latest_path = os.path.join(reports_dir, "{}-latest.md".format(prefix))

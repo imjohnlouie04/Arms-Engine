@@ -13,6 +13,7 @@ from .brand import (
     resolve_stack_recommendation,
 )
 from .budgets import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
+from .metadata import TASK_TABLE_DIVIDER, TASK_TABLE_HEADER
 from .paths import WorkspacePaths
 from .session import assess_token_budget, format_token_budget_message, write_text_atomic
 
@@ -145,8 +146,8 @@ def render_startup_tasks_content(data):
     rows = build_startup_tasks(data)
     lines = [
         "### Priority 1",
-        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
-        "|---|------|----------------|--------------|--------------|--------|",
+        TASK_TABLE_HEADER,
+        TASK_TABLE_DIVIDER,
     ]
     for index, row in enumerate(rows, start=1):
         if not row.get("task") or not row.get("agent"):
@@ -499,6 +500,8 @@ def render_generated_prompts(project_root):
             "- Read `.arms/CONTEXT_SYNTHESIS.md` first.\n"
             "- These prompts stay intentionally thin so the synthesis file remains the single dense context source.\n"
             "- When a user sends a new issue or durable work request through CLI/IDE chat, first run `arms task log --task \"<normalized ask>\"` (or refresh the matching open row) before substantive planning or implementation.\n"
+            "- If you need to force routing, use `--assigned-agent` / `--active-skill` (aliases: `--agent` / `--skill`) on the task command.\n"
+            "- Logging or updating the task row does not switch the active Copilot specialist by itself; after the row is assigned, invoke `/agent <assigned-agent>` for implementation.\n"
             "- Use the listed specialist agent for each prompt.\n"
             "- If the user is already replying inside one of these generated/custom specialist prompts, treat clarifying questions and issue follow-ups as continuation of that active task unless they introduce a net-new ask.\n"
             "- Do not run specialist implementation prompts with `arms-main-agent`; keep `arms-main-agent` for orchestration only."

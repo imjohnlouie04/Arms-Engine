@@ -144,6 +144,18 @@ Generated: <ISO 8601 timestamp>
 ## Active Skills
 <populated by skill discovery scan>
 
+## Memory Signals
+<compact digest of approved lessons from MEMORY.md>
+
+## Memory Packet
+<task-scoped memory excerpts pulled from indexed approved memory>
+
+## Memory Suggestions
+<session-derived candidate lessons based on active tasks and blockers>
+
+## Next Recommended Step
+<report-driven or task-driven next command recommendation>
+
 ## Active Tasks
 | # | Task | Assigned Agent | Active Skill | Dependencies | Status |
 |---|------|----------------|--------------|--------------|--------|
@@ -826,6 +838,7 @@ All reference files live in `references/`. Load only when the task requires it â
 | File | Read When |
 |---|---|
 | `BRAND.md` | Brand context generation, MVP scoping, supplemental business prompts |
+| `brand-and-scope.md` | Refining brand positioning, audience framing, MVP scope, and media/design pipeline prerequisites |
 | `agent-orchestration-patterns.md` | Designing custom workflows, debugging handoffs, adding agents, choosing sequential vs. parallel |
 | `supabase-local-workflow.md` | Schema changes, migrations, RLS policies, type generation, `db reset` / `db push` / `db diff` |
 | `deployment-protocol.md` | `run deploy`, env var management, Vercel / Docker / VPS steps, release notes |
