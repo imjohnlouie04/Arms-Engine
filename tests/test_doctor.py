@@ -254,6 +254,53 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("Project-owned instruction files include ARMS task-intake guidance for normal chat.", output)
 
+    def test_doctor_warns_when_project_owned_instruction_sections_disagree(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nInstruction discrepancy.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            (project_root / "GEMINI.md").write_text(
+                "### ARMS Orchestration & Intake\n- **Workflow:** Follow `.arms/RULES.md`.\n",
+                encoding="utf-8",
+            )
+            project_instruction_path = project_root / ".github" / "copilot-instructions.md"
+            project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
+            project_instruction_path.write_text(
+                "### ARMS Orchestration & Intake\n- **Workflow:** Different guidance.\n",
+                encoding="utf-8",
+            )
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Project-owned instruction files disagree on the shared `### ARMS Orchestration & Intake` section", output)
+
+    def test_doctor_ok_when_project_owned_instruction_sections_match(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nInstruction alignment.\n", encoding="utf-8")
+
+            exit_code, _ = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+            self.assertEqual(exit_code, 0)
+
+            aligned_section = (
+                "### ARMS Orchestration & Intake\n"
+                "- **Workflow:** Follow `.arms/RULES.md`.\n"
+                "- **Durable Tasks:** Use `arms task log` semantics.\n"
+            )
+            (project_root / "GEMINI.md").write_text(aligned_section, encoding="utf-8")
+            project_instruction_path = project_root / ".github" / "copilot-instructions.md"
+            project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
+            project_instruction_path.write_text(aligned_section, encoding="utf-8")
+
+            exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Project-owned Gemini and Copilot instruction files share the same ARMS intake section.", output)
+
     def test_doctor_fix_reports_removed_obsolete_skill_artifacts(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)

@@ -74,7 +74,9 @@ Skills are mirrored from `arms_engine/skills/` into `.agents/skills/` and `.gith
 
 - A plain CLI or IDE chat message can still be a task intake event. Do **not** require the user to type `arms task log` manually after they already described the work.
 - If a normal message, pasted issue body, screenshot, or image attachment starts or materially changes durable work, summarize the ask in text, then create or refresh the matching `.arms/SESSION.md` row using `arms task log --task "<normalized ask>"` semantics before substantive planning or implementation.
+- If routing must be explicit, use `arms task log --task "<normalized ask>" --assigned-agent <agent> --active-skill <skill>` (aliases: `--agent`, `--skill`).
 - Route that row to the correct specialist agent and auto-fill the bound skill from the ARMS registry.
+- Logging a row only updates `.arms/SESSION.md`; it does **not** activate that specialist automatically. After the row points at the correct owner, invoke `/agent <assigned-agent>` to hand execution to that specialist.
 - If the message is only a clarification, approval, status nudge, or continuation of an already-open task, keep it attached to the current row and use `arms task update` semantics only when the ledger entry itself materially changes.
 
 ## Project Instructions

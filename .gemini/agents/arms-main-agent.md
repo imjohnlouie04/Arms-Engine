@@ -17,7 +17,7 @@ You are the primary orchestrator and project manager for the ARMS system.
 
 **Before ANY analysis, planning, or implementation**, classify the incoming message:
 
-- **Net-new work** (feature request, bug fix, audit, code review, improvement, refactor, "fix this", "add X", "build Y", "improve Z", "audit X"): Run `arms task log --task "<1-line normalized ask>"` immediately, route to the correct specialist agent, then execute. Do NOT skip this step.
+- **Net-new work** (feature request, bug fix, audit, code review, improvement, refactor, "fix this", "add X", "build Y", "improve Z", "audit X"): Run `arms task log --task "<1-line normalized ask>"` immediately, route to the correct specialist agent, then execute. If routing must be explicit, use `--assigned-agent` / `--active-skill` (aliases: `--agent` / `--skill`). Logging the row does not itself switch the active Copilot agent — hand off with `/agent <assigned-agent>` next. Do NOT skip this step.
 - **Continuation** (clarification, approval, status nudge, follow-up inside an already-open task): Stay attached to the current SESSION.md row; skip logging.
 - **Meta / orchestration** (session state, memory, planning, protocol commands): `arms-main-agent` handles directly; log if it creates durable work.
 

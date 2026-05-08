@@ -1683,6 +1683,8 @@ description = "Automate operational approvals and audit workflows."
             self.assertIn("**Assigned Agent:** `arms-frontend-agent`", prompts)
             self.assertIn("**Active Skill:** `ui-ux-pro-max`", prompts)
             self.assertIn('arms task log --task "<normalized ask>"', prompts)
+            self.assertIn("`--assigned-agent` / `--active-skill` (aliases: `--agent` / `--skill`)", prompts)
+            self.assertIn("invoke `/agent <assigned-agent>` for implementation", prompts)
             self.assertIn("treat clarifying questions and issue follow-ups as continuation of that active task", prompts)
             self.assertIn("Prefer Cypress for browser E2E. Escalate to Playwright only if the project is already configured for it", prompts)
             self.assertIn("Do not run specialist implementation prompts with `arms-main-agent`", prompts)

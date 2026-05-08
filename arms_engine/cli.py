@@ -433,10 +433,14 @@ def main():
     )
     parser.add_argument(
         "--assigned-agent",
+        "--agent",
+        dest="assigned_agent",
         help="With task commands, explicitly assign the row to a specific agent instead of auto-routing it.",
     )
     parser.add_argument(
         "--active-skill",
+        "--skill",
+        dest="active_skill",
         help="With task commands, explicitly set the active skill when it is already bound to the assigned agent.",
     )
     parser.add_argument(

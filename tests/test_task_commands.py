@@ -172,6 +172,35 @@ class TaskCommandTests(unittest.TestCase):
             self.assertIn("Capture the reusable implementation decision behind 'Harden auth token validation'", memory_content)
             self.assertIn("Auto-memory draft staged", done_output)
 
+    def test_task_log_accepts_agent_and_skill_aliases(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nTask aliases.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            exit_code, output = self.invoke_cli(
+                project_root,
+                "task",
+                "log",
+                "--task",
+                "Run regression audit on checkout flow",
+                "--agent",
+                "arms-qa-agent",
+                "--skill",
+                "qa-automation-testing",
+                "--status",
+                "In Progress",
+                "--root",
+                str(ARMS_ROOT),
+            )
+
+            self.assertEqual(exit_code, 0)
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("Run regression audit on checkout flow", session_content)
+            self.assertIn("arms-qa-agent", session_content)
+            self.assertIn("qa-automation-testing", session_content)
+            self.assertIn("In Progress", output)
+
     def test_task_routing_uses_word_boundaries_for_keyword_matches(self):
         self.assertEqual(init_arms.infer_agent_from_task("Add API endpoint for auth"), "arms-backend-agent")
         self.assertEqual(init_arms.infer_agent_from_task("Add QA regression coverage"), "arms-qa-agent")

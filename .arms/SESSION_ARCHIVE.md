@@ -8,3 +8,94 @@ Record of all completed and cancelled tasks.
 | 2 | Refactor `init-arms.sh` into a Python-based interactive wizard | arms-devops-agent | None | Done | 2026-04-23 |
 | 3 | Update `agents.yaml` with `arms-product-agent` and new skill mapping | arms-main-agent | arms-orchestrator | Done | 2026-04-23 |
 | 4 | Implement `workflow/deployment-gate.json` protocol | arms-qa-agent | qa-automation-testing | Done | 2026-04-23 |
+
+## Archive — 2026-05-07T10:42:05Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Investigate repeated arms init startup task regeneration and report-driven next-step suggestions | arms-main-agent | Done | 2026-05-07T10:42:05Z |
+
+## Archive — 2026-05-07T17:14:10Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Implement report-driven next-step recommendations during arms init | arms-main-agent | Done | 2026-05-07T17:14:10Z |
+
+## Archive — 2026-05-07T17:21:07Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Implement one-time startup task seeding markers for arms init | arms-main-agent | Done | 2026-05-07T17:21:07Z |
+
+## Archive — 2026-05-07T17:25:30Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Improve startup task refresh and dedupe matching during arms init | arms-main-agent | Done | 2026-05-07T17:25:30Z |
+
+## Archive — 2026-05-07T17:50:13Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Surface next recommended step in arms init output and monitor HUD | arms-main-agent | Done | 2026-05-07T17:50:13Z |
+
+## Archive — 2026-05-08T07:53:41Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Mirror ARMS orchestration intake instructions into Copilot project-owned instructions | arms-main-agent | Done | 2026-05-08T07:53:41Z |
+
+## Archive — 2026-05-08T08:06:34Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Commit, push, and release the init UX and Copilot instruction updates with a version bump | arms-frontend-agent | Done | 2026-05-08T08:06:34Z |
+
+## Archive — 2026-05-08T08:40:00Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix task logging so assigned sub-agent and skill are accepted and persisted | arms-main-agent | Done | 2026-05-08T08:40:00Z |
+
+## Archive — 2026-05-08T08:44:40Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Add automated discrepancy checks so ARMS catches instruction drift between mirrored guidance surfaces | arms-main-agent | Done | 2026-05-08T08:44:40Z |
+
+## Archive — 2026-05-08T08:53:29Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Review ARMS engine for discrepancies | arms-main-agent | Done | 2026-05-08T08:53:29Z |
+
+## Archive — 2026-05-08T08:59:25Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix ARMS engine discrepancy audit findings | arms-main-agent | Done | 2026-05-08T08:59:25Z |
+
+## Archive — 2026-05-08T09:23:23Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Centralize ARMS protocol metadata and add drift tests | arms-main-agent | Done | 2026-05-08T09:23:23Z |
+
+## Archive — 2026-05-08T09:26:22Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Commit, push, and bump ARMS engine version for metadata alignment changes | arms-main-agent | Done | 2026-05-08T09:26:22Z |
