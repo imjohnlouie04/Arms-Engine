@@ -84,14 +84,32 @@ class EngineAlignmentTests(unittest.TestCase):
             read_text_file(str(REPO_ROOT / ".gemini" / "agents" / "arms-main-agent.md")),
         )
 
+        expected_frontend_agent = build_agent_sync_content(
+            read_text_file(str(ARMS_ROOT / "agents" / "arms-frontend-agent.md")),
+            registry.get("arms-frontend-agent", {}),
+        )
+        self.assertEqual(
+            expected_frontend_agent,
+            read_text_file(str(REPO_ROOT / ".github" / "agents" / "arms-frontend-agent.md")),
+        )
+        self.assertEqual(
+            expected_frontend_agent,
+            read_text_file(str(REPO_ROOT / ".gemini" / "agents" / "arms-frontend-agent.md")),
+        )
+
     def test_project_owned_instruction_intake_sections_match(self):
         heading = "### ARMS Orchestration & Intake"
         gemini_section = extract_heading_section(read_text_file(str(REPO_ROOT / "GEMINI.md")), heading)
+        gemini_cli_section = extract_heading_section(
+            read_text_file(str(REPO_ROOT / ".gemini" / "GEMINI.md")),
+            heading,
+        )
         copilot_section = extract_heading_section(
             read_text_file(str(REPO_ROOT / ".github" / "copilot-instructions.md")),
             heading,
         )
         self.assertTrue(gemini_section)
+        self.assertEqual(gemini_section, gemini_cli_section)
         self.assertEqual(gemini_section, copilot_section)
 
     def test_protocol_docs_match_canonical_report_metadata(self):
@@ -135,6 +153,14 @@ class EngineAlignmentTests(unittest.TestCase):
 
         self.assertTrue(references_section)
         self.assertIn("`brand-and-scope.md`", references_section)
+
+    def test_frontend_mobile_mandate_is_scoped_to_mobile_layouts(self):
+        frontend_agent = read_text_file(str(ARMS_ROOT / "agents" / "arms-frontend-agent.md"))
+        frontend_rules = read_text_file(str(ARMS_ROOT / "agents.yaml"))
+
+        self.assertIn("On mobile and Mobile Extended layouts", frontend_agent)
+        self.assertIn("do not apply that sizing mandate to desktop-only layouts", frontend_agent)
+        self.assertIn("while preserving normal desktop density", frontend_rules)
 
 
 if __name__ == "__main__":

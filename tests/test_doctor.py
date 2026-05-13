@@ -266,6 +266,12 @@ class DoctorCommandTests(unittest.TestCase):
                 "### ARMS Orchestration & Intake\n- **Workflow:** Follow `.arms/RULES.md`.\n",
                 encoding="utf-8",
             )
+            gemini_cli_path = project_root / ".gemini" / "GEMINI.md"
+            gemini_cli_path.parent.mkdir(parents=True, exist_ok=True)
+            gemini_cli_path.write_text(
+                "### ARMS Orchestration & Intake\n- **Workflow:** Different Gemini guidance.\n",
+                encoding="utf-8",
+            )
             project_instruction_path = project_root / ".github" / "copilot-instructions.md"
             project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
             project_instruction_path.write_text(
@@ -292,6 +298,9 @@ class DoctorCommandTests(unittest.TestCase):
                 "- **Durable Tasks:** Use `arms task log` semantics.\n"
             )
             (project_root / "GEMINI.md").write_text(aligned_section, encoding="utf-8")
+            gemini_cli_path = project_root / ".gemini" / "GEMINI.md"
+            gemini_cli_path.parent.mkdir(parents=True, exist_ok=True)
+            gemini_cli_path.write_text(aligned_section, encoding="utf-8")
             project_instruction_path = project_root / ".github" / "copilot-instructions.md"
             project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
             project_instruction_path.write_text(aligned_section, encoding="utf-8")

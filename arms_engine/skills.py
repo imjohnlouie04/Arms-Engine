@@ -16,6 +16,34 @@ REFERENCE_ONLY_SKILL_DIRS = {
     "ui-ux-pro-max": ("data",),
 }
 
+PROJECT_INSTRUCTION_SHARED_SECTION = """### ARMS Orchestration & Intake
+- **Workflow:** This project uses the ARMS (Architectural Runtime Management System). Follow the protocols in `.arms/RULES.md`.
+- **Durable Tasks:** Every net-new issue, bug report, or feature request arriving through chat must be logged to `.arms/SESSION.md` using `arms task log` or `arms task update` before substantive execution begins. Use the standard task-table schema for all handoffs.
+- **Routing Syntax:** When routing must be explicit, use `--assigned-agent` / `--active-skill` on task commands. `--agent` / `--skill` are accepted aliases.
+- **Agent Handoff:** Updating `.arms/SESSION.md` does not itself switch Copilot into the specialist. After the row is assigned, invoke `/agent <assigned-agent>` for the implementation turn.
+- **Verification:** No task is "Done" until validated by `arms-qa-agent` and pre-flight checks (lint, build, unit tests) pass.
+"""
+
+GEMINI_BRIDGE_TEMPLATE = """# Gemini Instructions
+
+> Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol.
+> If `./GEMINI.md` exists, read it as additional project context and preserve it as project-owned instructions.
+
+{shared_section}
+
+---
+"""
+
+COPILOT_BRIDGE_TEMPLATE = """# Copilot Instructions
+
+> Managed bridge created by ARMS so Copilot normal chat follows the shared task-intake protocol.
+> If `./GEMINI.md` exists, read it as additional project context and preserve it as project-owned instructions.
+
+{shared_section}
+
+---
+"""
+
 
 def require_yaml_dependency():
     if yaml is None:
@@ -54,6 +82,37 @@ def remove_obsolete_gemini_skill_artifacts(project_root):
             )
         )
     return removed_paths
+
+
+def scaffold_instruction_bridges(project_root):
+    bridge_targets = (
+        (
+            os.path.join(project_root, ".gemini", "GEMINI.md"),
+            GEMINI_BRIDGE_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
+            ".gemini/GEMINI.md",
+        ),
+        (
+            os.path.join(project_root, ".github", "copilot-instructions.md"),
+            COPILOT_BRIDGE_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
+            ".github/copilot-instructions.md",
+        ),
+    )
+    created = []
+    for path, content, relative_path in bridge_targets:
+        if os.path.exists(path):
+            continue
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        created.append(relative_path)
+
+    if created:
+        print(
+            "🧾 Scaffolded instruction bridge files: {}.".format(
+                ", ".join(f"`{path}`" for path in created)
+            )
+        )
+    return created
 
 
 def ensure_agent_tools_frontmatter(content):

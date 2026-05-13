@@ -27,7 +27,7 @@ agents:
     skills:
       - frontend-design
       - ui-ux-pro-max
-    rules: "Ensure bold typography, cohesive themes, non-generic aesthetics. Mobile-First Mandate: override default UI library sizes to h-11 min. Never render dense <Table> on mobile; wrap in 'hidden md:block' and provide stacked <Card> layouts for 'block md:hidden'. Convert desktop sidebars into swipeable drawers on mobile."
+    rules: "Ensure bold typography, cohesive themes, non-generic aesthetics. Mobile-First Mandate: on mobile and Mobile Extended layouts, raise interactive controls to h-11 min for touch targets while preserving normal desktop density. Never render dense <Table> on mobile; keep table layouts in 'hidden md:block' and provide stacked <Card> layouts for 'block md:hidden'. Convert desktop sidebars into swipeable drawers on mobile."
   arms-devops-agent:
     role: DevOps Specialist
     scope: CI/CD, deployment, boilerplate initialization based on chosen tech stack.

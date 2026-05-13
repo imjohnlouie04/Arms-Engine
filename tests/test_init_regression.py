@@ -57,7 +57,7 @@ class InitRegressionTests(unittest.TestCase):
             self.assertTrue((project_root / ".arms" / "SESSION.md").exists())
             self.assertTrue((project_root / ".arms" / "ENGINE.md").exists())
             self.assertTrue((project_root / ".arms" / "RULES.md").exists())
-            self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
+            self.assertTrue((project_root / ".gemini" / "GEMINI.md").exists())
             self.assertFalse((project_root / ".gemini" / "RULES.md").exists())
             self.assertFalse((project_root / "session.md").exists())
             self.assertFalse((project_root / "rules.md").exists())
@@ -87,6 +87,21 @@ class InitRegressionTests(unittest.TestCase):
             self.assertEqual(root_gemini, "# Project-specific Gemini instructions\n")
             self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
             self.assertFalse((project_root / ".github" / "copilot-instructions.md").exists())
+
+    def test_init_scaffolds_gemini_and_copilot_instruction_bridges(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nBridge scaffolding.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            gemini_bridge = (project_root / ".gemini" / "GEMINI.md").read_text(encoding="utf-8")
+            copilot_bridge = (project_root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+
+            self.assertIn("### ARMS Orchestration & Intake", gemini_bridge)
+            self.assertIn("arms task log", gemini_bridge)
+            self.assertIn("### ARMS Orchestration & Intake", copilot_bridge)
+            self.assertIn("arms task log", copilot_bridge)
 
     def test_init_migrates_legacy_root_archive_when_managed_archive_is_missing(self):
         with TemporaryDirectory() as tmp:
@@ -171,12 +186,15 @@ class InitRegressionTests(unittest.TestCase):
                 "# Project instructions\nKeep the existing deployment workflow.\n",
             )
             self.assertTrue((project_root / "AGENTS.md").exists())
-            self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
+            self.assertTrue((project_root / ".gemini" / "GEMINI.md").exists())
             agents_guide = (project_root / "AGENTS.md").read_text(encoding="utf-8")
+            gemini_bridge = (project_root / ".gemini" / "GEMINI.md").read_text(encoding="utf-8")
             self.assertIn("## Normal Chat Intake", agents_guide)
             self.assertIn("plain CLI or IDE chat message can still be a task intake event", agents_guide)
             self.assertIn('arms task log --task "<normalized ask>"', agents_guide)
             self.assertIn("pasted issue body, screenshot, or image attachment", agents_guide)
+            self.assertIn("### ARMS Orchestration & Intake", gemini_bridge)
+            self.assertIn("arms task log", gemini_bridge)
 
     def test_python_module_entrypoint_runs_init(self):
         with TemporaryDirectory() as tmp:
