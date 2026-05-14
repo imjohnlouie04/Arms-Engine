@@ -158,7 +158,7 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
 3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.github/agents/`, and `.github/skills/`.
-4. Migrates legacy state into `.arms/` and `.gemini/` when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md`.
+4. Migrates legacy state into the managed workspace when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md` (migrated into `.arms/RULES.md`).
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`, including the default memory approval gate in `.arms/RULES.md`.
 6. Removes obsolete Gemini-side skill mirrors and rebuilds the canonical skill mirrors under `.agents/skills/` and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
 7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
@@ -585,7 +585,7 @@ If a project already has `GEMINI.md` at the root, `.gemini/GEMINI.md`, or `.gith
 
 ### Why the engine source file is `ENGINE.md`
 
-The engine package now ships its managed instruction source as `arms_engine/ENGINE.md`. During `arms init`, ARMS deploys that engine-owned file into the project workspace as `.arms/ENGINE.md`, while any project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` remains separate and untouched. When normal chat behavior depends on those project-owned files, use `arms doctor` to detect whether they are missing ARMS task-intake guidance.
+The engine package now ships its managed instruction source as `arms_engine/ENGINE.md`. During `arms init`, ARMS deploys that engine-owned file into the project workspace as `.arms/ENGINE.md`, scaffolds missing project-owned `GEMINI.md` and `.github/copilot-instructions.md` files with the shared ARMS intake section, and leaves any existing `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` untouched. When normal chat behavior depends on those project-owned files, use `arms doctor` to detect whether they are missing ARMS task-intake guidance.
 
 ### Task table normalization
 

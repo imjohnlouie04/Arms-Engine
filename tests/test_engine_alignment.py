@@ -100,16 +100,11 @@ class EngineAlignmentTests(unittest.TestCase):
     def test_project_owned_instruction_intake_sections_match(self):
         heading = "### ARMS Orchestration & Intake"
         gemini_section = extract_heading_section(read_text_file(str(REPO_ROOT / "GEMINI.md")), heading)
-        gemini_cli_section = extract_heading_section(
-            read_text_file(str(REPO_ROOT / ".gemini" / "GEMINI.md")),
-            heading,
-        )
         copilot_section = extract_heading_section(
             read_text_file(str(REPO_ROOT / ".github" / "copilot-instructions.md")),
             heading,
         )
         self.assertTrue(gemini_section)
-        self.assertEqual(gemini_section, gemini_cli_section)
         self.assertEqual(gemini_section, copilot_section)
 
     def test_protocol_docs_match_canonical_report_metadata(self):

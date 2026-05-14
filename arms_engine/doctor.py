@@ -81,7 +81,6 @@ PROJECT_INSTRUCTION_FILES = (
 )
 PROJECT_OWNED_INSTRUCTION_ALIGNMENT_FILES = (
     "GEMINI.md",
-    os.path.join(".gemini", "GEMINI.md"),
     os.path.join(".github", "copilot-instructions.md"),
 )
 PROJECT_INSTRUCTION_ALIGNMENT_HEADING = "### ARMS Orchestration & Intake"
@@ -458,7 +457,7 @@ def build_doctor_report(project_root, arms_root):
                 "Ownership Safety",
                 "warn",
                 alignment_warning,
-                "Keep the shared `### ARMS Orchestration & Intake` section identical in `GEMINI.md`, `.gemini/GEMINI.md`, and `.github/copilot-instructions.md`.",
+                "Keep the shared `### ARMS Orchestration & Intake` section identical in `GEMINI.md` and `.github/copilot-instructions.md`.",
             )
         elif all(
             os.path.isfile(os.path.join(project_root, relative_path))

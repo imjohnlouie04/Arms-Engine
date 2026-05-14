@@ -82,7 +82,7 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Pyth
 1. Create ./.gemini/ directory if missing (AI config)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` or `./.gemini/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`.
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`, and keep `.gemini/` reserved for assistant assets such as mirrored agents.
 5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to `./.gemini/agents/` and `./.github/agents/`, ensure `tools: ["*"]` is present, and inject canonical per-agent runtime rules from `agents.yaml`.
 6. Execute the ARMS CLI. **`arms` is a Python CLI tool installed via pip/pipx — it is NOT an npm script. Never run `npm run arms:*`.**
 

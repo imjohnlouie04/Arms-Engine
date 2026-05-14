@@ -36,7 +36,8 @@ from .session import (
 )
 from .skills import (
     remove_obsolete_gemini_skill_artifacts,
-    scaffold_instruction_bridges,
+    remove_obsolete_instruction_bridges,
+    scaffold_project_instruction_files,
     create_skills_registry,
     sync_agents,
     sync_agents_copilot,
@@ -293,7 +294,8 @@ def run_init_once(
     def sync_managed_instructions():
         sync_engine_instructions(arms_root, project_root)
         sync_root_agents_guide(arms_root, project_root)
-        scaffold_instruction_bridges(project_root)
+        scaffold_project_instruction_files(project_root)
+        remove_obsolete_instruction_bridges(project_root)
 
     run_monitored_step(monitor, "Sync managed instructions", sync_managed_instructions)
 

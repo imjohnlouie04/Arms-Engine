@@ -24,7 +24,7 @@ PROJECT_INSTRUCTION_SHARED_SECTION = """### ARMS Orchestration & Intake
 - **Verification:** No task is "Done" until validated by `arms-qa-agent` and pre-flight checks (lint, build, unit tests) pass.
 """
 
-GEMINI_BRIDGE_TEMPLATE = """# Gemini Instructions
+LEGACY_GEMINI_BRIDGE_TEMPLATE = """# Gemini Instructions
 
 > Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol.
 > If `./GEMINI.md` exists, read it as additional project context and preserve it as project-owned instructions.
@@ -34,10 +34,18 @@ GEMINI_BRIDGE_TEMPLATE = """# Gemini Instructions
 ---
 """
 
-COPILOT_BRIDGE_TEMPLATE = """# Copilot Instructions
+ROOT_GEMINI_TEMPLATE = """# Gemini Instructions
 
-> Managed bridge created by ARMS so Copilot normal chat follows the shared task-intake protocol.
-> If `./GEMINI.md` exists, read it as additional project context and preserve it as project-owned instructions.
+> Project-owned Gemini instructions scaffolded by ARMS. Customize this file with repository-specific guidance as the project evolves.
+
+{shared_section}
+
+---
+"""
+
+COPILOT_INSTRUCTIONS_TEMPLATE = """# Copilot Instructions
+
+> Project-owned Copilot instructions scaffolded by ARMS. Customize this file with repository-specific guidance as the project evolves.
 
 {shared_section}
 
@@ -84,21 +92,21 @@ def remove_obsolete_gemini_skill_artifacts(project_root):
     return removed_paths
 
 
-def scaffold_instruction_bridges(project_root):
-    bridge_targets = (
+def scaffold_project_instruction_files(project_root):
+    scaffold_targets = (
         (
-            os.path.join(project_root, ".gemini", "GEMINI.md"),
-            GEMINI_BRIDGE_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
-            ".gemini/GEMINI.md",
+            os.path.join(project_root, "GEMINI.md"),
+            ROOT_GEMINI_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
+            "GEMINI.md",
         ),
         (
             os.path.join(project_root, ".github", "copilot-instructions.md"),
-            COPILOT_BRIDGE_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
+            COPILOT_INSTRUCTIONS_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
             ".github/copilot-instructions.md",
         ),
     )
     created = []
-    for path, content, relative_path in bridge_targets:
+    for path, content, relative_path in scaffold_targets:
         if os.path.exists(path):
             continue
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -108,11 +116,35 @@ def scaffold_instruction_bridges(project_root):
 
     if created:
         print(
-            "🧾 Scaffolded instruction bridge files: {}.".format(
+            "🧾 Scaffolded project instruction files: {}.".format(
                 ", ".join(f"`{path}`" for path in created)
             )
         )
     return created
+
+
+def remove_obsolete_instruction_bridges(project_root):
+    legacy_gemini_path = os.path.join(project_root, ".gemini", "GEMINI.md")
+    if not os.path.isfile(legacy_gemini_path):
+        return []
+
+    with open(legacy_gemini_path, "r", encoding="utf-8") as handle:
+        existing_content = handle.read().strip()
+    if (
+        "Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol."
+        not in existing_content
+        or PROJECT_INSTRUCTION_SHARED_SECTION.strip() not in existing_content
+    ):
+        return []
+
+    os.remove(legacy_gemini_path)
+    removed = [".gemini/GEMINI.md"]
+    print(
+        "🧹 Removed obsolete managed instruction bridge: {}.".format(
+            ", ".join(f"`{path}`" for path in removed)
+        )
+    )
+    return removed
 
 
 def ensure_agent_tools_frontmatter(content):
