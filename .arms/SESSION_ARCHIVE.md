@@ -106,3 +106,52 @@ Record of all completed and cancelled tasks.
 | # | Task | Agent | Status | Completed |
 |---|------|-------|--------|-----------|
 | 1 | Commit and push remaining ARMS engine local changes | arms-main-agent | Done | 2026-05-08T09:29:09Z |
+
+## Archive — 2026-05-13T03:06:24Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Scope mobile-first mandate so touch-target and table rules apply only to mobile layouts | arms-main-agent | Done | 2026-05-13T03:06:24Z |
+
+## Archive — 2026-05-13T12:05:12Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix Gemini CLI chat intake so normal messages create or refresh SESSION.md task rows | arms-main-agent | Done | 2026-05-13T12:05:12Z |
+
+## Archive — 2026-05-13T12:05:21Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Release Gemini intake bridge fix | arms-devops-agent | Done | 2026-05-13T12:05:21Z |
+
+## Archive — 2026-05-14T19:14:02Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Audit Gemini CLI thinking stall causes in this repo | arms-main-agent | Done | 2026-05-14T19:14:02Z |
+
+## Archive — 2026-05-14T19:30:08Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Move Gemini/Copilot instruction scaffolding to project-owned root files | arms-main-agent | Done | 2026-05-14T19:30:08Z |
+
+## Archive — 2026-05-14T19:37:23Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Release project-owned instruction scaffolding fix | arms-devops-agent | Done | 2026-05-14T19:37:23Z |
+
+## Archive — 2026-05-14T22:10:55Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix mobile-only h-11 mandate wording across ARMS instruction surfaces | arms-main-agent | Done | 2026-05-14T22:10:55Z |

@@ -30,7 +30,7 @@ The security agent will perform a vulnerability and configuration audit.
 ---
 
 ## Phase 4: Output & Handoff
-1.  **Generate Report:** The agents must synthesize their findings and write them to `./.arms/reports/review-<YYYY-MM-DD>.md` in the local project directory.
+1.  **Generate Report:** The agents must synthesize their findings and write them to `./.arms/reports/review-latest.md` in the local project directory. When the latest report changes, archive the prior revision into `./.arms/reports/REPORT_HISTORY.md`.
 2.  **Session Update:** Log the completion of the review phase in `./.arms/SESSION.md`.
 3.  **Approval Gate:** Present the summarized findings to the user and request permission to proceed.
 

@@ -27,3 +27,13 @@
 - [PENDING APPROVAL][memory-20260508-07]: Capture the preferred orchestration pattern that emerged while implementing 'Centralize ARMS protocol metadata and add drift tests' so future deep-dive work follows the same path.
 - [PENDING APPROVAL][memory-20260508-08]: Capture the reusable implementation decision behind 'Commit, push, and bump ARMS engine version for metadata alignment changes' if this session establishes a pattern worth repeating.
 - [PENDING APPROVAL][memory-20260508-09]: Capture the reusable implementation decision behind 'Commit and push remaining ARMS engine local changes' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260513-02]: Capture the preferred orchestration pattern that emerged while implementing 'Fix Gemini CLI chat intake so normal messages create or refresh SESSION.md task rows' so future deep-dive work follows the same path.
+- [PENDING APPROVAL][memory-20260513-03]: Capture the reusable implementation decision behind 'Release Gemini intake bridge fix' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260514-01]: Capture the reusable implementation decision behind 'Audit Gemini CLI thinking stall causes in this repo' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260514-02]: Capture the reusable implementation decision behind 'Move Gemini/Copilot instruction scaffolding to project-owned root files' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260514-03]: Capture the reusable implementation decision behind 'Release project-owned instruction scaffolding fix' if this session establishes a pattern worth repeating.
+- [PENDING APPROVAL][memory-20260514-04]: Capture the reusable implementation decision behind 'Fix mobile-only h-11 mandate wording across ARMS instruction surfaces' if this session establishes a pattern worth repeating.
+
+## Project Context & MVP
+
+- [PENDING APPROVAL][memory-20260513-01]: Capture the reusable implementation decision behind 'Scope mobile-first mandate so touch-target and table rules apply only to mobile layouts' if this session establishes a pattern worth repeating.

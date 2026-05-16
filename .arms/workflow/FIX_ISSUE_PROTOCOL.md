@@ -7,9 +7,9 @@ This protocol dictates the execution phase following a code review. It enforces 
 ---
 
 ## Phase 1: Ingestion & Task Planning (`arms-main-agent`)
-1. **Read the Report:** The orchestrator must read the latest `./.arms/reports/review-<YYYY-MM-DD>.md` file.
+1. **Read the Report:** The orchestrator must read the latest review report, preferring `./.arms/reports/review-latest.md` and falling back to the most recent `review-*.md` artifact when needed.
 2. **Decompose & Delegate:** Break down the required fixes into a Task Table. 
-   * *Columns:* Task | Assigned Agent | Dependencies | Status
+   * *Columns:* # | Task | Assigned Agent | Active Skill | Dependencies | Status
 3. **Session Sync:** Write the active Task Table to the local `./.arms/SESSION.md`.
 4. **Approval Gate:** Present the resolution plan.
    > *"Task plan generated and logged. Shall I begin executing these fixes?"* -> **HALT**
