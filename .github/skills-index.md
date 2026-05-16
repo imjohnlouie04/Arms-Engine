@@ -78,6 +78,13 @@ Nano Banana Pro (nano-banana-pro) image generation skill. Use this skill when th
 
 **File:** `.github/skills/nano-banana-pro/SKILL.md`
 
+### `pse-trading/SKILL.md`
+**pse-trading**
+
+Deep knowledge of how the Philippine Stock Exchange (PSE) works: trading sessions, order types, market mechanics, the ITCH/OUCH protocol feed, instrument reference data, and real session statistics derived from actual ITCH Total View data (replay date 2026-05-14). Use this skill whenever the user asks about PSE trading mechanics, session schedules, order book behavior, market data feeds, Philippine equities, lot sizes, circuit breakers, tick sizes, broker anonymity, auction uncrossing, or wants to analyse or build anything on top of PSE market data. Also trigger for questions about reading or parsing the ITCH binary/JSON feed, understanding message types (Add Order, Trade, Executed, BBO, etc.), or building trading systems for the Philippine market.
+
+**File:** `.github/skills/pse-trading/SKILL.md`
+
 ### `qa-automation-testing/SKILL.md`
 **qa-automation-testing**
 

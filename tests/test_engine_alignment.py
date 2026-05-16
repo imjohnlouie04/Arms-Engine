@@ -71,6 +71,10 @@ class EngineAlignmentTests(unittest.TestCase):
             agent["name"]: agent
             for agent in load_agents_registry(str(ARMS_ROOT))
         }
+        self.assertEqual(
+            read_text_file(str(ARMS_ROOT / "agents.yaml")),
+            read_text_file(str(REPO_ROOT / ".gemini" / "agents.yaml")),
+        )
         expected_agent = build_agent_sync_content(
             read_text_file(str(ARMS_ROOT / "agents" / "arms-main-agent.md")),
             registry.get("arms-main-agent", {}),

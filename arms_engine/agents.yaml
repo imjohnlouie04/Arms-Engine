@@ -21,6 +21,7 @@ agents:
     scope: APIs, models, auth, backend services.
     skills:
       - backend-system-architect
+      - pse-trading
   arms-frontend-agent:
     role: Frontend Specialist
     scope: UI components, routing, state, API integration.

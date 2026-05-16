@@ -1,6 +1,8 @@
 import datetime
 import os
+import re
 
+from .bm25 import score_tokens as _bm25_score_tokens
 from .paths import WorkspacePaths
 from .session import (
     MEMORY_APPROVED_MARKER,
@@ -15,14 +17,364 @@ from .session import (
     write_markdown_sections,
 )
 
+# ── Triage thresholds ────────────────────────────────────────────────────────
+TRIAGE_AUTO_APPROVE_THRESHOLD = 0.60
+TRIAGE_AUTO_DISCARD_THRESHOLD = 0.15
+STALE_PENDING_DAYS = 7
+
+# ── Required MEMORY.md sections (from MEMORY_TEMPLATE) ──────────────────────
+MEMORY_REQUIRED_SECTIONS = [
+    "Project Context & MVP",
+    "Primary Use Case & Implications",
+    "Phase 2 Backlog",
+    "Developer Preferences",
+    "Known Bugs & Fixes",
+]
+
+# ── Scoring vocabularies ─────────────────────────────────────────────────────
+_ACTIONABILITY_VERBS = frozenset({
+    "use", "avoid", "always", "never", "prefer", "run", "check", "ensure",
+    "require", "set", "enable", "disable", "configure", "install", "update",
+    "import", "export", "add", "remove", "fix", "test", "deploy", "build",
+    "lint", "migrate", "validate", "sync", "keep", "must", "should", "replace",
+    "follow", "enforce", "prevent", "instead", "do", "dont",
+})
+
+_SPECIFICITY_PATTERNS = [
+    re.compile(r"\.[a-z]{2,5}\b"),              # file extensions like .py .ts .yaml
+    re.compile(r"`[^`]+`"),                      # backtick-quoted code
+    re.compile(r"\b\w+\.\w+\("),                 # function/method calls
+    re.compile(r"\bv\d+[\.\d]*\b"),              # version numbers v1 v2.3
+    re.compile(r"--[\w][\w-]*"),                 # CLI flags --flag
+    re.compile(
+        r"\b(npm|pip|git|arms|supabase|docker|kubectl|python|node|bash)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(sql|rls|api|jwt|orm|cli|env|ci|cd|url|uuid|json|yaml|html|css)\b",
+        re.IGNORECASE,
+    ),
+]
+
+
+# ── Memory Quality Scorer ─────────────────────────────────────────────────────
+
+def _score_actionability(text: str) -> float:
+    """Fraction of action verbs detected; capped at 1.0."""
+    words = re.findall(r"[a-z']+", text.lower())
+    if not words:
+        return 0.0
+    matches = sum(1 for w in words if w in _ACTIONABILITY_VERBS)
+    return min(1.0, matches / max(1, len(words) / 5))
+
+
+def _score_specificity(text: str) -> float:
+    """Technical term density based on pattern hits; capped at 1.0."""
+    hits = sum(len(p.findall(text)) for p in _SPECIFICITY_PATTERNS)
+    length_units = max(1, len(text) / 40)
+    return min(1.0, hits / length_units)
+
+
+def _score_uniqueness(lesson: str, existing_approved_lessons: list) -> float:
+    """1.0 = totally novel; 0.0 = identical to an existing approved lesson."""
+    if not existing_approved_lessons:
+        return 1.0
+    lesson_tokens = re.findall(r"\w+", lesson.lower())
+    if not lesson_tokens:
+        return 0.0
+    max_sim = 0.0
+    for existing in existing_approved_lessons:
+        tokens = re.findall(r"\w+", existing.lower())
+        if not tokens:
+            continue
+        score = _bm25_score_tokens(lesson_tokens, tokens, tokens)
+        max_val = max(1.0, _bm25_score_tokens(tokens, tokens, tokens))
+        max_sim = max(max_sim, score / max_val)
+    return max(0.0, 1.0 - max_sim)
+
+
+def _score_length(text: str) -> float:
+    """Optimal-length reward curve; 0.0 for very short, peak at 40–300 chars."""
+    n = len(text)
+    if n < 10:
+        return 0.0
+    if n < 20:
+        return 0.2
+    if n < 40:
+        return 0.4 + 0.6 * ((n - 20) / 20)
+    if n <= 300:
+        return 1.0
+    if n <= 500:
+        return 1.0 - 0.5 * ((n - 300) / 200)
+    return 0.3
+
+
+def _score_uniqueness(lesson: str, existing_approved_lessons: list) -> float:
+    """1.0 = totally novel; 0.0 = identical to an existing approved lesson."""
+    if not existing_approved_lessons:
+        return 1.0
+    if not lesson.strip():
+        return 0.0
+    max_sim = 0.0
+    for existing in existing_approved_lessons:
+        if not existing.strip():
+            continue
+        score = _bm25_score_tokens(lesson, existing, existing)
+        norm = max(1.0, _bm25_score_tokens(existing, existing, ""))
+        max_sim = max(max_sim, score / norm)
+    return max(0.0, 1.0 - max_sim)
+
+
+def score_memory_entry(lesson: str, existing_approved_lessons: list) -> float:
+    """Return a composite quality score 0.0–1.0 for a candidate memory lesson.
+
+    Dimensions (weights before length multiplier):
+    - actionability  0.35
+    - specificity    0.30
+    - uniqueness     0.35
+
+    Length acts as a multiplier so very short entries are capped near 0.0
+    regardless of other dimensions.
+    """
+    a = _score_actionability(lesson)
+    s = _score_specificity(lesson)
+    u = _score_uniqueness(lesson, existing_approved_lessons)
+    ln = _score_length(lesson)
+    return round((0.35 * a + 0.30 * s + 0.35 * u) * ln, 4)
+
+
+# ── Memory Self-Repair ────────────────────────────────────────────────────────
+
+def _parse_entry_date(draft_id: str):
+    """Parse the date embedded in a ``memory-YYYYMMDD-NN`` ID, or None."""
+    m = re.match(r"memory-(\d{8})-\d+", draft_id or "")
+    if not m:
+        return None
+    try:
+        return datetime.datetime.strptime(m.group(1), "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def repair_memory_file(project_root: str) -> dict:
+    """Fix structural issues in MEMORY.md in-place.
+
+    Actions performed:
+    - Restore any missing required section headers.
+    - Remove exact-duplicate approved entries within a section.
+    - Expire stale ``[PENDING APPROVAL]`` entries older than STALE_PENDING_DAYS.
+    - Strip malformed entries that have neither a valid marker nor meaningful text.
+
+    Returns a dict with ``repaired``, ``expired``, and ``deduplicated`` lists.
+    """
+    wp = WorkspacePaths(project_root)
+    memory_path = wp.memory
+    if not os.path.isfile(memory_path):
+        return {"repaired": [], "expired": [], "deduplicated": []}
+
+    preamble, sections = load_memory_sections(project_root)
+    today = datetime.date.today()
+    repaired = []
+    expired = []
+    deduplicated = []
+
+    # Ensure all required sections exist.
+    for sec in MEMORY_REQUIRED_SECTIONS:
+        if sec not in sections:
+            sections[sec] = ""
+            repaired.append(f"Restored missing section: {sec}")
+
+    # Per-section cleanup.
+    for sec in list(sections.keys()):
+        body = sections[sec] or ""
+        lines = body.splitlines()
+        new_lines = []
+        seen_approved = set()
+
+        for raw_line in lines:
+            stripped = raw_line.strip()
+            if not stripped:
+                new_lines.append(raw_line)
+                continue
+
+            is_pending = MEMORY_PENDING_MARKER in raw_line
+            is_approved = MEMORY_APPROVED_MARKER in raw_line
+
+            if is_pending:
+                # Expire stale pending entries.
+                m = MEMORY_ENTRY_ID_RE.search(raw_line)
+                draft_id = m.group(1) if m else None
+                entry_date = _parse_entry_date(draft_id) if draft_id else None
+                if entry_date and (today - entry_date).days > STALE_PENDING_DAYS:
+                    expired.append(draft_id or stripped[:80])
+                    continue
+
+            if is_approved:
+                # Deduplicate exact approved entries within section.
+                # Key on the lesson text (everything after the marker block).
+                lesson_text = re.sub(r"\[APPROVED\]\[memory-[^\]]+\]:\s*", "", stripped)
+                lesson_text = re.sub(r"^[-*]\s*", "", lesson_text).strip().lower()
+                if lesson_text in seen_approved:
+                    deduplicated.append(stripped[:80])
+                    continue
+                seen_approved.add(lesson_text)
+
+            new_lines.append(raw_line)
+
+        sections[sec] = "\n".join(new_lines)
+
+    write_memory_sections(project_root, preamble, sections)
+    return {"repaired": repaired, "expired": expired, "deduplicated": deduplicated}
+
+
+# ── Intelligent Memory Triage ─────────────────────────────────────────────────
+
+def _collect_approved_lessons(sections: dict) -> list:
+    """Extract lesson texts from all ``[APPROVED]`` entries across sections."""
+    lessons = []
+    for body in sections.values():
+        for raw_line in (body or "").splitlines():
+            if MEMORY_APPROVED_MARKER in raw_line:
+                lesson = re.sub(r"\[APPROVED\]\[memory-[^\]]+\]:\s*", "", raw_line.strip())
+                lesson = re.sub(r"^[-*]\s*", "", lesson).strip()
+                if lesson:
+                    lessons.append(lesson)
+    return lessons
+
+
+def _collect_pending_entries(sections: dict) -> list:
+    """Return list of dicts for every ``[PENDING APPROVAL]`` entry."""
+    entries = []
+    for sec, body in sections.items():
+        for raw_line in (body or "").splitlines():
+            if MEMORY_PENDING_MARKER not in raw_line:
+                continue
+            m = MEMORY_ENTRY_ID_RE.search(raw_line)
+            draft_id = m.group(1) if m else None
+            lesson = re.sub(r"\[PENDING APPROVAL\]\[memory-[^\]]+\]:\s*", "", raw_line.strip())
+            lesson = re.sub(r"^[-*]\s*", "", lesson).strip()
+            if lesson and draft_id:
+                entries.append({"section": sec, "draft_id": draft_id, "lesson": lesson, "raw": raw_line})
+    return entries
+
+
+def smart_triage_pending_memory(project_root: str, arms_root: str) -> dict:
+    """Intelligently triage all ``[PENDING APPROVAL]`` entries in MEMORY.md.
+
+    Decision rules:
+    - score >= TRIAGE_AUTO_APPROVE_THRESHOLD  → auto-approve (append as APPROVED)
+    - score <  TRIAGE_AUTO_DISCARD_THRESHOLD  → auto-discard (remove silently)
+    - otherwise                               → keep pending, surface for user review
+
+    Prints a clear summary and a per-entry review block for marginal entries so
+    the user knows exactly what commands to run.
+
+    Returns ``{"approved": [...], "discarded": [...], "needs_review": [...]}``
+    """
+    wp = WorkspacePaths(project_root)
+    if not os.path.isfile(wp.memory):
+        return {"approved": [], "discarded": [], "needs_review": []}
+
+    # Run self-repair first so we start with a clean file.
+    repair = repair_memory_file(project_root)
+    if repair["expired"]:
+        print(f"🔧 Memory repair: expired {len(repair['expired'])} stale pending entries.")
+    if repair["deduplicated"]:
+        print(f"🔧 Memory repair: removed {len(repair['deduplicated'])} duplicate approved entries.")
+    if repair["repaired"]:
+        for msg in repair["repaired"]:
+            print(f"🔧 Memory repair: {msg}")
+
+    preamble, sections = load_memory_sections(project_root)
+    approved_lessons = _collect_approved_lessons(sections)
+    pending_entries = _collect_pending_entries(sections)
+
+    if not pending_entries:
+        return {"approved": [], "discarded": [], "needs_review": []}
+
+    approved_out = []
+    discarded_out = []
+    needs_review_out = []
+
+    # Score every pending entry and collect decisions.
+    for entry in pending_entries:
+        score = score_memory_entry(entry["lesson"], approved_lessons)
+        entry["score"] = score
+        if score >= TRIAGE_AUTO_APPROVE_THRESHOLD:
+            approved_out.append(entry)
+        elif score < TRIAGE_AUTO_DISCARD_THRESHOLD:
+            discarded_out.append(entry)
+        else:
+            needs_review_out.append(entry)
+
+    # Auto-approve high-quality entries.
+    for entry in approved_out:
+        append_memory_entry(
+            project_root, arms_root,
+            section=entry["section"],
+            lesson=entry["lesson"],
+            draft_id=entry["draft_id"],
+        )
+        print(f"✅ Auto-approved [{entry['draft_id']}]: {entry['lesson'][:80]}")
+
+    # Auto-discard low-quality entries by removing their raw lines.
+    if discarded_out:
+        reload_preamble, reload_sections = load_memory_sections(project_root)
+        for entry in discarded_out:
+            sec_body = reload_sections.get(entry["section"], "")
+            lines = [ln for ln in sec_body.splitlines() if ln.strip() != entry["raw"].strip()]
+            reload_sections[entry["section"]] = "\n".join(lines)
+            print(f"🗑️  Auto-discarded [{entry['draft_id']}]: {entry['lesson'][:80]}")
+        write_memory_sections(project_root, reload_preamble, reload_sections)
+
+    # Surface marginal entries for user review.
+    if needs_review_out:
+        today = datetime.date.today()
+        print()
+        print("─" * 70)
+        print(f"🔬 Memory Review Required — {len(needs_review_out)} entr{'y' if len(needs_review_out)==1 else 'ies'} need your decision")
+        print("─" * 70)
+        for i, entry in enumerate(needs_review_out, start=1):
+            expiry_date = _parse_entry_date(entry["draft_id"])
+            expiry_str = (
+                str(expiry_date + datetime.timedelta(days=STALE_PENDING_DAYS))
+                if expiry_date else "unknown"
+            )
+            score_bar = "🟡" if entry["score"] >= 0.35 else "🔴"
+            print(f"\n  [{i}] Section:  {entry['section']}")
+            print(f"      Score:    {entry['score']:.2f}  {score_bar}  (marginal)")
+            lesson_display = entry["lesson"]
+            if len(lesson_display) > 100:
+                lesson_display = lesson_display[:97] + "..."
+            print(f"      Lesson:   \"{lesson_display}\"")
+            print(f"      ▶ Approve: arms memory append --draft-id {entry['draft_id']}")
+            print(f"      ⌛ Expires: {expiry_str} (auto-discarded if not approved)")
+        print()
+        print("─" * 70)
+        print(f"ℹ️  Entries above will auto-expire after {STALE_PENDING_DAYS} days.")
+        print("─" * 70)
+        print()
+
+    total = len(approved_out) + len(discarded_out) + len(needs_review_out)
+    if total:
+        print(
+            f"📊 Memory triage: {len(approved_out)} approved, "
+            f"{len(discarded_out)} discarded, "
+            f"{len(needs_review_out)} awaiting review  (of {total} pending)"
+        )
+
+    return {"approved": approved_out, "discarded": discarded_out, "needs_review": needs_review_out}
+
 
 def identify_memory_command(command_parts: tuple) -> str:
-    """Return ``"draft"`` or ``"append"`` for the given command parts, or empty string."""
+    """Return ``"draft"``, ``"append"``, or ``"triage"`` for the given command parts, or empty string."""
     normalized = tuple(part.strip().lower() for part in command_parts if part.strip())
     if normalized == ("memory", "draft"):
         return "draft"
     if normalized == ("memory", "append"):
         return "append"
+    if normalized == ("memory", "triage"):
+        return "triage"
     return ""
 
 
@@ -35,7 +387,13 @@ def handle_memory_command(
     draft_id: str = "",
     from_suggestion: str = "",
 ) -> None:
-    """Dispatch a ``memory draft`` or ``memory append`` command and print a structured response."""
+    """Dispatch a ``memory draft``, ``memory append``, or ``memory triage`` command."""
+    if command_name == "triage":
+        result = smart_triage_pending_memory(project_root, arms_root)
+        if not any(result.values()):
+            print("✅ No pending memory entries to triage.")
+        return
+
     error = validate_memory_command(project_root, command_name, section, lesson, draft_id, from_suggestion)
     if error:
         emit_memory_response(

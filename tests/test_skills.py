@@ -10,6 +10,7 @@ from arms_engine.skills import (
     infer_skill_description,
     inject_agent_runtime_rules,
     parse_skill_metadata,
+    reconcile_skill_agent_bindings,
     split_agent_rules_text,
 )
 
@@ -171,6 +172,78 @@ class TestBuildSkillMirrorIgnore(unittest.TestCase):
         ignored = ignore_fn('/some/dir', ['data', 'SKILL.md', 'references'])
         self.assertIn('data', ignored)
         self.assertNotIn('SKILL.md', ignored)
+
+
+class TestReconcileSkillAgentBindings(unittest.TestCase):
+    def _make_agents_yaml(self, tmpdir, agents_block):
+        path = os.path.join(tmpdir, "agents.yaml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("agents:\n")
+            f.write(agents_block)
+        return path
+
+    def _make_skill(self, tmpdir, skill_name, frontmatter_extra=""):
+        skill_dir = os.path.join(tmpdir, "skills", skill_name)
+        os.makedirs(skill_dir, exist_ok=True)
+        content = f"---\nname: {skill_name}\n{frontmatter_extra}description: Does things.\n---\n\nBody.\n"
+        with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def test_adds_skill_to_declared_agent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_agents_yaml(tmpdir, "  arms-backend-agent:\n    role: Backend\n    skills:\n      - existing-skill\n")
+            self._make_skill(tmpdir, "pse-trading", "agents:\n  - arms-backend-agent\n")
+
+            added = reconcile_skill_agent_bindings(tmpdir)
+
+        self.assertIn("arms-backend-agent", added)
+        self.assertIn("pse-trading", added["arms-backend-agent"])
+
+    def test_does_not_duplicate_existing_binding(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_agents_yaml(tmpdir, "  arms-backend-agent:\n    role: Backend\n    skills:\n      - pse-trading\n")
+            self._make_skill(tmpdir, "pse-trading", "agents:\n  - arms-backend-agent\n")
+
+            added = reconcile_skill_agent_bindings(tmpdir)
+
+        self.assertNotIn("arms-backend-agent", added)
+
+    def test_skips_skill_without_agents_field(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_agents_yaml(tmpdir, "  arms-backend-agent:\n    role: Backend\n")
+            self._make_skill(tmpdir, "no-agent-skill")
+
+            added = reconcile_skill_agent_bindings(tmpdir)
+
+        self.assertEqual(added, {})
+
+    def test_skips_unknown_agent_name(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_agents_yaml(tmpdir, "  arms-backend-agent:\n    role: Backend\n")
+            self._make_skill(tmpdir, "rogue-skill", "agents:\n  - arms-nonexistent-agent\n")
+
+            added = reconcile_skill_agent_bindings(tmpdir)
+
+        self.assertEqual(added, {})
+
+    def test_returns_empty_dict_when_no_agents_yaml(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_skill(tmpdir, "some-skill", "agents:\n  - arms-backend-agent\n")
+            added = reconcile_skill_agent_bindings(tmpdir)
+        self.assertEqual(added, {})
+
+    def test_persists_binding_to_agents_yaml(self):
+        import yaml
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yaml_path = self._make_agents_yaml(tmpdir, "  arms-backend-agent:\n    role: Backend\n")
+            self._make_skill(tmpdir, "pse-trading", "agents:\n  - arms-backend-agent\n")
+            reconcile_skill_agent_bindings(tmpdir)
+
+            with open(yaml_path, encoding="utf-8") as f:
+                updated = yaml.safe_load(f.read())
+
+        agent_skills = updated["agents"]["arms-backend-agent"].get("skills", [])
+        self.assertIn("pse-trading", agent_skills)
 
 
 if __name__ == '__main__':

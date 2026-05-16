@@ -15,7 +15,7 @@ from .brand import (
 )
 from .compression import compress_workspace, format_compression_summary, workspace_compression_reasons
 from .doctor import handle_doctor_command, identify_doctor_command
-from .memory import handle_memory_command, identify_memory_command
+from .memory import handle_memory_command, identify_memory_command, smart_triage_pending_memory
 from .prompts import (
     build_context_synthesis_data,
     render_startup_tasks_content,
@@ -35,6 +35,7 @@ from .session import (
     update_session,
 )
 from .skills import (
+    reconcile_skill_agent_bindings,
     remove_obsolete_gemini_skill_artifacts,
     remove_obsolete_instruction_bridges,
     scaffold_project_instruction_files,
@@ -217,6 +218,7 @@ def run_init_once(
 
     def sync_runtime_mirrors():
         remove_obsolete_gemini_skill_artifacts(project_root)
+        reconcile_skill_agent_bindings(arms_root)
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
         sync_skills_copilot(arms_root, project_root)
@@ -298,6 +300,14 @@ def run_init_once(
         remove_obsolete_instruction_bridges(project_root)
 
     run_monitored_step(monitor, "Sync managed instructions", sync_managed_instructions)
+
+    run_monitored_step(
+        monitor,
+        "Triage pending memory entries",
+        smart_triage_pending_memory,
+        project_root,
+        arms_root,
+    )
 
     manual_compress = "compress" in full_command.lower()
     auto_compress_reasons = []

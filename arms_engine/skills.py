@@ -592,6 +592,141 @@ def build_agent_skill_bindings(agents):
     }
 
 
+def _patch_agents_yaml_add_skill(text, agent_name, skill_name):
+    """Surgically insert *skill_name* into *agent_name*'s skills list in
+    the raw YAML text, preserving all surrounding formatting.
+
+    Returns the modified text, or the original text unchanged if the skill
+    is already present or the agent cannot be found.
+    """
+    lines = text.splitlines(keepends=True)
+    agent_header = f"  {agent_name}:\n"
+
+    agent_start = next(
+        (i for i, line in enumerate(lines) if line == agent_header), None
+    )
+    if agent_start is None:
+        return text
+
+    # Locate the end of this agent's block (next 2-space-indented key or EOF).
+    agent_end = len(lines)
+    for i in range(agent_start + 1, len(lines)):
+        line = lines[i]
+        if (
+            line.startswith("  ")
+            and not line.startswith("   ")
+            and not line.startswith("  #")
+        ):
+            agent_end = i
+            break
+
+    agent_block = "".join(lines[agent_start:agent_end])
+    if f"- {skill_name}" in agent_block:
+        return text  # already bound
+
+    # Try to find an existing `    skills:` section.
+    skills_line = next(
+        (i for i in range(agent_start + 1, agent_end) if lines[i].rstrip() == "    skills:"),
+        None,
+    )
+
+    if skills_line is not None:
+        # Append after the last existing `      - ...` item in the list.
+        skills_end = skills_line + 1
+        while skills_end < agent_end and lines[skills_end].startswith("      - "):
+            skills_end += 1
+        lines.insert(skills_end, f"      - {skill_name}\n")
+    else:
+        # No skills section yet — insert one.  Place it before `rules:` when
+        # present, otherwise before the next agent block.
+        insert_at = agent_end
+        for i in range(agent_start + 1, agent_end):
+            if lines[i].startswith("    rules:"):
+                insert_at = i
+                break
+        lines.insert(insert_at, f"    skills:\n      - {skill_name}\n")
+
+    return "".join(lines)
+
+
+def reconcile_skill_agent_bindings(arms_root):
+    """Read every SKILL.md and, for any that declare an ``agents:`` frontmatter
+    field, ensure those agents have the skill listed in ``agents.yaml``.
+
+    Returns a mapping of ``{agent_name: [newly_added_skills]}`` for all changes
+    written.  The function is additive-only: it never removes existing bindings.
+    The original file format and key ordering are preserved via surgical text
+    patching — no YAML round-trip dump is performed.
+    """
+    yaml_path = os.path.join(arms_root, "agents.yaml")
+    if not os.path.exists(yaml_path):
+        return {}
+
+    yaml_module = require_yaml_dependency()
+
+    with open(yaml_path, "r", encoding="utf-8", errors="ignore") as fh:
+        raw_content = fh.read()
+
+    try:
+        registry = yaml_module.safe_load(raw_content) or {}
+    except yaml_module.YAMLError:
+        return {}
+
+    if not isinstance(registry, dict):
+        return {}
+
+    agents_map = registry.get("agents") or {}
+    if not isinstance(agents_map, dict):
+        return {}
+
+    skills_dir = os.path.join(arms_root, "skills")
+    if not os.path.exists(skills_dir):
+        return {}
+
+    added = {}
+    patched_text = raw_content
+
+    for skill_dir_name in sorted(os.listdir(skills_dir)):
+        skill_path = os.path.join(skills_dir, skill_dir_name)
+        skill_md_path = os.path.join(skill_path, "SKILL.md")
+        if not (os.path.isdir(skill_path) and os.path.exists(skill_md_path)):
+            continue
+
+        try:
+            metadata = parse_skill_metadata(skill_md_path, skill_dir_name)
+        except ValueError:
+            continue
+
+        declared_agents = metadata.get("agents") or []
+        if isinstance(declared_agents, str):
+            declared_agents = [declared_agents]
+        declared_agents = [str(a).strip() for a in declared_agents if str(a).strip()]
+        if not declared_agents:
+            continue
+
+        skill_name = metadata["name"]
+
+        for agent_name in declared_agents:
+            if agent_name not in agents_map:
+                continue
+            new_text = _patch_agents_yaml_add_skill(patched_text, agent_name, skill_name)
+            if new_text != patched_text:
+                patched_text = new_text
+                added.setdefault(agent_name, []).append(skill_name)
+
+    if added:
+        with open(yaml_path, "w", encoding="utf-8") as fh:
+            fh.write(patched_text)
+        for agent_name, skills in added.items():
+            print(
+                "🔗 Auto-bound skill(s) {} → {}".format(
+                    ", ".join(f"`{s}`" for s in skills), agent_name
+                )
+            )
+
+    return added
+
+
 def discover_agents_and_skills(arms_root):
     print("👥 Discovering Agents & associated Skills...")
     agents, _, _ = resolve_agents_with_skills(arms_root, announce=True)
