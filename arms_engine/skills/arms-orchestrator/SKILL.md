@@ -21,9 +21,10 @@ Before doing anything else, resolve the ARMS engine location. Do not assume a pa
 ### Step 1: Locate `Arms-Engine`
 
 Check in this order:
-1. `~/.gemini/Arms-Engine/`   ← Global Safe Zone (Preferred)
-2. `../Arms-Engine/`         ← Sibling to project
-3. `./Arms-Engine/`          ← Inside project root
+1. `~/.claude/Arms-Engine/`   ← Claude Code Global Safe Zone
+2. `~/.gemini/Arms-Engine/`   ← Gemini Global Safe Zone
+3. `../Arms-Engine/`          ← Sibling to project
+4. `./Arms-Engine/`           ← Inside project root
 
 Use whichever exists first. Set `$ARMS_ROOT` to that path for all subsequent references this session.
 
@@ -38,11 +39,12 @@ Do not error silently. Surface this immediately:
 [State Updates]: None
 
 [Action / Code]:
-⚠️ ARMS engine not found. Checked: ../Arms-Engine/ · ./Arms-Engine/ · ~/.gemini/Arms-Engine/
+⚠️ ARMS engine not found. Checked: ~/.claude/Arms-Engine/ · ~/.gemini/Arms-Engine/ · ../Arms-Engine/ · ./Arms-Engine/
 
 To continue, choose a setup location:
-  A) Inside this project:  mkdir -p Arms-Engine/skills Arms-Engine/workflow
-  B) Sibling to project:   mkdir -p ../Arms-Engine/skills ../Arms-Engine/workflow
+  A) Claude Code global: git clone <repo> ~/.claude/Arms-Engine
+  B) Sibling to project: git clone <repo> ../Arms-Engine
+  C) Inside project:     mkdir -p Arms-Engine/skills Arms-Engine/workflow
 
 Re-run your command once Arms-Engine is in place.
 
@@ -62,15 +64,17 @@ Once `$ARMS_ROOT` is confirmed, substitute it everywhere `../Arms-Engine/` appea
 **Workspace layout:**
 - ARMS engine logic: `$ARMS_ROOT/arms_engine/` (agents, skills, workflow protocols)
 - ARMS project state: `./.arms/` (SESSION.md, SESSION_ARCHIVE.md, BRAND.md, MEMORY.md, ENGINE.md)
-- Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md` and must be preserved if present
-- Mirrored assistant assets: `./.gemini/`, including `.gemini/agents/`
-- Local mirrored assets: `./.github/agents/`, `./.github/skills/`, and `./.arms/workflow/` (mirrored for CLI and engine context)
+- Project-owned instruction files: `./CLAUDE.md`, `./GEMINI.md`, `./.gemini/GEMINI.md`, `./.github/copilot-instructions.md` — preserve all if present
+- Claude Code mirrors: `./.claude/agents/` (sub-agents), `./.claude/commands/` (skills as slash commands)
+- Gemini mirrors: `./.gemini/agents/`
+- Copilot mirrors: `./.github/agents/`, `./.github/skills/`
+- Shared skill registry: `./.agents/skills/`, `./.arms/workflow/`
 
 ---
 
 ## Session Bootstrap (Run After Path Discovery)
 
-When `./.arms/` or `./.gemini/` does not exist or is missing required files, `arms-main-agent` must scaffold them before any work begins. Never assume these files exist.
+When `./.arms/` does not exist or is missing required files, `arms-main-agent` must scaffold them before any work begins. Never assume these files exist.
 
 If the user command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** begin with generic planning, repo triage, linting, or `git status`. Boot ARMS first.
 
@@ -79,11 +83,11 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Pyth
 ### Bootstrap Sequence
 
 ```
-1. Create ./.gemini/ directory if missing (AI config)
+1. Create ./.gemini/, ./.claude/agents/, and ./.claude/commands/ directories if missing (AI config mirrors)
 2. Create ./.arms/ directory if missing (ARMS engine state)
 3. Create `./.arms/agent-outputs/` and `./.arms/reports/` directories if missing
-4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` locations when the target file does not already exist. Preserve any existing project-owned `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`, and keep `.gemini/` reserved for assistant assets such as mirrored agents.
-5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to `./.gemini/agents/` and `./.github/agents/`, ensure `tools: ["*"]` is present, and inject canonical per-agent runtime rules from `agents.yaml`.
+4. Migrate legacy project state: move `.gemini/SESSION.md`, `.gemini/SESSION_ARCHIVE.md`, `.gemini/BRAND.md`, `.gemini/RULES.md`, root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and other legacy brand files into the managed `./.arms/` locations when the target file does not already exist. Preserve any existing project-owned `CLAUDE.md`, `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md`.
+5. Detect legacy agents: If $ARMS_ROOT/arms_engine/agents/ exists, migrate files to `./.gemini/agents/`, `./.github/agents/`, and `./.claude/agents/`, ensure `tools: ["*"]` is present, and inject canonical per-agent runtime rules from `agents.yaml`.
 6. Execute the ARMS CLI. **`arms` is a Python CLI tool installed via pip/pipx — it is NOT an npm script. Never run `npm run arms:*`.**
 
    Pick the first option that works:
@@ -104,7 +108,7 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Pyth
    - Scan `$ARMS_ROOT/arms_engine/skills/` (Global Engine).
    - **Validation Rule:** A directory is only a skill if it contains a `SKILL.md` file.
    - **Complete Roster Mandate:** Register ALL discovered skills (typically 9+).
-   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`. Never delete the roster during a task update.
+   - **Persistence:** Update `SESSION.md` under `## Active Skills`, sync `.gemini/agents.yaml` from `agents.yaml`, mirror agent markdown into `.gemini/agents/`, `.github/agents/`, and `.claude/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/`, `.github/skills/`, and `.claude/commands/` (flat `.md` files). Never delete the roster during a task update.
    - **Visibility:** Keep the hot-context roster compact, but show bound-but-inactive skills so users can tell a skill is available even when no open task is currently activating it.
    - **Budget Guardrail:** Keep `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` inside their token budgets. If a generated artifact nears or exceeds budget, tighten duplicate context instead of accepting prompt sprawl.
 ```
@@ -240,7 +244,7 @@ Immediately after Brand Context for a new/empty project, the CLI must also ask f
 
 **CRITICAL RULE:** If `.arms/` already exists with populated files, read them — **NEVER overwrite existing `.arms/SESSION.md` or `.arms/MEMORY.md` files.** The templates provided above are strictly for scaffolding missing files. Overwriting project memory or session history is a critical protocol violation that destroys continuous learning.
 
-Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Project-owned instruction files may live at the root as `GEMINI.md`, under `./.gemini/GEMINI.md`, or under `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
+Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, and `agents.yaml` are migration sources only. Project-owned instruction files may live at the root as `CLAUDE.md`, `GEMINI.md`, under `./.gemini/GEMINI.md`, or under `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
 
 When updating `.arms/SESSION.md`, agents must preserve the entire `## Environment` block, including:
 - `ARMS Root`
@@ -334,7 +338,7 @@ Pending → In Progress → Pre-Flight → Done
 - **Memory Suggestion Loop:** Generate `## Memory Suggestions` from active tasks and blockers so deeper sessions still surface candidate lessons before anyone edits `.arms/MEMORY.md`.
 - **Proper Agent Assignment:** Intake rows must be assigned to the specialist agent that owns the requested work. Do not default new user asks to `arms-main-agent` unless the work is orchestration/meta work.
 - **Default Routing Matrix:** UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`; API, auth, backend services, business logic → `arms-backend-agent`; schema, migrations, database, query tuning → `arms-data-agent`; tests, QA, accessibility validation, pre-flight → `arms-qa-agent`; secrets, OWASP, auth/security audit → `arms-security-agent`; CI/CD, deploy, infra, environments → `arms-devops-agent`; metadata, SEO, Core Web Vitals → `arms-seo-agent`; assets, logo, generated images → `arms-media-agent`; scope, product framing, prioritization → `arms-product-agent`.
-- **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy.
+- **Active Skill Auto-Fill:** When creating a task row, populate `Active Skill` from the assigned agent's bound skill. Read explicit `skills` from `$ARMS_ROOT/agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy (`.claude/agents.yaml` does not exist — the registry lives only at `.gemini/agents.yaml`).
 - If an agent has exactly one available skill, use it automatically.
 - If an agent has multiple available skills, pick the most relevant skill for the task being delegated.
 - Use `—` only when that agent truly has no bound skill.
@@ -739,7 +743,7 @@ Owned by `arms-main-agent`. Tracks active tasks, active skills, handoffs, and co
 ARMS engine instructions for the workspace: architectural overview, chosen stack, deployment target, tech standards (TypeScript strict, testing strategy, state management), data models, security policies, auth approach, local workflow, and references to `BRAND.md` for engine orchestration.
 
 ### Project-owned instruction files
-`./GEMINI.md`, `./.gemini/GEMINI.md`, and `./.github/copilot-instructions.md` are optional project-owned instructions. If present, treat them as repository context and preserve them verbatim; do not overwrite them during `arms init`.
+`./CLAUDE.md`, `./GEMINI.md`, `./.gemini/GEMINI.md`, and `./.github/copilot-instructions.md` are optional project-owned instructions. If present, treat them as repository context and preserve them verbatim; do not overwrite them during `arms init`.
 
 ### `./.arms/RULES.md`
 Folder structure and naming conventions, TypeScript strict mode, testing framework + coverage requirements, state management patterns, API design standards, Tailwind/component library conventions, Agent Protocol adherence rules.
@@ -795,11 +799,14 @@ Step 3 — Frontend Design System Scaffold (arms-frontend-agent → frontend-des
 - **Existing projects:** If a logo already exists (Logo Status = `Existing asset detected`),
   skip Step 1. Use the existing logo as a `--reference` input for Step 2.
 
-### Skill Paths (synced by `arms init` to `.agents/skills/`)
+### Skill Paths (synced by `arms init`)
 
-> These paths are resolved from the local project's `.agents/skills/` directory, which is
-> automatically populated by `arms init`. Both Gemini CLI and Copilot CLI discover skills
-> from this folder without any additional configuration.
+> Skills are synced to multiple discovery directories by `arms init`:
+> - `.agents/skills/{name}/SKILL.md` — Copilot CLI discovery
+> - `.github/skills/{name}/SKILL.md` — GitHub Copilot
+> - `.claude/commands/{name}.md` — Claude Code slash commands (`/{name}`)
+>
+> All three are populated automatically. No additional configuration is required.
 
 | Skill | Path | Agent |
 |---|---|---|

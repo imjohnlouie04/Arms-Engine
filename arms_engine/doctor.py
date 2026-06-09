@@ -24,9 +24,11 @@ from .skills import (
     load_agents_registry,
     remove_obsolete_gemini_skill_artifacts,
     sync_agents,
+    sync_agents_claude,
     sync_agents_copilot,
     sync_engine_instructions,
     sync_root_agents_guide,
+    sync_skills_claude,
     sync_skills_copilot,
     sync_workflow,
 )
@@ -56,6 +58,8 @@ REQUIRED_WORKSPACE_DIRECTORIES = (
     ".arms/reports",
     ".arms/workflow",
     ".agents/skills",
+    ".claude/agents",
+    ".claude/commands",
     ".gemini/agents",
     ".github/agents",
     ".github/skills",
@@ -69,17 +73,21 @@ REQUIRED_WORKSPACE_FILES = (
     ".arms/ENGINE.md",
     ".agents/skills.yaml",
     ".agents/skills-index.md",
+    ".claude/skills.yaml",
+    ".claude/skills-index.md",
     ".github/skills.yaml",
     ".github/skills-index.md",
     ".gemini/agents.yaml",
     "AGENTS.md",
 )
 PROJECT_INSTRUCTION_FILES = (
+    "CLAUDE.md",
     "GEMINI.md",
     os.path.join(".gemini", "GEMINI.md"),
     os.path.join(".github", "copilot-instructions.md"),
 )
 PROJECT_OWNED_INSTRUCTION_ALIGNMENT_FILES = (
+    "CLAUDE.md",
     "GEMINI.md",
     os.path.join(".github", "copilot-instructions.md"),
 )
@@ -457,7 +465,7 @@ def build_doctor_report(project_root, arms_root):
                 "Ownership Safety",
                 "warn",
                 alignment_warning,
-                "Keep the shared `### ARMS Orchestration & Intake` section identical in `GEMINI.md` and `.github/copilot-instructions.md`.",
+                "Keep the shared `### ARMS Orchestration & Intake` section identical in `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`.",
             )
         elif all(
             os.path.isfile(os.path.join(project_root, relative_path))
@@ -468,7 +476,7 @@ def build_doctor_report(project_root, arms_root):
                 counts,
                 "Ownership Safety",
                 "ok",
-                "Project-owned Gemini and Copilot instruction files share the same ARMS intake section.",
+                "Project-owned Claude, Gemini, and Copilot instruction files share the same ARMS intake section.",
             )
     else:
         add_check(
@@ -608,7 +616,9 @@ def apply_safe_doctor_repairs(project_root, arms_root):
     with redirect_stdout(io.StringIO()):
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
+        sync_agents_claude(arms_root, project_root)
         sync_skills_copilot(arms_root, project_root)
+        sync_skills_claude(arms_root, project_root)
         create_skills_registry(arms_root, project_root)
         sync_workflow(arms_root, project_root)
         sync_engine_instructions(arms_root, project_root)
@@ -617,7 +627,8 @@ def apply_safe_doctor_repairs(project_root, arms_root):
     repairs = [
         "Resynced `.gemini/agents/` and `.gemini/agents.yaml` from the engine.",
         "Resynced `.github/agents/` from the engine.",
-        "Rebuilt `.agents/skills/`, `.github/skills/`, and the generated skill registries.",
+        "Resynced `.claude/agents/` from the engine.",
+        "Rebuilt `.agents/skills/`, `.github/skills/`, `.claude/commands/`, and the generated skill registries.",
         "Resynced `.arms/workflow/`, `.arms/ENGINE.md`, and the root `AGENTS.md` guide.",
     ]
     if removed_obsolete:
@@ -651,7 +662,7 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
         return
 
     mismatches = []
-    for relative_dir in (".gemini/agents", ".github/agents"):
+    for relative_dir in (".gemini/agents", ".github/agents", os.path.join(".claude", "agents")):
         mirror_dir = os.path.join(project_root, relative_dir)
         mirrored_files = sorted(
             name for name in os.listdir(mirror_dir)
@@ -694,7 +705,7 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             "Workspace Health",
             "fail",
             "Agent mirrors are out of sync: {}.".format(" | ".join(mismatches)),
-            "Rerun `arms init` to resync `.gemini/agents/` and `.github/agents/` from the engine.",
+            "Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, and `.claude/agents/` from the engine.",
         )
     else:
         add_check(
@@ -737,6 +748,20 @@ def validate_skill_mirror(project_root, arms_root, categories, counts):
         if current_problems:
             problems.append(f"`{relative_root}`: " + "; ".join(current_problems))
 
+    # Claude Code skills are flat .md files in .claude/commands/
+    claude_commands_dir = os.path.join(project_root, ".claude", "commands")
+    if os.path.isdir(claude_commands_dir):
+        mirrored_claude_skills = {
+            entry[:-3]
+            for entry in os.listdir(claude_commands_dir)
+            if entry.endswith(".md")
+        }
+        missing_claude = sorted(source_skills - mirrored_claude_skills)
+        if missing_claude:
+            problems.append("`.claude/commands`: missing {}".format(
+                ", ".join(f"`{name}.md`" for name in missing_claude)
+            ))
+
     if problems:
         add_check(
             categories,
@@ -744,7 +769,7 @@ def validate_skill_mirror(project_root, arms_root, categories, counts):
             "Workspace Health",
             "fail",
             "Skill mirrors are out of sync: {}.".format(" | ".join(problems)),
-            "Rerun `arms init` to rebuild `.agents/skills/`, `.github/skills/`, and the generated skill registries.",
+            "Rerun `arms init` to rebuild `.agents/skills/`, `.github/skills/`, `.claude/commands/`, and the generated skill registries.",
         )
     else:
         add_check(

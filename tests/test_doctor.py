@@ -165,7 +165,7 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertIn("Agent mirrors are out of sync", output)
             self.assertIn("`.gemini/agents` has stale content", output)
             self.assertIn("arms-main-agent.md", output)
-            self.assertIn("Rerun `arms init` to resync `.gemini/agents/` and `.github/agents/`", output)
+            self.assertIn("Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, and `.claude/agents/`", output)
 
     def test_doctor_fails_when_gemini_agents_yaml_is_out_of_sync(self):
         with TemporaryDirectory() as tmp:
@@ -291,6 +291,7 @@ class DoctorCommandTests(unittest.TestCase):
                 "- **Workflow:** Follow `.arms/RULES.md`.\n"
                 "- **Durable Tasks:** Use `arms task log` semantics.\n"
             )
+            (project_root / "CLAUDE.md").write_text(aligned_section, encoding="utf-8")
             (project_root / "GEMINI.md").write_text(aligned_section, encoding="utf-8")
             project_instruction_path = project_root / ".github" / "copilot-instructions.md"
             project_instruction_path.parent.mkdir(parents=True, exist_ok=True)
@@ -299,7 +300,7 @@ class DoctorCommandTests(unittest.TestCase):
             exit_code, output = self.invoke_cli(project_root, "doctor", "--root", str(ARMS_ROOT))
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("Project-owned Gemini and Copilot instruction files share the same ARMS intake section.", output)
+            self.assertIn("Project-owned Claude, Gemini, and Copilot instruction files share the same ARMS intake section.", output)
 
     def test_doctor_fix_reports_removed_obsolete_skill_artifacts(self):
         with TemporaryDirectory() as tmp:

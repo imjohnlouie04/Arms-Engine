@@ -52,6 +52,15 @@ COPILOT_INSTRUCTIONS_TEMPLATE = """# Copilot Instructions
 ---
 """
 
+ROOT_CLAUDE_TEMPLATE = """# Claude Instructions
+
+> Project-owned Claude instructions scaffolded by ARMS. Customize this file with repository-specific guidance as the project evolves.
+
+{shared_section}
+
+---
+"""
+
 
 def require_yaml_dependency():
     if yaml is None:
@@ -103,6 +112,11 @@ def scaffold_project_instruction_files(project_root):
             os.path.join(project_root, ".github", "copilot-instructions.md"),
             COPILOT_INSTRUCTIONS_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
             ".github/copilot-instructions.md",
+        ),
+        (
+            os.path.join(project_root, "CLAUDE.md"),
+            ROOT_CLAUDE_TEMPLATE.format(shared_section=PROJECT_INSTRUCTION_SHARED_SECTION),
+            "CLAUDE.md",
         ),
     )
     created = []
@@ -237,6 +251,51 @@ def sync_agents_copilot(arms_root, project_root):
     target_dir = os.path.join(project_root, ".github/agents")
     os.makedirs(target_dir, exist_ok=True)
     sync_agent_markdowns(arms_root, target_dir)
+
+
+def sync_agents_claude(arms_root, project_root):
+    print("🤖 Syncing Agents for Claude Code...")
+    target_dir = os.path.join(project_root, ".claude", "agents")
+    os.makedirs(target_dir, exist_ok=True)
+    sync_agent_markdowns(arms_root, target_dir)
+
+
+def sync_skills_claude(arms_root, project_root):
+    print("🔌 Syncing Skills for Claude Code...")
+    skills_src = os.path.join(arms_root, "skills")
+    target_dir = os.path.join(project_root, ".claude", "commands")
+    os.makedirs(target_dir, exist_ok=True)
+
+    if not os.path.exists(skills_src):
+        return
+
+    current_skill_dir_names = {
+        name
+        for name in os.listdir(skills_src)
+        if os.path.isdir(os.path.join(skills_src, name))
+        and os.path.exists(os.path.join(skills_src, name, "SKILL.md"))
+    }
+
+    # Remove stale ARMS-managed skill command files (only those matching known skill names)
+    for entry in os.listdir(target_dir):
+        if entry.endswith(".md") and entry[:-3] in current_skill_dir_names:
+            os.remove(os.path.join(target_dir, entry))
+
+    for skill_dir_name in current_skill_dir_names:
+        skill_md_path = os.path.join(skills_src, skill_dir_name, "SKILL.md")
+        try:
+            metadata = parse_skill_metadata(skill_md_path, skill_dir_name)
+        except ValueError as exc:
+            print(f"⚠️  Skipping skill '{skill_dir_name}': invalid SKILL.md ({exc})")
+            continue
+
+        with open(skill_md_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+
+        normalized_content = ensure_skill_frontmatter(content, metadata["name"])
+        dest_path = os.path.join(target_dir, f"{skill_dir_name}.md")
+        with open(dest_path, "w", encoding="utf-8") as f:
+            f.write(normalized_content)
 
 
 def infer_skill_description(content, skill_name):
@@ -382,6 +441,13 @@ def create_skills_registry(arms_root, project_root):
     write_skills_registry_files(
         os.path.join(project_root, ".github"),
         ".github/skills",
+        skills_data,
+    )
+    claude_dir = os.path.join(project_root, ".claude")
+    os.makedirs(claude_dir, exist_ok=True)
+    write_skills_registry_files(
+        claude_dir,
+        ".claude/commands",
         skills_data,
     )
 

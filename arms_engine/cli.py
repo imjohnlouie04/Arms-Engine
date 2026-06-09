@@ -41,9 +41,11 @@ from .skills import (
     scaffold_project_instruction_files,
     create_skills_registry,
     sync_agents,
+    sync_agents_claude,
     sync_agents_copilot,
     sync_engine_instructions,
     sync_root_agents_guide,
+    sync_skills_claude,
     sync_skills_copilot,
     sync_workflow,
 )
@@ -221,7 +223,9 @@ def run_init_once(
         reconcile_skill_agent_bindings(arms_root)
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
+        sync_agents_claude(arms_root, project_root)
         sync_skills_copilot(arms_root, project_root)
+        sync_skills_claude(arms_root, project_root)
         create_skills_registry(arms_root, project_root)
         sync_workflow(arms_root, project_root)
 

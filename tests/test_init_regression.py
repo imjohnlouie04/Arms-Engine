@@ -97,12 +97,75 @@ class InitRegressionTests(unittest.TestCase):
 
             gemini_instructions = (project_root / "GEMINI.md").read_text(encoding="utf-8")
             copilot_instructions = (project_root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+            claude_instructions = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
 
             self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
             self.assertIn("### ARMS Orchestration & Intake", gemini_instructions)
             self.assertIn("arms task log", gemini_instructions)
             self.assertIn("### ARMS Orchestration & Intake", copilot_instructions)
             self.assertIn("arms task log", copilot_instructions)
+            self.assertIn("### ARMS Orchestration & Intake", claude_instructions)
+            self.assertIn("arms task log", claude_instructions)
+
+    def test_init_syncs_agents_and_skills_to_claude_directories(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nClaude sync.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            claude_agents_dir = project_root / ".claude" / "agents"
+            claude_commands_dir = project_root / ".claude" / "commands"
+
+            self.assertTrue(claude_agents_dir.is_dir())
+            self.assertTrue(claude_commands_dir.is_dir())
+
+            mirrored_agents = {p.name for p in claude_agents_dir.iterdir() if p.suffix == ".md"}
+            source_agents = {
+                p.name for p in (ARMS_ROOT / "agents").iterdir() if p.suffix == ".md"
+            }
+            self.assertEqual(mirrored_agents, source_agents)
+
+            mirrored_skills = {p.stem for p in claude_commands_dir.iterdir() if p.suffix == ".md"}
+            source_skills = {
+                p.name for p in (ARMS_ROOT / "skills").iterdir()
+                if p.is_dir() and (p / "SKILL.md").exists()
+            }
+            self.assertEqual(mirrored_skills, source_skills)
+
+            self.assertTrue((project_root / ".claude" / "skills.yaml").exists())
+            self.assertTrue((project_root / ".claude" / "skills-index.md").exists())
+
+    def test_init_preserves_existing_claude_instructions(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            claude_path = project_root / "CLAUDE.md"
+            claude_path.write_text(
+                "# Project instructions\nKeep the existing auth workflow.\n",
+                encoding="utf-8",
+            )
+            (project_root / "README.md").write_text("# Demo\nClaude preservation.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertEqual(
+                claude_path.read_text(encoding="utf-8"),
+                "# Project instructions\nKeep the existing auth workflow.\n",
+            )
+
+    def test_reinit_prunes_stale_claude_agent_mirror_files(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nClaude agent prune.\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            stale_claude = project_root / ".claude" / "agents" / "stale-agent.md"
+            stale_claude.write_text("# stale\n", encoding="utf-8")
+
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertFalse(stale_claude.exists())
 
     def test_init_migrates_legacy_root_archive_when_managed_archive_is_missing(self):
         with TemporaryDirectory() as tmp:
@@ -187,16 +250,20 @@ class InitRegressionTests(unittest.TestCase):
                 "# Project instructions\nKeep the existing deployment workflow.\n",
             )
             self.assertTrue((project_root / "AGENTS.md").exists())
+            self.assertTrue((project_root / "CLAUDE.md").exists())
             self.assertTrue((project_root / "GEMINI.md").exists())
             self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
             agents_guide = (project_root / "AGENTS.md").read_text(encoding="utf-8")
             gemini_instructions = (project_root / "GEMINI.md").read_text(encoding="utf-8")
+            claude_instructions = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
             self.assertIn("## Normal Chat Intake", agents_guide)
             self.assertIn("plain CLI or IDE chat message can still be a task intake event", agents_guide)
             self.assertIn('arms task log --task "<normalized ask>"', agents_guide)
             self.assertIn("pasted issue body, screenshot, or image attachment", agents_guide)
             self.assertIn("### ARMS Orchestration & Intake", gemini_instructions)
             self.assertIn("arms task log", gemini_instructions)
+            self.assertIn("### ARMS Orchestration & Intake", claude_instructions)
+            self.assertIn("arms task log", claude_instructions)
 
     def test_init_removes_obsolete_managed_gemini_bridge(self):
         with TemporaryDirectory() as tmp:

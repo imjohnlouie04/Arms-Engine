@@ -73,8 +73,8 @@ ARMS operates on a **hub-and-spoke** model:
 -   **Registry:** Agents and their skill bindings are defined in `arms_engine/agents.yaml`.
 -   **Syncing:** Engine-owned files (agents, skills, workflow) are mirrored into projects during `arms init`. DO NOT edit mirrored files directly in a project; update the source in `arms_engine/`.
 -   **Mirroring Locations:**
-    -   Agents: `.gemini/agents/`, `.github/agents/`
-    -   Skills: `.agents/skills/`, `.github/skills/`
+    -   Agents: `.gemini/agents/`, `.github/agents/`, `.claude/agents/`
+    -   Skills: `.agents/skills/`, `.github/skills/`, `.claude/commands/` (flat `.md` files for Claude Code slash commands)
 
 ### Workflow Protocols
 Agents must strictly follow the protocols defined in `arms_engine/workflow/`:

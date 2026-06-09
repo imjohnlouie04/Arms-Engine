@@ -33,7 +33,7 @@ After changing `arms init` behavior, run the regression suite first, then manual
 
 ```
 arms_engine/          ← Global engine (never write project state here)
-  agents/             ← Agent .md instruction sets (synced to .github/agents/)
+  agents/             ← Agent .md instruction sets (synced to .github/agents/, .claude/agents/)
   agents.yaml         ← Canonical agent registry (roles, skills, rules)
   skills/             ← Skill directories (each must contain SKILL.md)
   workflow/           ← Protocol .md files (REVIEW, FIX_ISSUE, DEPLOY)
@@ -48,6 +48,8 @@ arms_engine/          ← Global engine (never write project state here)
   SESSION_ARCHIVE.md  ← Completed task history — never delete
 
 .agents/skills/       ← Skill mirror for Copilot CLI discovery
+.claude/agents/       ← Agent mirror for Claude Code sub-agents
+.claude/commands/     ← Skill mirror for Claude Code slash commands (flat .md files)
 .gemini/agents/       ← Agent mirror for Gemini CLI discovery
 .github/agents/       ← Agent mirror for Copilot /agent command
 .github/skills/       ← Skill mirror for GitHub Copilot
@@ -118,7 +120,7 @@ Adding a new file under these paths requires no `pyproject.toml` change. Adding 
 ### Naming Conventions
 - **Agent names**: kebab-case with `arms-` prefix (`arms-backend-agent`)
 - **Skill directories**: kebab-case (`backend-system-architect`, `arms-orchestrator`)
-- **Workspace dirs**: `.arms/` (state), `.agents/` (Copilot skills), `.gemini/` (Gemini), `.github/agents/` (Copilot agents)
+- **Workspace dirs**: `.arms/` (state), `.agents/` (Copilot skills), `.claude/` (Claude Code), `.gemini/` (Gemini), `.github/agents/` (Copilot agents)
 
 ### Test Patterns
 All tests use `unittest.TestCase` with `TemporaryDirectory` for isolation and `mock.patch.object(sys, "argv", [...])` + `redirect_stdout` to invoke the CLI without subprocess overhead:
@@ -187,9 +189,9 @@ arms init --monitor       # Live HTML debug HUD during init
 - `.arms/MEMORY.md` — append-only lessons
 - `.arms/BRAND.md` — visual identity
 - `.arms/RULES.md` — project conventions
-- Project-owned: `GEMINI.md`, `.github/copilot-instructions.md` — read only, never modify
+- Project-owned: `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md` — read only, never modify
 
 ### Agent/Skill Discovery (Post-Init)
-- Agents: `.github/agents/` (Copilot), `.gemini/agents/` (Gemini)
-- Skills: `.agents/skills/` + `.agents/skills.yaml` + `.agents/skills-index.md`
+- Agents: `.github/agents/` (Copilot), `.gemini/agents/` (Gemini), `.claude/agents/` (Claude Code)
+- Skills: `.agents/skills/` + `.agents/skills.yaml` + `.agents/skills-index.md`; `.claude/commands/` + `.claude/skills.yaml` (Claude Code slash commands)
 - `arms-docs` auto-updates README.md agent roster from `arms_engine/agents.yaml`
