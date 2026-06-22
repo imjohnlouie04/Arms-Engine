@@ -11,6 +11,8 @@ except ImportError as import_error:
 else:
     YAML_IMPORT_ERROR = None
 
+from .model_routing import load_model_routing, normalize_model_tier, resolve_agent_model
+
 
 REFERENCE_ONLY_SKILL_DIRS = {
     "ui-ux-pro-max": ("data",),
@@ -21,6 +23,8 @@ PROJECT_INSTRUCTION_SHARED_SECTION = """### ARMS Orchestration & Intake
 - **Durable Tasks:** Every net-new issue, bug report, or feature request arriving through chat must be logged to `.arms/SESSION.md` using `arms task log` or `arms task update` before substantive execution begins. Use the standard task-table schema for all handoffs.
 - **Routing Syntax:** When routing must be explicit, use `--assigned-agent` / `--active-skill` on task commands. `--agent` / `--skill` are accepted aliases.
 - **Agent Handoff:** Updating `.arms/SESSION.md` does not itself switch Copilot into the specialist. After the row is assigned, invoke `/agent <assigned-agent>` for the implementation turn.
+- **Brand Intake Display:** If `arms init` / `arms start` halts with `Awaiting Brand Context answers`, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely tell the user to open the file unless they asked for a path-only summary.
+- **Brand Intake Questionnaire:** When intake is required for a new / empty project, actively ASK the questions as a numbered conversational form (one line per field from `.arms/BRAND_INTAKE.md`) and WAIT for the user's answers before doing any other work. Never silently generate `.arms/BRAND.md` / `.arms/BRAND_INTAKE.md` and move on — the user must see and be able to answer the questions in chat. Treat their next reply as the continuation of this same intake.
 - **Verification:** No task is "Done" until validated by `arms-qa-agent` and pre-flight checks (lint, build, unit tests) pass.
 """
 
@@ -144,11 +148,7 @@ def remove_obsolete_instruction_bridges(project_root):
 
     with open(legacy_gemini_path, "r", encoding="utf-8") as handle:
         existing_content = handle.read().strip()
-    if (
-        "Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol."
-        not in existing_content
-        or PROJECT_INSTRUCTION_SHARED_SECTION.strip() not in existing_content
-    ):
+    if "Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol." not in existing_content:
         return []
 
     os.remove(legacy_gemini_path)
@@ -169,6 +169,31 @@ def ensure_agent_tools_frontmatter(content):
     if len(parts) >= 3:
         return "---\ntools: [\"*\"]" + parts[1] + "---" + parts[2]
     return content
+
+
+def ensure_agent_model_frontmatter(content, model_value):
+    """Set the `model:` frontmatter key to *model_value*, adding it if absent."""
+    if not model_value:
+        return content
+
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return content
+
+    frontmatter_lines = parts[1].splitlines()
+    new_lines = []
+    replaced = False
+    for line in frontmatter_lines:
+        if line.startswith("model:"):
+            new_lines.append(f"model: {model_value}")
+            replaced = True
+        else:
+            new_lines.append(line)
+    if not replaced:
+        new_lines.append(f"model: {model_value}")
+
+    new_frontmatter = "\n".join(new_lines) + "\n"
+    return "---" + new_frontmatter + "---" + parts[2]
 
 
 def split_agent_rules_text(rules_text):
@@ -194,17 +219,23 @@ def inject_agent_runtime_rules(content, rules_text):
     return content.rstrip() + "\n\n## Runtime Rules\n" + rendered_rules + "\n"
 
 
-def build_agent_sync_content(content, agent_info):
+def build_agent_sync_content(content, agent_info, platform=None, routing=None):
     content = ensure_agent_tools_frontmatter(content)
-    return inject_agent_runtime_rules(content, agent_info.get("rules", ""))
+    content = inject_agent_runtime_rules(content, agent_info.get("rules", ""))
+    if platform:
+        model_value = resolve_agent_model(agent_info, platform, routing or {})
+        if isinstance(model_value, str):
+            content = ensure_agent_model_frontmatter(content, model_value)
+    return content
 
 
-def sync_agent_markdowns(arms_root, target_dir):
+def sync_agent_markdowns(arms_root, target_dir, platform=None):
     agents_dir = os.path.join(arms_root, "agents")
     registry = {
         agent["name"]: agent
         for agent in load_agents_registry(arms_root)
     }
+    routing = load_model_routing(arms_root) if platform else {}
 
     if not os.path.exists(agents_dir):
         return
@@ -228,7 +259,9 @@ def sync_agent_markdowns(arms_root, target_dir):
         with open(src, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
-        normalized_content = build_agent_sync_content(content, registry.get(agent_name, {}))
+        normalized_content = build_agent_sync_content(
+            content, registry.get(agent_name, {}), platform=platform, routing=routing
+        )
 
         with open(dest, "w", encoding="utf-8") as f:
             f.write(normalized_content)
@@ -237,7 +270,7 @@ def sync_agent_markdowns(arms_root, target_dir):
 def sync_agents(arms_root, project_root):
     print("🤖 Syncing Agents...")
     target_dir = os.path.join(project_root, ".gemini/agents")
-    sync_agent_markdowns(arms_root, target_dir)
+    sync_agent_markdowns(arms_root, target_dir, platform="gemini")
 
     yaml_src = os.path.join(arms_root, "agents.yaml")
     yaml_dest = os.path.join(project_root, ".gemini/agents.yaml")
@@ -257,7 +290,93 @@ def sync_agents_claude(arms_root, project_root):
     print("🤖 Syncing Agents for Claude Code...")
     target_dir = os.path.join(project_root, ".claude", "agents")
     os.makedirs(target_dir, exist_ok=True)
-    sync_agent_markdowns(arms_root, target_dir)
+    sync_agent_markdowns(arms_root, target_dir, platform="claude")
+
+
+def parse_agent_frontmatter_and_body(content):
+    """Split an ARMS agent markdown file into its frontmatter dict and body text."""
+    stripped = content.lstrip("\n")
+    if not stripped.startswith("---"):
+        return {}, content.strip()
+
+    parts = stripped.split("---", 2)
+    if len(parts) < 3:
+        return {}, content.strip()
+
+    frontmatter = {}
+    if parts[1].strip():
+        yaml_module = require_yaml_dependency()
+        parsed = yaml_module.safe_load(parts[1]) or {}
+        if isinstance(parsed, dict):
+            frontmatter = parsed
+
+    return frontmatter, parts[2].strip("\n")
+
+
+def _escape_toml_basic_string(value):
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def render_codex_agent_toml(name, description, instructions, model_config=None):
+    lines = [
+        'name = "{}"'.format(_escape_toml_basic_string(name)),
+        'description = "{}"'.format(_escape_toml_basic_string(description)),
+    ]
+    if isinstance(model_config, dict):
+        model = model_config.get("model")
+        effort = model_config.get("model_reasoning_effort")
+        if model:
+            lines.append('model = "{}"'.format(_escape_toml_basic_string(str(model))))
+        if effort:
+            lines.append('model_reasoning_effort = "{}"'.format(_escape_toml_basic_string(str(effort))))
+
+    # TOML literal multi-line strings ('''...''') take instructions verbatim
+    # (no escape processing); they just cannot contain the ''' delimiter itself.
+    safe_instructions = instructions.replace("'''", "'' '")
+    lines.append("developer_instructions = '''")
+    lines.append(safe_instructions)
+    lines.append("'''")
+    return "\n".join(lines) + "\n"
+
+
+def sync_agents_codex(arms_root, project_root):
+    print("🤖 Syncing Agents for Codex CLI...")
+    agents_dir = os.path.join(arms_root, "agents")
+    target_dir = os.path.join(project_root, ".codex", "agents")
+
+    if not os.path.exists(agents_dir):
+        return
+
+    os.makedirs(target_dir, exist_ok=True)
+    registry = {
+        agent["name"]: agent
+        for agent in load_agents_registry(arms_root)
+    }
+    routing = load_model_routing(arms_root)
+
+    source_agent_names = {
+        os.path.splitext(filename)[0]
+        for filename in os.listdir(agents_dir)
+        if filename.endswith(".md")
+    }
+    for entry in os.listdir(target_dir):
+        if entry.endswith(".toml") and entry[:-len(".toml")] not in source_agent_names:
+            os.remove(os.path.join(target_dir, entry))
+
+    for agent_name in source_agent_names:
+        src = os.path.join(agents_dir, f"{agent_name}.md")
+        with open(src, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+
+        frontmatter, body = parse_agent_frontmatter_and_body(content)
+        agent_info = registry.get(agent_name, {})
+        description = str(frontmatter.get("description") or agent_info.get("scope") or agent_name).strip()
+        model_config = resolve_agent_model(agent_info, "codex", routing)
+
+        toml_content = render_codex_agent_toml(agent_name, description, body, model_config)
+        dest = os.path.join(target_dir, f"{agent_name}.toml")
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(toml_content)
 
 
 def sync_skills_claude(arms_root, project_root):
@@ -639,6 +758,7 @@ def load_agents_registry(arms_root):
                 "role": str(info.get("role", "")).strip(),
                 "scope": str(info.get("scope", "")).strip(),
                 "skills": [str(skill).strip() for skill in raw_skills if str(skill).strip()],
+                "model_tier": normalize_model_tier(info.get("model_tier")),
                 "rules": str(info.get("rules", "")).strip(),
             }
         )
@@ -654,6 +774,13 @@ def resolve_agents_with_skills(arms_root, announce=False):
 def build_agent_skill_bindings(agents):
     return {
         agent["name"]: list(agent.get("skills", []))
+        for agent in agents
+    }
+
+
+def build_agent_model_tiers(agents):
+    return {
+        agent["name"]: agent.get("model_tier", "—")
         for agent in agents
     }
 

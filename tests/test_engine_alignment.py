@@ -7,8 +7,15 @@ from arms_engine.metadata import (
     TASK_TABLE_COLUMNS,
     latest_report_filename,
 )
+from arms_engine.model_routing import load_model_routing
 from arms_engine.session import read_text_file
-from arms_engine.skills import build_agent_sync_content, load_agents_registry
+from arms_engine.skills import (
+    build_agent_sync_content,
+    load_agents_registry,
+    parse_agent_frontmatter_and_body,
+    render_codex_agent_toml,
+    resolve_agent_model,
+)
 from arms_engine.update_docs import get_agent_docs
 
 
@@ -71,35 +78,42 @@ class EngineAlignmentTests(unittest.TestCase):
             agent["name"]: agent
             for agent in load_agents_registry(str(ARMS_ROOT))
         }
+        routing = load_model_routing(str(ARMS_ROOT))
         self.assertEqual(
             read_text_file(str(ARMS_ROOT / "agents.yaml")),
             read_text_file(str(REPO_ROOT / ".gemini" / "agents.yaml")),
         )
-        expected_agent = build_agent_sync_content(
-            read_text_file(str(ARMS_ROOT / "agents" / "arms-main-agent.md")),
-            registry.get("arms-main-agent", {}),
-        )
-        self.assertEqual(
-            expected_agent,
-            read_text_file(str(REPO_ROOT / ".github" / "agents" / "arms-main-agent.md")),
-        )
-        self.assertEqual(
-            expected_agent,
-            read_text_file(str(REPO_ROOT / ".gemini" / "agents" / "arms-main-agent.md")),
-        )
 
-        expected_frontend_agent = build_agent_sync_content(
-            read_text_file(str(ARMS_ROOT / "agents" / "arms-frontend-agent.md")),
-            registry.get("arms-frontend-agent", {}),
-        )
-        self.assertEqual(
-            expected_frontend_agent,
-            read_text_file(str(REPO_ROOT / ".github" / "agents" / "arms-frontend-agent.md")),
-        )
-        self.assertEqual(
-            expected_frontend_agent,
-            read_text_file(str(REPO_ROOT / ".gemini" / "agents" / "arms-frontend-agent.md")),
-        )
+        for agent_name in ("arms-main-agent", "arms-frontend-agent"):
+            source_content = read_text_file(str(ARMS_ROOT / "agents" / "{}.md".format(agent_name)))
+            agent_info = registry.get(agent_name, {})
+
+            expected_copilot = build_agent_sync_content(source_content, agent_info)
+            self.assertEqual(
+                expected_copilot,
+                read_text_file(str(REPO_ROOT / ".github" / "agents" / "{}.md".format(agent_name))),
+            )
+
+            expected_gemini = build_agent_sync_content(source_content, agent_info, platform="gemini", routing=routing)
+            self.assertEqual(
+                expected_gemini,
+                read_text_file(str(REPO_ROOT / ".gemini" / "agents" / "{}.md".format(agent_name))),
+            )
+
+            expected_claude = build_agent_sync_content(source_content, agent_info, platform="claude", routing=routing)
+            self.assertEqual(
+                expected_claude,
+                read_text_file(str(REPO_ROOT / ".claude" / "agents" / "{}.md".format(agent_name))),
+            )
+
+            frontmatter, body = parse_agent_frontmatter_and_body(source_content)
+            description = str(frontmatter.get("description") or agent_info.get("scope") or agent_name).strip()
+            model_config = resolve_agent_model(agent_info, "codex", routing)
+            expected_codex = render_codex_agent_toml(agent_name, description, body, model_config)
+            self.assertEqual(
+                expected_codex,
+                read_text_file(str(REPO_ROOT / ".codex" / "agents" / "{}.toml".format(agent_name))),
+            )
 
     def test_project_owned_instruction_intake_sections_match(self):
         heading = "### ARMS Orchestration & Intake"

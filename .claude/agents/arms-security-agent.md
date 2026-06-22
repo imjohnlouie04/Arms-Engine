@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-security-agent
 description: Expert in cybersecurity, authentication protocols, and database security (RLS).
+model: opus
 ---
 
 # ARMS Security Agent

@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-devops-agent
 description: Expert in CI/CD, deployment, and project boilerplate initialization.
+model: sonnet
 ---
 
 # ARMS DevOps Agent

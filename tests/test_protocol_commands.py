@@ -256,7 +256,7 @@ class ProtocolCommandTests(unittest.TestCase):
 
             session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
             self.assertIn(
-                "| 2 | Review: audit responsive UI, breakpoints, and UX rules | arms-frontend-agent | frontend-design | — | In Progress |",
+                "| 2 | Review: audit responsive UI, breakpoints, and UX rules | arms-frontend-agent | frontend-design | standard | — | In Progress |",
                 session,
             )
 

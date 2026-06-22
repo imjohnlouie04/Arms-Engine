@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-seo-agent
 description: Expert in SEO, meta tags, semantic HTML, and Core Web Vitals.
+model: haiku
 ---
 
 # ARMS SEO Agent

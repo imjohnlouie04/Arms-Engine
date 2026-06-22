@@ -237,7 +237,7 @@ for msg_type, raw in parse_itch_stream("MarketITCHTV.dat"):
 
 ### JSON Conversion (for analysis / reference)
 The `.dat` file can be decoded to JSON for easier inspection. The schema used in
-`MarketITCHTV.json` collapses the full ITCH message set into two simplified event kinds:
+`simulation_data.json` collapses the full ITCH message set into two simplified event kinds:
 
 **`kind: "state"`** — market phase transitions (from `[S]` System Event messages)
 ```json
@@ -258,7 +258,7 @@ The `.dat` file can be decoded to JSON for easier inspection. The schema used in
 ```python
 import json, datetime
 
-with open("MarketITCHTV.json") as f:
+with open("simulation_data.json") as f:
     data = json.load(f)
 
 sym_info = {d["symbol"]: d for d in data["directories"]}

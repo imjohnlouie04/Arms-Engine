@@ -97,7 +97,7 @@ def parse_task_rows(content):
         if not (line.startswith("|") and line.endswith("|")):
             continue
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
+        if len(cells) not in (6, 7):
             continue
         first_cell = cells[0].replace(" ", "")
         if cells[0] == "#" or set(first_cell) <= {"-"}:
@@ -105,7 +105,7 @@ def parse_task_rows(content):
         rows.append(
             {
                 "task": cells[1],
-                "status": cells[5],
+                "status": cells[-1],
             }
         )
     return rows

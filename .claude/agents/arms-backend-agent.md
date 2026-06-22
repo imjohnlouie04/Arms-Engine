@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-backend-agent
 description: Expert in APIs, database models, Supabase Auth, and server-side business logic.
+model: opus
 ---
 
 # ARMS Backend Agent

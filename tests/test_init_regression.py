@@ -69,6 +69,182 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("Strict Init Rule", engine_instructions)
             self.assertEqual(migrated_rules, "# old rules\n")
 
+    def test_init_in_empty_project_starts_new_project_assessment(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+
+            output = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            intake_content = (project_root / ".arms" / "BRAND_INTAKE.md").read_text(encoding="utf-8")
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+
+            self.assertIn("Brand Context is required for a new / empty project", output)
+            self.assertIn("Awaiting Brand Context answers", output)
+            self.assertIn("Compact Brand Context block saved at .arms/BRAND_INTAKE.md", output)
+            self.assertIn("AI agents: read .arms/BRAND_INTAKE.md and show the compact answer block inline.", output)
+            self.assertIn("> New project detected.", brand_content)
+            self.assertIn("Reply with this block:", intake_content)
+            self.assertIn("Project Name:", intake_content)
+            self.assertIn("- Project Root: {}".format(os.path.realpath(project_root)), session_content)
+            self.assertIn("## Blockers\nAwaiting Brand Context answers", session_content)
+            self.assertIn("- Action: Read `.arms/BRAND_INTAKE.md`, answer the compact Brand Context block, then rerun `arms init`.", session_content)
+
+            status_output = self.invoke_cli(project_root, "run", "status", "--root", str(ARMS_ROOT))
+
+            self.assertIn("**Current Phase:** Intake", status_output)
+            self.assertIn("## Brand Intake Required", status_output)
+            self.assertIn("Reply with this block:", status_output)
+            self.assertIn("Project Name:", status_output)
+            self.assertIn("Brand intake is required before startup tasks can be generated", status_output)
+
+    def test_intake_command_prints_compact_questionnaire_without_init_noise(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+
+            output = self.invoke_cli(project_root, "intake", "--root", str(ARMS_ROOT))
+
+            self.assertIn("Brand Context is required for a new / empty project", output)
+            self.assertIn("Reply with this block:", output)
+            self.assertIn("Project Name:", output)
+            self.assertNotIn("Initializing ARMS Engine", output)
+            self.assertTrue((project_root / ".arms" / "BRAND.md").exists())
+            self.assertTrue((project_root / ".arms" / "BRAND_INTAKE.md").exists())
+
+    def test_intake_command_applies_answers_and_marks_brand_complete(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            answers = (
+                "Project Name: Intake Demo\n"
+                "Primary Use Case: SaaS\n"
+                "Target Audience: operations teams\n"
+                "Core Features: approvals, routing, analytics\n"
+                "Goal / Monetization Model: subscription\n"
+                "Brand Personality: technical, trustworthy\n"
+                "Visual Direction: Dark\n"
+                "Preferred Tech Stack: A\n"
+                "Deployment Target: 1\n"
+                "Authentication Requirement: OAuth\n"
+                "Website Brief: N/A\n"
+                "Technical Constraints: TypeScript only\n"
+            )
+
+            output = self.invoke_cli(project_root, "intake", "--root", str(ARMS_ROOT), "--answers-text", answers)
+
+            brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            self.assertIn("Brand intake is complete", output)
+            self.assertIn("run `arms init`", output)
+            self.assertIn("- **Project Name:** Intake Demo", brand_content)
+            self.assertFalse((project_root / ".arms" / "BRAND_INTAKE.md").exists())
+
+    def test_interactive_intake_available_gating(self):
+        # No TTY in the test harness → always unavailable regardless of flags.
+        with mock.patch.object(sys.stdin, "isatty", return_value=True), mock.patch.object(
+            sys.stdout, "isatty", return_value=True
+        ):
+            self.assertTrue(
+                cli_module.interactive_intake_available(False, "", "", False)
+            )
+            # Each suppressing condition individually disables prompting.
+            self.assertFalse(cli_module.interactive_intake_available(True, "", "", False))  # yolo
+            self.assertFalse(cli_module.interactive_intake_available(False, "saas", "", False))  # preset
+            self.assertFalse(cli_module.interactive_intake_available(False, "", "x: y", False))  # answers
+            self.assertFalse(cli_module.interactive_intake_available(False, "", "", True))  # --no-interactive
+            self.assertFalse(
+                cli_module.interactive_intake_available(False, "", "", False, watch=True)
+            )
+            self.assertFalse(
+                cli_module.interactive_intake_available(False, "", "", False, monitor=object())
+            )
+        with mock.patch.object(sys.stdin, "isatty", return_value=False):
+            self.assertFalse(cli_module.interactive_intake_available(False, "", "", False))
+
+    def test_init_runs_interactive_intake_and_completes_brand(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / ".git").mkdir()
+
+            answers_text = (
+                "Project Name: Interactive Demo\n"
+                "Primary Use Case: SaaS\n"
+                "Target Audience: ops teams\n"
+                "Core Features: approvals, routing\n"
+                "Goal / Monetization Model: subscription\n"
+                "Brand Personality: sharp, calm\n"
+                "Visual Direction: Dark\n"
+                "Preferred Tech Stack: A\n"
+                "Deployment Target: 1\n"
+                "Authentication Requirement: OAuth\n"
+                "Website Brief: N/A\n"
+                "Technical Constraints: TypeScript only\n"
+            )
+            fake_intake = mock.Mock(return_value={"answered": True, "answers_text": answers_text})
+
+            stdout = io.StringIO()
+            with working_directory(project_root), mock.patch.object(
+                cli_module, "run_interactive_brand_intake", fake_intake
+            ), redirect_stdout(stdout):
+                result = cli_module.run_init_once(
+                    str(project_root),
+                    str(ARMS_ROOT),
+                    "init",
+                    False,
+                    allow_interactive=True,
+                )
+
+            fake_intake.assert_called_once()
+            self.assertEqual(result["status"], "complete")
+            brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            self.assertIn("- **Project Name:** Interactive Demo", brand_content)
+            self.assertFalse((project_root / ".arms" / "BRAND_INTAKE.md").exists())
+
+    def test_intake_command_runs_interactive_form_when_available(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            answers_text = (
+                "Project Name: Form Demo\n"
+                "Primary Use Case: SaaS\n"
+                "Target Audience: ops teams\n"
+                "Core Features: approvals\n"
+                "Goal / Monetization Model: subscription\n"
+                "Brand Personality: sharp\n"
+                "Visual Direction: Dark\n"
+                "Preferred Tech Stack: A\n"
+                "Deployment Target: 1\n"
+                "Authentication Requirement: OAuth\n"
+                "Website Brief: N/A\n"
+                "Technical Constraints: None\n"
+            )
+            fake_intake = mock.Mock(return_value={"answered": True, "answers_text": answers_text})
+
+            stdout = io.StringIO()
+            with working_directory(project_root), mock.patch.object(
+                cli_module, "run_interactive_brand_intake", fake_intake
+            ), redirect_stdout(stdout):
+                cli_module.handle_intake_command(str(project_root), allow_interactive=True)
+
+            output = stdout.getvalue()
+            fake_intake.assert_called_once()
+            self.assertIn("Brand intake is complete", output)
+            brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            self.assertIn("- **Project Name:** Form Demo", brand_content)
+
+    def test_init_in_empty_child_of_git_workspace_does_not_target_parent(self):
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "workspace"
+            empty_project = workspace_root / "new-app"
+            (workspace_root / ".git").mkdir(parents=True)
+            empty_project.mkdir()
+
+            output = self.invoke_cli(empty_project, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            self.assertTrue((empty_project / ".arms" / "BRAND.md").exists())
+            self.assertTrue((empty_project / ".arms" / "SESSION.md").exists())
+            self.assertFalse((workspace_root / ".arms").exists())
+            self.assertIn("Brand Context is required for a new / empty project", output)
+            session_content = (empty_project / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+            self.assertIn("- Project Root: {}".format(os.path.realpath(empty_project)), session_content)
+
     def test_sync_engine_instructions_preserves_root_gemini(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
@@ -102,10 +278,13 @@ class InitRegressionTests(unittest.TestCase):
             self.assertFalse((project_root / ".gemini" / "GEMINI.md").exists())
             self.assertIn("### ARMS Orchestration & Intake", gemini_instructions)
             self.assertIn("arms task log", gemini_instructions)
+            self.assertIn("read `.arms/BRAND_INTAKE.md` and display the compact answer block inline", gemini_instructions)
             self.assertIn("### ARMS Orchestration & Intake", copilot_instructions)
             self.assertIn("arms task log", copilot_instructions)
+            self.assertIn("read `.arms/BRAND_INTAKE.md` and display the compact answer block inline", copilot_instructions)
             self.assertIn("### ARMS Orchestration & Intake", claude_instructions)
             self.assertIn("arms task log", claude_instructions)
+            self.assertIn("read `.arms/BRAND_INTAKE.md` and display the compact answer block inline", claude_instructions)
 
     def test_init_syncs_agents_and_skills_to_claude_directories(self):
         with TemporaryDirectory() as tmp:
@@ -1083,7 +1262,7 @@ None
 
             updated_session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
             self.assertIn(f"- Engine Version: {init_arms.__version__}", updated_session)
-            self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | None | Pending |", updated_session)
+            self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | power | None | Pending |", updated_session)
 
     def test_wait_for_brand_change_returns_after_file_update(self):
         with TemporaryDirectory() as tmp:
@@ -1261,6 +1440,16 @@ None
 """
         self.assertFalse(init_arms.brand_file_requires_bootstrap(complete_brand))
 
+    def test_new_project_brand_prompt_stays_visible_in_chat_output(self):
+        prompt = init_arms.render_new_project_brand_prompt()
+
+        self.assertLessEqual(len(prompt.splitlines()), 32)
+        self.assertIn("Reply with this block:", prompt)
+        self.assertIn("Project Name:", prompt)
+        self.assertIn("Preferred Tech Stack: A Next.js+Supabase", prompt)
+        self.assertIn("Full 24-question intake is stored in `.arms/BRAND.md`.", prompt)
+        self.assertNotIn("16. If this project needs a website or landing page", prompt)
+
     def test_apply_answers_to_brand_content_round_trip_updates_direct_derived_and_note_fields(self):
         with TemporaryDirectory() as tmp:
             content = init_arms.render_new_project_brand_questionnaire(tmp)
@@ -1345,7 +1534,7 @@ None
             self.assertTrue(updated)
             atomic_write.assert_called_once()
             session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
-            self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | None | Pending |", session_content)
+            self.assertIn("| 1 | Existing task | arms-main-agent | arms-orchestrator | power | None | Pending |", session_content)
             self.assertNotIn("Seeded task", session_content)
             self.assertIn(f"- Engine Version: {init_arms.__version__}", session_content)
 
@@ -2028,6 +2217,7 @@ None
             session = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
 
             self.assertEqual(result["status"], "complete")
+            self.assertFalse((project_root / ".arms" / "BRAND_INTAKE.md").exists())
             self.assertIn("**UI System:** shadcn/ui", synthesis)
             self.assertIn("**Recommended Stack:** Next.js + Supabase + shadcn/ui", synthesis)
             self.assertIn("Read `.arms/CONTEXT_SYNTHESIS.md` first", prompts)

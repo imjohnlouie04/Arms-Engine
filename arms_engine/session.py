@@ -10,7 +10,7 @@ from collections import OrderedDict
 
 from . import __version__
 from .bm25 import score_tokens as _bm25_score_tokens
-from .brand import infer_brand_context_from_project
+from .brand import brand_file_requires_bootstrap, infer_brand_context_from_project
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
 from .metadata import (
     REPORT_HISTORY_FILENAME,
@@ -21,7 +21,7 @@ from .metadata import (
     render_empty_task_table,
 )
 from .paths import WorkspacePaths
-from .skills import build_agent_skill_bindings, resolve_agents_with_skills
+from .skills import build_agent_model_tiers, build_agent_skill_bindings, resolve_agents_with_skills
 from .versioning import resolve_version
 
 TOKEN_RE = re.compile(r"\S+")
@@ -297,6 +297,17 @@ def is_missing_active_skill(value):
     return normalized in {"", "-", "—", "none", "n/a", "na"}
 
 
+def is_missing_model_value(value):
+    normalized = (value or "").strip().lower()
+    return normalized in {"", "-", "—", "none", "n/a", "na"}
+
+
+def choose_task_model(current_model, assigned_agent, agent_model_tiers):
+    if not is_missing_model_value(current_model):
+        return current_model.strip()
+    return (agent_model_tiers or {}).get(assigned_agent, "—")
+
+
 def score_task_skill_match(task_text, skill):
     return _bm25_score_tokens(task_text, skill["name"], skill.get("description", ""))
 
@@ -325,7 +336,7 @@ def choose_task_active_skill(task_text, assigned_agent, current_skill, agent_ski
     return best_skill
 
 
-def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catalog_by_name=None):
+def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catalog_by_name=None, agent_model_tiers=None):
     new_header = TASK_TABLE_HEADER
     new_divider = TASK_TABLE_DIVIDER
     legacy_header = "| # | Task | Assigned Agent | Active Skill | Status |"
@@ -351,15 +362,24 @@ def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catal
         if not (row.startswith("|") and row.endswith("|")):
             return line
         cells = [cell.strip() for cell in row.strip("|").split("|")]
+        is_divider = bool(cells) and all(
+            cell.replace(" ", "") and set(cell.replace(" ", "")) <= {"-", ":"}
+            for cell in cells
+        )
         if len(cells) == 5:
-            cells.insert(4, "None")
-        if len(cells) != 6:
+            cells.insert(4, "---" if is_divider else "None")
+        if len(cells) == 6:
+            cells.insert(4, "---" if is_divider else "—")
+        if len(cells) != 7:
             return line
         if cells[0] == "#" and cells[1] == "Task":
             return new_header
+        if is_divider:
+            return "| " + " | ".join(cells) + " |"
         task_text = cells[1]
         assigned_agent = cells[2]
         current_skill = cells[3]
+        current_model = cells[4]
         cells[3] = choose_task_active_skill(
             task_text,
             assigned_agent,
@@ -367,6 +387,7 @@ def normalize_active_tasks_table(content, agent_skill_bindings=None, skill_catal
             agent_skill_bindings or {},
             skill_catalog_by_name or {},
         )
+        cells[4] = choose_task_model(current_model, assigned_agent, agent_model_tiers)
         return "| " + " | ".join(cells) + " |"
 
     if len(lines) >= 2 and lines[0].strip() == legacy_header and lines[1].strip() == legacy_divider:
@@ -394,7 +415,7 @@ def active_tasks_table_has_rows(content):
         if not (line.startswith("|") and line.endswith("|")):
             continue
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
+        if len(cells) not in (6, 7):
             continue
         first_cell = cells[0].replace(" ", "")
         if cells[0] == "#" or set(first_cell) <= {"-"}:
@@ -534,6 +555,14 @@ def format_relative_project_path(project_root, absolute_path):
 
 
 def build_next_recommended_step(project_root, active_rows, blockers_text="None"):
+    if brand_intake_is_pending(project_root):
+        return {
+            "label": "Action",
+            "value": "Read `.arms/BRAND_INTAKE.md`, answer the compact Brand Context block, then rerun `arms init`.",
+            "reason": "This new or incomplete project cannot generate synthesis, prompts, or startup tasks until brand and technical intake are complete.",
+            "source": "`.arms/BRAND_INTAKE.md`",
+        }
+
     report_snapshots = latest_report_snapshots(project_root)
     latest_report = report_snapshots[0] if report_snapshots else None
     normalized_blockers = (blockers_text or "None").strip() or "None"
@@ -613,6 +642,29 @@ def build_next_recommended_step(project_root, active_rows, blockers_text="None")
     }
 
 
+def brand_intake_is_pending(project_root):
+    brand_path = WorkspacePaths(project_root).brand
+    if not os.path.exists(brand_path):
+        return False
+    brand_content = read_text_file(brand_path)
+    return bool(brand_content.strip() and brand_file_requires_bootstrap(brand_content))
+
+
+def brand_intake_blocker_text():
+    return (
+        "Awaiting Brand Context answers in `.arms/BRAND.md`. "
+        "AI agents should read `.arms/BRAND_INTAKE.md` and display the compact intake block inline; "
+        "after answers are provided, rerun `arms init` to generate synthesis, prompts, and startup tasks."
+    )
+
+
+def replace_blockers_section(tasks_content, blockers_content):
+    replacement = f"## Blockers\n{blockers_content}"
+    if re.search(r"## Blockers\n[\s\S]*$", tasks_content):
+        return re.sub(r"## Blockers\n[\s\S]*$", replacement, tasks_content, count=1)
+    return tasks_content.rstrip() + "\n\n" + replacement
+
+
 def render_next_recommended_step(project_root, active_rows, blockers_text="None"):
     recommendation = build_next_recommended_step(project_root, active_rows, blockers_text=blockers_text)
     return "\n".join(
@@ -661,7 +713,9 @@ def parse_active_task_rows(content):
         if not (line.startswith("|") and line.endswith("|")):
             continue
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
+        if len(cells) == 6:
+            cells.insert(4, "—")
+        if len(cells) != 7:
             continue
         first_cell = cells[0].replace(" ", "")
         if cells[0] == "#" or set(first_cell) <= {"-"}:
@@ -671,8 +725,9 @@ def parse_active_task_rows(content):
                 "task": cells[1],
                 "agent": cells[2],
                 "skill": cells[3],
-                "dependencies": cells[4],
-                "status": cells[5],
+                "model": cells[4],
+                "dependencies": cells[5],
+                "status": cells[6],
             }
         )
     return rows
@@ -1594,6 +1649,7 @@ def update_session(
 
     resolved_agents, skill_catalog, _ = resolve_agents_with_skills(arms_root, announce=False)
     agent_skill_bindings = build_agent_skill_bindings(resolved_agents)
+    agent_model_tiers = build_agent_model_tiers(resolved_agents)
     skill_catalog_by_name = {
         skill["name"]: skill
         for skill in skill_catalog
@@ -1604,6 +1660,7 @@ def update_session(
             startup_tasks_content,
             agent_skill_bindings=agent_skill_bindings,
             skill_catalog_by_name=skill_catalog_by_name,
+            agent_model_tiers=agent_model_tiers,
         )
     seed_startup_tasks = should_seed_startup_tasks(
         project_root,
@@ -1632,6 +1689,7 @@ def update_session(
                             content,
                             agent_skill_bindings=agent_skill_bindings,
                             skill_catalog_by_name=skill_catalog_by_name,
+                            agent_model_tiers=agent_model_tiers,
                         )
                         if seed_startup_tasks and not active_tasks_table_has_rows(content):
                             content = normalized_startup_tasks_content
@@ -1676,6 +1734,10 @@ def update_session(
 
 ## Blockers
 None"""
+
+    if brand_intake_is_pending(project_root) and blockers_content.strip().lower() in {"", "none"}:
+        blockers_content = brand_intake_blocker_text()
+        tasks_content = replace_blockers_section(tasks_content, blockers_content)
 
     parsed_active_rows = parse_active_task_rows(active_tasks_content)
     hot_task_rows = filter_hot_task_rows(parsed_active_rows)

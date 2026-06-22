@@ -9,6 +9,10 @@
 
 **Strict Init Rule:** If the command is exactly `arms init`, `arms start`, `arms init yolo`, or `arms start yolo`, do **not** switch into generic planning, repo cleanup, linting, `git status`, or issue triage before the boot sequence. Resolve the ARMS engine path first, run the linker/bootstrap flow, migrate legacy state, and only then continue with normal orchestration.
 
+**Brand Intake Display Rule:** If `arms init` or `arms start` completes with `Awaiting Brand Context answers`, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless they explicitly requested a path-only summary.
+
+**Brand Intake Questionnaire Rule:** For a new / empty project, the boot sequence MUST surface the Brand Context questionnaire as an interactive, numbered question form and WAIT for the user's answers before generating synthesis, prompts, or tasks. Ask one prompt per field listed in `.arms/BRAND_INTAKE.md`; never silently scaffold `.arms/BRAND.md` / `.arms/BRAND_INTAKE.md` and proceed as if intake were done. When the user answers, apply via `arms init --answers-text "<block>"` (or `arms intake`) and continue. In a real terminal, `arms init` also prompts these questions directly on stdin unless `--no-interactive`, YOLO, `--watch`, `--monitor`, or `--preset`/`--answers-*` are used.
+
 **Init Monitor Rule:** If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. This opens a local activity HUD at `.arms/reports/init-monitor-latest.html` and records each init step without changing the default init workflow.
 
 **Doctor Command Rule:** If the command is `arms doctor`, inspect workspace health, context budgets, version diagnostics, ownership safety, and protocol readiness. Print actionable diagnostics, end with a compact final triage summary, and exit non-zero when blocking issues are present. If the command is `arms doctor --fix`, first resync engine-owned mirrored files only, report any obsolete managed artifacts removed during cleanup, then report any remaining failures; do not bootstrap a missing workspace and do not overwrite project-owned instruction files.
@@ -88,11 +92,12 @@ Scan:
 **Registration Rules:**
 1. **Validation:** Only directories containing a `SKILL.md` are registered as skills.
 2. **Priority:** Global engine skills ALWAYS take precedence.
-3. **Logging:** Sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/` and `.github/agents/` with runtime rules sourced from `agents.yaml`, and mirror every valid skill into `.agents/skills/` and `.github/skills/`.
+3. **Logging:** Sync `agents.yaml` to `.gemini/agents.yaml`, mirror agent markdown into `.gemini/agents/`, `.github/agents/`, and `.claude/agents/` with runtime rules sourced from `agents.yaml`, generate `.codex/agents/*.toml` custom-agent files for Codex CLI, and mirror every valid skill into `.agents/skills/` and `.github/skills/`.
 4. **Hot Context Mandate:** The `## Active Agents` and `## Active Skills` sections in `.arms/SESSION.md` are hot-context summaries, not full registries. Keep only the agents and skills required for open work plus registry pointers, but also surface bound-but-inactive skills so users can see available capabilities without expanding the full registry. Full discovery remains in `.gemini/agents.yaml` and the generated `skills.yaml` files.
 5. **Budget Guardrails:** Keep `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` inside their built-in token budgets. When generation nears or exceeds those limits, tighten duplicated context instead of accepting prompt sprawl.
 6. **Persistence:** Environmental metadata (Root paths, Engine Version, execution metadata, and compact roster references) MUST be preserved during all updates. Never omit or overwrite these sections unless performing an explicit `init` sync.
-7. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
+7. **Model Tier Routing:** Each agent in `agents.yaml` declares a `model_tier` (`economy` | `standard` | `power`). `model_routing.yaml` resolves each tier to a concrete model per platform (Claude Code `model:` frontmatter, Codex CLI `model` / `model_reasoning_effort`, Gemini CLI / Google Antigravity `model:` frontmatter), so specialist agents run on right-sized models instead of always inheriting the host session's model. Adopting a new model release is a one-file edit to `model_routing.yaml`.
+8. **Legacy Root Files:** Root-level legacy files such as `SESSION.md`, `session.md`, `RULES.md`, `rules.md`, `agents.yaml`, and legacy brand files are migration inputs only. Project-owned instruction files may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md`: preserve them, read them when they help explain the project, and do not overwrite them during `arms init`.
 
 ### Step 4: Execute Initialization Flow
 
@@ -105,6 +110,7 @@ Strictly follow the multi-step Initialization Flow defined in the loaded `SKILL.
 - Project-owned repository instructions may live at `./GEMINI.md`, `./.gemini/GEMINI.md`, or `./.github/copilot-instructions.md` and must be preserved if already present
 - Mirrored assistant assets are written to `./.gemini/`, including `.gemini/agents/`
 - Copilot discovery assets are synced to `./.github/agents/` and `./.github/skills/`
+- Claude Code subagents are synced to `./.claude/agents/`, and Codex CLI custom agents are generated at `./.codex/agents/*.toml`
 - Never write project state to `$ARMS_ROOT/`
 - Never read session state from anywhere other than `./.arms/`
 
@@ -154,6 +160,8 @@ The System Architect is an **orchestrator**, not a code generator. You must neve
 ### 1. The Planning Gate
 If initialization is currently waiting for Brand Context / tech stack answers, the user's next answer block must be treated as a continuation of `init`, not a new task. In that case, finish brand + stack synthesis first, then generate the Strategic Task Table.
 
+When initialization is waiting on Brand Context, read `.arms/BRAND_INTAKE.md` and show its compact answer block inline before asking the user to continue. This is required because some CLIs collapse long command transcripts.
+
 After the Boot Sequence is complete, your first action must be to review the existing tasks and **append any new tasks** to the existing **Strategic Task Table** in `.arms/SESSION.md`.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md` when planning. The Task Table is an additive record. If a plan changes, add NEW tasks or update the status of existing ones to `Cancelled`. However, when a task status transitions to `Done`, it MUST be immediately removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`.
 - **⚠️ Prompt Intake Record — MANDATORY GATE:** Before ANY substantive response to a request that creates durable work, you MUST log the task. This applies to ALL plain chat messages — not only explicit `arms task log` commands. Classification: (1) net-new feature request, bug fix, audit, code review, improvement, refactor, or any ask containing "fix", "add", "build", "audit", "improve", "implement", "review", "update", "create" directed at project code → run `arms task log --task "<1-line normalized ask>"` FIRST, then execute; (2) clarification, approval, status nudge, follow-up inside an already-open task → stay attached to current row, no new log; (3) protocol/meta (session, memory, init) → `arms-main-agent` handles. Do NOT execute before logging. This is a non-negotiable gate.
@@ -165,8 +173,8 @@ After the Boot Sequence is complete, your first action must be to review the exi
 - **Default Routing Matrix:** UI, UX, styling, components, layout, responsive work, and visual polish → `arms-frontend-agent`; API, auth, backend services, business logic → `arms-backend-agent`; schema, migrations, database, query tuning → `arms-data-agent`; tests, QA, accessibility validation, pre-flight → `arms-qa-agent`; secrets, OWASP, auth/security audit → `arms-security-agent`; CI/CD, deploy, infra, environments → `arms-devops-agent`; metadata, SEO, Core Web Vitals → `arms-seo-agent`; assets, logo, generated images → `arms-media-agent`; scope, product framing, prioritization → `arms-product-agent`.
 - Use the following schema:
 
-| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|------|----------------|--------------|--------------|--------|
+| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |
+|---|------|----------------|--------------|-------|--------------|--------|
 | 1 | Description | agent-name | skill-name | Task # or None | Pending |
 
 - **Active Skill Auto-Fill:** When generating the Strategic Task Table, the `Active Skill` column must be auto-populated from the assigned agent's bound skill. Use the explicit `skills` entry from `agents.yaml` and the mirrored `.gemini/agents.yaml` runtime copy.

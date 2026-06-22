@@ -165,7 +165,7 @@ class DoctorCommandTests(unittest.TestCase):
             self.assertIn("Agent mirrors are out of sync", output)
             self.assertIn("`.gemini/agents` has stale content", output)
             self.assertIn("arms-main-agent.md", output)
-            self.assertIn("Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, and `.claude/agents/`", output)
+            self.assertIn("Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, `.claude/agents/`, and `.codex/agents/`", output)
 
     def test_doctor_fails_when_gemini_agents_yaml_is_out_of_sync(self):
         with TemporaryDirectory() as tmp:

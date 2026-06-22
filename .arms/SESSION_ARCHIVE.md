@@ -155,3 +155,66 @@ Record of all completed and cancelled tasks.
 | # | Task | Agent | Status | Completed |
 |---|------|-------|--------|-----------|
 | 1 | Fix mobile-only h-11 mandate wording across ARMS instruction surfaces | arms-main-agent | Done | 2026-05-14T22:10:55Z |
+
+## Archive — 2026-06-10T01:58:26Z
+### Context: Task command: update row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Add intelligent model-tier routing so ARMS picks cost-efficient models per agent across Claude, Codex, and Antigravity | arms-main-agent | Done | 2026-06-10T01:58:26Z |
+
+## Archive — 2026-06-15T05:59:44Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix arms init so empty projects still initiate project assessment | arms-main-agent | Done | 2026-06-15T05:59:44Z |
+
+## Archive — 2026-06-15T06:20:36Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix arms init question output so empty projects visibly show the brand/context questionnaire | arms-main-agent | Done | 2026-06-15T06:20:36Z |
+
+## Archive — 2026-06-15T06:32:14Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix empty-project init so status shows brand intake questions and next action | arms-main-agent | Done | 2026-06-15T06:32:14Z |
+
+## Archive — 2026-06-15T09:12:27Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Investigate brand assessment CLI failures and cross-tool AI integration support | arms-main-agent | Done | 2026-06-15T09:12:27Z |
+
+## Archive — 2026-06-15T09:21:35Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Persist brand intake prompt so AI tools that summarize CLI output still show questionnaire | arms-main-agent | Done | 2026-06-15T09:21:35Z |
+
+## Archive — 2026-06-15T09:32:09Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Force AI tool summaries to display brand intake questions after arms init halt | arms-main-agent | Done | 2026-06-15T09:32:09Z |
+
+## Archive — 2026-06-15T09:35:33Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Design robust brand intake display flow that works despite AI command-output summarization | arms-main-agent | Done | 2026-06-15T09:35:33Z |
+
+## Archive — 2026-06-15T09:41:51Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Implement dedicated arms intake command to print and apply brand questionnaire | arms-main-agent | Done | 2026-06-15T09:41:51Z |

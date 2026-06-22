@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-qa-agent
 description: Expert in quality assurance, automated testing, and validation protocols.
+model: gemini-flash-latest
 ---
 
 # ARMS QA Agent

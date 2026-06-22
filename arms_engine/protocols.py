@@ -4,6 +4,11 @@ import re
 import subprocess
 from collections import OrderedDict
 
+from .brand import (
+    brand_file_requires_bootstrap,
+    get_missing_new_project_brand_fields,
+    render_new_project_brand_prompt,
+)
 from .compression import ARCHIVABLE_STATUSES, append_archive_entry, format_archive_diagnostics_lines
 from .metadata import (
     REPORT_HISTORY_FILENAME,
@@ -26,7 +31,7 @@ from .session import (
     write_markdown_sections,
     write_text_atomic,
 )
-from .skills import build_agent_skill_bindings, resolve_agents_with_skills
+from .skills import build_agent_model_tiers, build_agent_skill_bindings, resolve_agents_with_skills
 from .tables import best_semantic_row_match, parse_task_rows
 
 
@@ -233,9 +238,17 @@ def run_status_protocol(project_root):
     active_rows = parse_task_rows(active_tasks_content)
     blockers = (sections.get("Blockers", "None") or "None").strip() or "None"
     execution_mode = extract_environment_value(sections.get("Environment", ""), "Execution Mode") or "Unknown"
-    current_phase = infer_current_phase(active_rows)
+    brand_intake_prompt = render_pending_brand_intake_prompt(project_root)
+    current_phase = "Intake" if brand_intake_prompt else infer_current_phase(active_rows)
     last_completed = extract_last_completed(project_root, sections.get("Completed Tasks", "- None"))
     runtime_diagnostics = render_runtime_diagnostics(active_rows)
+    brand_intake_section = []
+    if brand_intake_prompt:
+        brand_intake_section = [
+            "",
+            "## Brand Intake Required",
+            brand_intake_prompt,
+        ]
 
     emit_protocol_response(
         "None",
@@ -256,10 +269,25 @@ def run_status_protocol(project_root):
                 "",
                 "## Runtime Diagnostics",
                 runtime_diagnostics,
+                *brand_intake_section,
             ]
         ),
-        "Status report complete. Awaiting next command. → HALT",
+        (
+            "Brand intake is required before startup tasks can be generated. Answer `.arms/BRAND.md`, then rerun `arms init`. → HALT"
+            if brand_intake_prompt
+            else "Status report complete. Awaiting next command. → HALT"
+        ),
     )
+
+
+def render_pending_brand_intake_prompt(project_root):
+    brand_path = WorkspacePaths(project_root).brand
+    if not os.path.exists(brand_path):
+        return ""
+    brand_content = read_text_file(brand_path)
+    if not brand_content.strip() or not brand_file_requires_bootstrap(brand_content):
+        return ""
+    return render_new_project_brand_prompt(get_missing_new_project_brand_fields(brand_content))
 
 
 def build_review_rows():
@@ -362,11 +390,12 @@ def choose_fix_assignment(issue):
     return "arms-backend-agent", "backend-system-architect"
 
 
-def make_task_row(task, agent, active_skill, dependencies="—", status="Pending"):
+def make_task_row(task, agent, active_skill, dependencies="—", status="Pending", model="—"):
     return {
         "Task": task,
         "Assigned Agent": agent,
         "Active Skill": active_skill,
+        "Model": model,
         "Dependencies": dependencies,
         "Status": status,
     }
@@ -408,6 +437,7 @@ def renumber_rows(rows):
                 "Task": row.get("Task", "").strip(),
                 "Assigned Agent": row.get("Assigned Agent", "").strip(),
                 "Active Skill": row.get("Active Skill", "—").strip() or "—",
+                "Model": row.get("Model", "—").strip() or "—",
                 "Dependencies": row.get("Dependencies", "—").strip() or "—",
                 "Status": row.get("Status", "Pending").strip() or "Pending",
             }
@@ -424,21 +454,24 @@ def render_task_table(rows, arms_root):
     lines = [TASK_TABLE_HEADER, TASK_TABLE_DIVIDER]
     for row in renumber_rows(rows):
         lines.append(
-            "| {index} | {task} | {agent} | {skill} | {deps} | {status} |".format(
+            "| {index} | {task} | {agent} | {skill} | {model} | {deps} | {status} |".format(
                 index=row["#"],
                 task=_escape_pipe(row["Task"]),
                 agent=_escape_pipe(row["Assigned Agent"]),
                 skill=_escape_pipe(row["Active Skill"]),
+                model=_escape_pipe(row["Model"]),
                 deps=_escape_pipe(row["Dependencies"]),
                 status=_escape_pipe(row["Status"]),
             )
         )
     task_content = "\n".join(lines)
     agent_skill_bindings, skill_catalog_by_name = load_agent_skill_context(arms_root)
+    agent_model_tiers = load_agent_model_tiers(arms_root)
     return normalize_active_tasks_table(
         task_content,
         agent_skill_bindings=agent_skill_bindings,
         skill_catalog_by_name=skill_catalog_by_name,
+        agent_model_tiers=agent_model_tiers,
     )
 
 
@@ -483,6 +516,11 @@ def extract_environment_value(environment_content, key):
 def load_agent_skill_context(arms_root):
     resolved_agents, skill_catalog, _ = resolve_agents_with_skills(arms_root, announce=False)
     return build_agent_skill_bindings(resolved_agents), {skill["name"]: skill for skill in skill_catalog}
+
+
+def load_agent_model_tiers(arms_root):
+    resolved_agents, _, _ = resolve_agents_with_skills(arms_root, announce=False)
+    return build_agent_model_tiers(resolved_agents)
 
 
 def update_protocol_session(project_root, arms_root, active_rows, blockers=KEEP_EXISTING, archive_context="Protocol task refresh"):

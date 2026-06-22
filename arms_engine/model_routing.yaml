@@ -1,0 +1,42 @@
+# ARMS Model Tier Routing
+#
+# Maps each agent's `model_tier` (declared in agents.yaml) to a concrete
+# model identifier per AI CLI platform. agents.yaml only ever references a
+# tier name -- never a raw model ID -- so adopting a new model release is a
+# one-file edit here, with no Python changes required.
+#
+# Tiers:
+#   economy  - low-stakes, pattern-following work (copy, metadata, asset prompts)
+#   standard - default tier for most specialist agent work
+#   power    - complex reasoning: architecture, data integrity, security, orchestration
+#
+# Synced into:
+#   - .claude/agents/*.md   -> `model:` frontmatter (Claude Code subagents)
+#   - .codex/agents/*.toml  -> `model` / `model_reasoning_effort` (Codex CLI custom agents)
+#   - .gemini/agents/*.md   -> `model:` frontmatter (Gemini CLI / Google Antigravity)
+
+platforms:
+  claude:
+    # Short model aliases auto-track Anthropic's current Haiku/Sonnet/Opus releases.
+    economy: haiku
+    standard: sonnet
+    power: opus
+
+  codex:
+    # model_reasoning_effort: minimal | low | medium | high | xhigh
+    economy:
+      model: gpt-5.4-mini
+      model_reasoning_effort: low
+    standard:
+      model: gpt-5.4
+      model_reasoning_effort: medium
+    power:
+      model: gpt-5.5
+      model_reasoning_effort: high
+
+  gemini:
+    # "-latest" aliases auto-track Google's current Flash/Pro lineup.
+    # Google Antigravity is Gemini-based and reads this same agent mirror.
+    economy: gemini-flash-latest
+    standard: gemini-flash-latest
+    power: gemini-pro-latest

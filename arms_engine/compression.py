@@ -520,11 +520,12 @@ def render_task_table(rows):
     lines = [TASK_TABLE_HEADER, TASK_TABLE_DIVIDER]
     for index, row in enumerate(rows, start=1):
         lines.append(
-            "| {index} | {task} | {agent} | {skill} | {deps} | {status} |".format(
+            "| {index} | {task} | {agent} | {skill} | {model} | {deps} | {status} |".format(
                 index=index,
                 task=row["Task"],
                 agent=row["Assigned Agent"],
                 skill=row["Active Skill"],
+                model=row["Model"],
                 deps=row["Dependencies"],
                 status=row["Status"],
             )

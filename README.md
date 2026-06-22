@@ -63,8 +63,10 @@ When you run `arms init`, ARMS writes project-local state and mirrors:
 | `.arms/RULES.md` | Project rules and guardrails | Created if missing and migrated from legacy rule files |
 | `.arms/GENERATED_PROMPTS.md` | Agent-ready prompts derived from intake | Generated only when the brand brief is complete; stays intentionally thin and references `.arms/CONTEXT_SYNTHESIS.md` as the dense context source |
 | `GEMINI.md`, `.gemini/GEMINI.md`, or `.github/copilot-instructions.md` | Project-owned workspace instructions | Preserved if already present; ARMS scans these locations for context and never treats them as engine-managed sync targets |
-| `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/` |
+| `.gemini/agents/` | Local mirror of agent markdown files | Synced from `arms_engine/agents/`, with `model:` frontmatter resolved from each agent's `model_tier` (Google Antigravity reads this same mirror) |
 | `.gemini/agents.yaml` | Local mirror of the canonical agent registry | Synced directly from `arms_engine/agents.yaml` |
+| `.claude/agents/` | Claude Code subagent definitions | Synced from `arms_engine/agents/`, with `model:` frontmatter (haiku/sonnet/opus) resolved from each agent's `model_tier` |
+| `.codex/agents/` | Codex CLI custom agent definitions | Generated as `*.toml` files from `arms_engine/agents/`, with `model` / `model_reasoning_effort` resolved from each agent's `model_tier` |
 | `.arms/workflow/` | Local mirror of workflow docs | Copied from the engine for cross-CLI use |
 | `.arms/reports/` | Shared report output directory | Used by review, fix, and deploy protocols |
 | `.arms/agent-outputs/` | Shared generated asset/output directory | Used for agent-produced files such as media assets |
@@ -146,8 +148,31 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 | `arms_engine/protocols.py` | Protocol command dispatch, session/report updates, pipeline status summaries, and release-note scaffolding |
 | `arms_engine/tasks.py` | Executable task-ledger commands for logging, updating, routing, and archiving `.arms/SESSION.md` rows |
 | `arms_engine/skills.py` | Agent/skill sync, discovery, metadata parsing, mirrored runtime-rule injection, and registry generation |
+| `arms_engine/model_routing.py` | Resolves each agent's `model_tier` to a per-platform model directive using `model_routing.yaml` |
 | `arms_engine/session.py` | Legacy migration, version guard, task-table normalization, and atomic `SESSION.md` updates |
 | `arms_engine/init_arms.py` | Compatibility shim, stable script entrypoint, and executable module wrapper for `python -m arms_engine.init_arms` |
+
+---
+
+## Model Tier Routing
+
+Specialist agents shouldn't all run on the most expensive model available. Each agent in `arms_engine/agents.yaml` declares a `model_tier`:
+
+| Tier | Use case | Example agents |
+|---|---|---|
+| `economy` | Low-stakes, pattern-following work (copy, metadata, asset prompts) | `arms-seo-agent`, `arms-media-agent` |
+| `standard` | Default tier for most specialist agent work | `arms-product-agent`, `arms-frontend-agent`, `arms-devops-agent`, `arms-qa-agent` |
+| `power` | Complex reasoning: architecture, data integrity, security, orchestration | `arms-main-agent`, `arms-backend-agent`, `arms-data-agent`, `arms-security-agent` |
+
+`arms_engine/model_routing.yaml` is the single source of truth that resolves each tier to a concrete model identifier per AI CLI platform:
+
+| Platform | Mirror | What gets set |
+|---|---|---|
+| Claude Code | `.claude/agents/*.md` | `model:` frontmatter (`haiku` / `sonnet` / `opus`) |
+| Codex CLI | `.codex/agents/*.toml` | `model` and `model_reasoning_effort` |
+| Gemini CLI / Google Antigravity | `.gemini/agents/*.md` | `model:` frontmatter (`gemini-flash-latest` / `gemini-pro-latest`) |
+
+Adopting a new model release is a one-file edit to `model_routing.yaml` — no Python changes required. `.github/agents/` (Copilot CLI) is left untouched since Copilot's per-agent model field isn't part of this routing yet.
 
 ---
 
@@ -157,11 +182,11 @@ The public CLI entrypoint stays at `arms_engine.init_arms:main`, but the init im
 
 1. Resolves the active project root.
 2. Refuses to initialize the home directory as a safety guard.
-3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.github/agents/`, and `.github/skills/`.
+3. Creates required folders such as `.arms/`, `.gemini/`, `.agents/skills/`, `.github/agents/`, `.claude/agents/`, `.codex/agents/`, and `.github/skills/`.
 4. Migrates legacy state into the managed workspace when older files are found, including previous root-level layouts such as `SESSION.md`, `RULES.md`, `agents.yaml`, and legacy `.gemini/RULES.md` (migrated into `.arms/RULES.md`).
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`, including the default memory approval gate in `.arms/RULES.md`.
 6. Removes obsolete Gemini-side skill mirrors and rebuilds the canonical skill mirrors under `.agents/skills/` and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
-7. Syncs agents, skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
+7. Syncs agents (including `.claude/agents/` and `.codex/agents/`, with model tiers resolved from `model_routing.yaml`), skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
 8. Creates or refreshes `.arms/BRAND.md` depending on project state.
 9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
 10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
@@ -302,11 +327,11 @@ When `arms doctor --fix` removes obsolete managed artifacts, those removals are 
 - **failed tasks** recorded by ARMS in `SESSION.md`
 - **cancelled tasks** that should usually be treated as external runtime/operator cancellations unless the user explicitly cancelled them
 
-`arms doctor --fix` safely resyncs engine-owned mirrored files first (`.gemini/agents*`, mirrored skills and registries, `.arms/workflow/`, `.arms/ENGINE.md`, and root `AGENTS.md`) and then reports anything still unsafe or incomplete. It does not bootstrap a missing workspace and it does not overwrite project-owned instruction files.
+`arms doctor --fix` safely resyncs engine-owned mirrored files first (`.gemini/agents*`, `.claude/agents/`, `.codex/agents/`, mirrored skills and registries, `.arms/workflow/`, `.arms/ENGINE.md`, and root `AGENTS.md`) and then reports anything still unsafe or incomplete. It does not bootstrap a missing workspace and it does not overwrite project-owned instruction files.
 
 It checks:
 
-- required `.arms/`, `.agents/`, `.gemini/`, and `.github/agents/` files and directories
+- required `.arms/`, `.agents/`, `.gemini/`, `.claude/agents/`, `.codex/agents/`, and `.github/agents/` files and directories
 - `.arms/SESSION.md` structure and engine-version compatibility
 - agent, skill, and workflow mirror sync
 - engine-managed file sync for `.arms/ENGINE.md` and root `AGENTS.md`
@@ -591,10 +616,10 @@ The engine package now ships its managed instruction source as `arms_engine/ENGI
 
 If ARMS finds an older `SESSION.md` task table shape, it upgrades it to the current schema:
 
-| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|---|---|---|---|---|
+| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |
+|---|---|---|---|---|---|---|
 
-On re-sync, ARMS also repairs stale `Active Skill` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound skill in `arms_engine/agents.yaml`, `arms init` backfills the correct skill automatically.
+On re-sync, ARMS also repairs stale `Active Skill` and `Model` cells in existing task rows. If a task still shows `—` but the assigned agent now has a bound skill in `arms_engine/agents.yaml`, `arms init` backfills the correct skill automatically. Likewise, the `Model` column is backfilled from the assigned agent's `model_tier` (`economy` / `standard` / `power`) so CLIs and IDEs that don't auto-apply an agent's `model:` frontmatter (Claude Code does) know which model tier to switch to before running that agent.
 
 For live task updates after bootstrap, prefer the executable ledger commands: `arms task log`, `arms task update`, and `arms task done`.
 

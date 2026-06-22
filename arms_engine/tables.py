@@ -34,10 +34,13 @@ TASK_MATCH_STOPWORDS = {
 
 
 def parse_task_rows(content):
-    """Parse a markdown task table and return a list of 6-field row dicts.
+    """Parse a markdown task table and return a list of 7-field row dicts.
 
     Each returned dict has keys: ``#``, ``Task``, ``Assigned Agent``,
-    ``Active Skill``, ``Dependencies``, ``Status``.
+    ``Active Skill``, ``Model``, ``Dependencies``, ``Status``.
+
+    Rows from the legacy 6-column schema (no ``Model`` column) are migrated
+    in place by inserting a ``—`` placeholder for ``Model``.
 
     The ``&#124;`` HTML entity is unescaped back to a literal ``|`` so that
     pipe characters inside task descriptions survive the round-trip through
@@ -49,7 +52,9 @@ def parse_task_rows(content):
         if not (line.startswith("|") and line.endswith("|")):
             continue
         cells = [cell.strip().replace("&#124;", "|") for cell in line.strip("|").split("|")]
-        if len(cells) != 6:
+        if len(cells) == 6:
+            cells.insert(4, "—")
+        if len(cells) != 7:
             continue
         first_cell = cells[0].replace(" ", "")
         if cells[0] == "#" or set(first_cell) <= {"-"}:
@@ -60,8 +65,9 @@ def parse_task_rows(content):
                 "Task": cells[1],
                 "Assigned Agent": cells[2],
                 "Active Skill": cells[3],
-                "Dependencies": cells[4],
-                "Status": cells[5],
+                "Model": cells[4],
+                "Dependencies": cells[5],
+                "Status": cells[6],
             }
         )
     return rows
@@ -175,12 +181,12 @@ def deduplicate_startup_tasks_against_existing(startup_tasks_content, existing_s
         return startup_tasks_content
 
     lines = [
-        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
-        "|---|------|----------------|--------------|--------------|--------|",
+        "| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |",
+        "|---|------|----------------|--------------|-------|--------------|--------|",
     ]
     for index, row in enumerate(new_startup_rows, start=1):
         lines.append(
-            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Dependencies']} | {row['Status']} |"
+            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Model']} | {row['Dependencies']} | {row['Status']} |"
         )
     return "\n".join(lines)
 
@@ -208,11 +214,11 @@ def merge_task_tables(existing_table, new_table):
 
     merged = existing_rows + new_rows
     lines = [
-        "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |",
-        "|---|------|----------------|--------------|--------------|--------|",
+        "| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |",
+        "|---|------|----------------|--------------|-------|--------------|--------|",
     ]
     for index, row in enumerate(merged, start=1):
         lines.append(
-            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Dependencies']} | {row['Status']} |"
+            f"| {index} | {row['Task']} | {row['Assigned Agent']} | {row['Active Skill']} | {row['Model']} | {row['Dependencies']} | {row['Status']} |"
         )
     return "\n".join(lines)

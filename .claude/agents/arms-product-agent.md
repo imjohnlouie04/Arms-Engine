@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-product-agent
 description: Expert in product strategy, requirements gathering, and feature prioritization.
+model: sonnet
 ---
 
 # ARMS Product Agent

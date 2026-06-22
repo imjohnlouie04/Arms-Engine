@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-data-agent
 description: Expert in schema design, migrations, and query optimization.
+model: gemini-pro-latest
 ---
 
 # ARMS Data Agent

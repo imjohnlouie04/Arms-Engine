@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-media-agent
 description: Expert in asset creation and image generation.
+model: haiku
 ---
 
 # ARMS Media Agent

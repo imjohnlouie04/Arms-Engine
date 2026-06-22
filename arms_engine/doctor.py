@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 
 from . import __version__
 from .metadata import SESSION_ENVIRONMENT_KEYS, TASK_TABLE_HEADER
+from .model_routing import load_model_routing
 from .paths import WorkspacePaths
 from .prompts import CONTEXT_SYNTHESIS_TOKEN_BUDGET, GENERATED_PROMPTS_TOKEN_BUDGET
 from .protocols import collect_recent_commit_subjects, find_latest_report, parse_actionable_issues
@@ -22,9 +23,13 @@ from .skills import (
     create_skills_registry,
     discover_skill_catalog,
     load_agents_registry,
+    parse_agent_frontmatter_and_body,
     remove_obsolete_gemini_skill_artifacts,
+    render_codex_agent_toml,
+    resolve_agent_model,
     sync_agents,
     sync_agents_claude,
+    sync_agents_codex,
     sync_agents_copilot,
     sync_engine_instructions,
     sync_root_agents_guide,
@@ -60,6 +65,7 @@ REQUIRED_WORKSPACE_DIRECTORIES = (
     ".agents/skills",
     ".claude/agents",
     ".claude/commands",
+    ".codex/agents",
     ".gemini/agents",
     ".github/agents",
     ".github/skills",
@@ -617,6 +623,7 @@ def apply_safe_doctor_repairs(project_root, arms_root):
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
         sync_agents_claude(arms_root, project_root)
+        sync_agents_codex(arms_root, project_root)
         sync_skills_copilot(arms_root, project_root)
         sync_skills_claude(arms_root, project_root)
         create_skills_registry(arms_root, project_root)
@@ -628,6 +635,7 @@ def apply_safe_doctor_repairs(project_root, arms_root):
         "Resynced `.gemini/agents/` and `.gemini/agents.yaml` from the engine.",
         "Resynced `.github/agents/` from the engine.",
         "Resynced `.claude/agents/` from the engine.",
+        "Resynced `.codex/agents/` from the engine.",
         "Rebuilt `.agents/skills/`, `.github/skills/`, `.claude/commands/`, and the generated skill registries.",
         "Resynced `.arms/workflow/`, `.arms/ENGINE.md`, and the root `AGENTS.md` guide.",
     ]
@@ -662,6 +670,12 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
         return
 
     mismatches = []
+    routing = load_model_routing(arms_root)
+    mirror_platforms = {
+        ".gemini/agents": "gemini",
+        ".github/agents": None,
+        os.path.join(".claude", "agents"): "claude",
+    }
     for relative_dir in (".gemini/agents", ".github/agents", os.path.join(".claude", "agents")):
         mirror_dir = os.path.join(project_root, relative_dir)
         mirrored_files = sorted(
@@ -679,6 +693,7 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             mismatches.append("; ".join(description))
             continue
 
+        platform = mirror_platforms[relative_dir]
         out_of_sync = []
         for filename in mirrored_files:
             source_path = os.path.join(source_agents_dir, filename)
@@ -687,6 +702,8 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             expected_content = build_agent_sync_content(
                 read_text_file(source_path),
                 agent_registry.get(agent_name, {}),
+                platform=platform,
+                routing=routing,
             )
             if expected_content != read_text_file(mirrored_path):
                 out_of_sync.append(f"`{filename}`")
@@ -698,6 +715,41 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
                 )
             )
 
+    codex_dir = os.path.join(project_root, ".codex", "agents")
+    codex_mirrored_files = sorted(
+        name for name in os.listdir(codex_dir)
+        if name.endswith(".toml")
+    ) if os.path.isdir(codex_dir) else []
+    expected_codex_files = sorted(
+        "{}.toml".format(os.path.splitext(name)[0]) for name in source_agent_files
+    )
+    missing = sorted(set(expected_codex_files) - set(codex_mirrored_files))
+    extra = sorted(set(codex_mirrored_files) - set(expected_codex_files))
+    if missing or extra:
+        description = ["`.codex/agents`"]
+        if missing:
+            description.append("missing {}".format(", ".join(f"`{name}`" for name in missing)))
+        if extra:
+            description.append("has extra {}".format(", ".join(f"`{name}`" for name in extra)))
+        mismatches.append("; ".join(description))
+    else:
+        out_of_sync = []
+        for filename in source_agent_files:
+            agent_name = os.path.splitext(filename)[0]
+            source_path = os.path.join(source_agents_dir, filename)
+            frontmatter, body = parse_agent_frontmatter_and_body(read_text_file(source_path))
+            agent_info = agent_registry.get(agent_name, {})
+            description_text = str(frontmatter.get("description") or agent_info.get("scope") or agent_name).strip()
+            model_config = resolve_agent_model(agent_info, "codex", routing)
+            expected_content = render_codex_agent_toml(agent_name, description_text, body, model_config)
+            mirrored_path = os.path.join(codex_dir, "{}.toml".format(agent_name))
+            if expected_content != read_text_file(mirrored_path):
+                out_of_sync.append(f"`{agent_name}.toml`")
+        if out_of_sync:
+            mismatches.append(
+                "`.codex/agents` has stale content in {}".format(", ".join(out_of_sync))
+            )
+
     if mismatches:
         add_check(
             categories,
@@ -705,7 +757,7 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             "Workspace Health",
             "fail",
             "Agent mirrors are out of sync: {}.".format(" | ".join(mismatches)),
-            "Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, and `.claude/agents/` from the engine.",
+            "Rerun `arms init` to resync `.gemini/agents/`, `.github/agents/`, `.claude/agents/`, and `.codex/agents/` from the engine.",
         )
     else:
         add_check(

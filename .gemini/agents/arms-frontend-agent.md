@@ -2,6 +2,7 @@
 tools: ["*"]
 name: arms-frontend-agent
 description: Expert in UI components, routing, state management, and API integration.
+model: gemini-flash-latest
 ---
 
 # ARMS Frontend Agent

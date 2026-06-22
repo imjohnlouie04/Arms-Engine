@@ -1,20 +1,25 @@
+# Model tier values (economy/standard/power) drive per-platform model
+# selection -- see model_routing.yaml for what each tier resolves to on
+# Claude Code, Codex CLI, and Gemini CLI / Google Antigravity.
 agents:
   arms-main-agent:
     role: Orchestrator
     scope: Planning, delegation, session management.
-    writes: 
+    writes:
       - .arms/SESSION.md
       - .arms/MEMORY.md
     skills:
       - arms-orchestrator
       - arms-docs-generator
       - caveman-compressor
-    rules: "Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work, using `## Memory Signals` in `.arms/SESSION.md` as the hot-context shortcut. Must present a markdown task table (Task | Assigned Agent | Dependencies | Status) and wait for explicit user approval before delegating. Must ask for explicit user approval before updating `.arms/MEMORY.md`. Must append blocker resolutions and project context to `.arms/MEMORY.md` only after approval. After significant work, must draft a concise memory lesson candidate and request approval before appending it."
+    model_tier: power
+    rules: "Must read `.arms/SESSION.md`, `.arms/BRAND.md`, and `.arms/MEMORY.md` before task work, using `## Memory Signals` in `.arms/SESSION.md` as the hot-context shortcut. Must present a markdown task table (Task | Assigned Agent | Model | Dependencies | Status) and wait for explicit user approval before delegating. Must ask for explicit user approval before updating `.arms/MEMORY.md`. Must append blocker resolutions and project context to `.arms/MEMORY.md` only after approval. After significant work, must draft a concise memory lesson candidate and request approval before appending it."
   arms-product-agent:
     role: Product Manager
     scope: Requirements gathering, user stories, PRD generation, feature prioritization.
     skills:
       - arms-docs-generator
+    model_tier: standard
     rules: "Must focus on 'Why' and 'Who' before the 'How'. Translates vague user requests into structured technical tasks for the Architect."
   arms-backend-agent:
     role: Backend Specialist
@@ -22,32 +27,38 @@ agents:
     skills:
       - backend-system-architect
       - pse-trading
+    model_tier: power
   arms-frontend-agent:
     role: Frontend Specialist
     scope: UI components, routing, state, API integration.
     skills:
       - frontend-design
       - ui-ux-pro-max
+    model_tier: standard
     rules: "Ensure bold typography, cohesive themes, non-generic aesthetics. Mobile-First Mandate: on mobile and Mobile Extended layouts, raise interactive controls to h-11 min for touch targets while preserving normal desktop density. Never render dense <Table> on mobile; keep table layouts in 'hidden md:block' and provide stacked <Card> layouts for 'block md:hidden'. Convert desktop sidebars into swipeable drawers on mobile."
   arms-devops-agent:
     role: DevOps Specialist
     scope: CI/CD, deployment, boilerplate initialization based on chosen tech stack.
     skills:
       - devops-orchestrator
+    model_tier: standard
   arms-seo-agent:
     role: SEO Specialist
     scope: Search engine optimization, meta tags, semantic HTML validation, schema markup, Core Web Vitals.
     skills:
       - seo-web-performance-expert
+    model_tier: economy
   arms-media-agent:
     role: Media Specialist
     scope: Asset creation.
     skills:
       - nano-banana-pro
       - logo-design
+    model_tier: economy
   arms-data-agent:
     role: Data Specialist
     scope: Schema design, migrations, query optimization.
+    model_tier: power
     rules: "Mandate: Must use Supabase CLI (supabase init / supabase start) local environment for all schema tests before remote execution."
   arms-qa-agent:
     role: QA & Testing Specialist
@@ -55,6 +66,7 @@ agents:
     skills:
       - qa-automation-testing
       - Accessibility Auditor
+    model_tier: standard
     rules: "Must run Vitest and the project's configured E2E suite before marking a task 'Done'. Prefer Cypress for browser E2E; use Playwright only when explicitly required. Strictly validates Pre-Flight checks for any regression."
 
   arms-security-agent:
@@ -62,4 +74,5 @@ agents:
     scope: Enforces OWASP standards, validates auth flows, configures RLS, audits dependencies.
     skills:
       - security-code-review
+    model_tier: power
     rules: "Must perform a security audit on all database migrations and authentication logic. Ensures zero exposure of PII/Secrets."

@@ -1,6 +1,6 @@
-TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Dependencies | Status |"
-TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|--------------|--------|"
-TASK_TABLE_COLUMNS = "# | Task | Assigned Agent | Active Skill | Dependencies | Status"
+TASK_TABLE_HEADER = "| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |"
+TASK_TABLE_DIVIDER = "|---|------|----------------|--------------|-------|--------------|--------|"
+TASK_TABLE_COLUMNS = "# | Task | Assigned Agent | Active Skill | Model | Dependencies | Status"
 
 SESSION_ENVIRONMENT_KEYS = (
     "ARMS Root",

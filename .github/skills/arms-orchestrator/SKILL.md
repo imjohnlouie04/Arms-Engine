@@ -117,6 +117,10 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Pyth
 
 If initialization HALTS to collect Brand Context and initial tech stack answers for a new / empty project, the **next user reply containing those answers is not a fresh request**. It is the continuation signal for the same `init` flow.
 
+When this halt happens, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless the user explicitly asks for a path-only summary. This is mandatory because several AI tools collapse long command transcripts.
+
+**Present the intake as an interactive form, not a file dump.** Ask the Brand Context questions as a numbered conversational form — one prompt per field in `.arms/BRAND_INTAKE.md` (Project Name, Primary Use Case, Target Audience, Core Features, Goal / Monetization Model, Brand Personality, Visual Direction, Preferred Tech Stack, Deployment Target, Authentication Requirement, Website Brief, Technical Constraints) — and WAIT for the user to answer. It is not acceptable to silently scaffold `.arms/BRAND.md` and `.arms/BRAND_INTAKE.md` and continue without asking; the user must be given the questionnaire to fill in. When the user replies, apply their answers with `arms init --answers-text "<block>"` (or `arms intake`) so BRAND.md is updated, then continue the resume sequence below.
+
 Resume from that point in this order:
 1. Update `.arms/BRAND.md` from the user's answers
 2. Generate `.arms/CONTEXT_SYNTHESIS.md` from the approved brand + stack answers
@@ -161,8 +165,8 @@ Generated: <ISO 8601 timestamp>
 <report-driven or task-driven next command recommendation>
 
 ## Active Tasks
-| # | Task | Assigned Agent | Active Skill | Dependencies | Status |
-|---|------|----------------|--------------|--------------|--------|
+| # | Task | Assigned Agent | Active Skill | Model | Dependencies | Status |
+|---|------|----------------|--------------|-------|--------------|--------|
 
 ## Completed Tasks
 - None

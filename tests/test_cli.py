@@ -79,6 +79,10 @@ class TestHasProjectRootMarkers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             self.assertFalse(has_project_root_markers(tmpdir))
 
+    def test_home_directory_always_false(self):
+        home_dir = os.path.expanduser("~")
+        self.assertFalse(has_project_root_markers(home_dir))
+
 
 class TestCliArgValidation(unittest.TestCase):
     """Exercises the early argument validation added to main()."""

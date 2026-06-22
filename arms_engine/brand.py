@@ -41,6 +41,9 @@ BOOTSTRAP_ONLY_FILES = {
     "LICENSE.md",
     "CHANGELOG",
     "CHANGELOG.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
 }
 SOURCE_FILE_EXTENSIONS = {
     ".js",
@@ -214,6 +217,7 @@ NOTE_DRIVEN_INTAKE_FIELDS = (
     "Reference Brand",
     "Brand Comparison",
     "Existing Brand Assets",
+    "Website Brief",
     "Content / Visual Non-Negotiables",
 )
 
@@ -313,6 +317,32 @@ QUESTION_VALUE_ALIASES = {
         "3": "AWS / GCP",
     },
 }
+
+# Single source of truth for the compact Brand Context intake. Each entry is a
+# ``(label, hint)`` pair. ``label`` doubles as the ``Field:`` key that
+# ``parse_structured_answers`` understands, so the printed answer block and the
+# interactive questionnaire stay in lockstep with the parser.
+COMPACT_INTAKE_FIELDS = (
+    ("Project Name", ""),
+    ("Primary Use Case", "SaaS / Content-Marketing / Mobile-First / Multi-Purpose"),
+    ("Target Audience", ""),
+    ("Core Features", ""),
+    ("Goal / Monetization Model", ""),
+    ("Brand Personality", "up to 3 words"),
+    ("Visual Direction", "Light / Dark / System / Undecided"),
+    ("Preferred Tech Stack", "A Next.js+Supabase / B Nuxt+Firebase / C Astro+Tailwind / D Custom"),
+    ("Deployment Target", "1 Vercel / 2 Docker-VPS / 3 AWS-GCP"),
+    ("Authentication Requirement", "Email / OAuth / Magic link / None / Unsure"),
+    ("Website Brief", "sections, CTA, industry, SEO, images, or N/A"),
+    ("Technical Constraints", ""),
+)
+
+
+def render_compact_intake_answer_block() -> str:
+    """Render the compact ``Field: hint`` answer block from COMPACT_INTAKE_FIELDS."""
+    return "\n".join(
+        f"{label}:{(' ' + hint) if hint else ''}" for label, hint in COMPACT_INTAKE_FIELDS
+    )
 
 STACK_RECOMMENDATIONS = {
     "nextjs": {
@@ -432,6 +462,7 @@ def build_answer_field_aliases() -> dict:
             "reference brand": "Reference Brand",
             "brand comparison": "Brand Comparison",
             "existing assets": "Existing Brand Assets",
+            "website brief": "Website Brief",
             "non negotiables": "Content / Visual Non-Negotiables",
             "content visual non negotiables": "Content / Visual Non-Negotiables",
         }
@@ -720,6 +751,131 @@ def infer_project_type_from_primary_use_case(value: str) -> str:
     return value.strip()
 
 
+def compact_answer_value(answers: dict, field_name: str) -> str:
+    """Return an answer value with surrounding whitespace removed."""
+    return str(answers.get(field_name, "")).strip()
+
+
+def answer_indicates_not_applicable(value: str) -> bool:
+    """Return True if a free-text compact answer explicitly says the item does not apply."""
+    normalized = value.strip().lower()
+    return brand_field_is_not_applicable(normalized) or normalized in {"n/a.", "na.", "not applicable."}
+
+
+def derive_compact_answer_updates(content: str, answers: dict) -> dict:
+    """Derive missing formal BRAND.md fields from compact CLI intake answers.
+
+    The chat prompt intentionally asks for a short answer block. This helper
+    bridges that compact shape to the full questionnaire so `arms init` can
+    continue without forcing users to manually fill every low-level field.
+    """
+    derived_updates = {}
+
+    def field_unanswered(field_name: str) -> bool:
+        return brand_field_is_unanswered(extract_brand_field(content, field_name))
+
+    def derive(field_name: str, value: str):
+        value = " ".join(str(value).split()).strip()
+        if value and field_unanswered(field_name):
+            derived_updates[field_name] = value
+
+    project_name = compact_answer_value(answers, "Project Name")
+    primary_use_case = compact_answer_value(answers, "Primary Use Case")
+    audience = compact_answer_value(answers, "Primary Audience")
+    core_features = compact_answer_value(answers, "Core Features")
+    monetization = compact_answer_value(answers, "Goal / Monetization Model")
+    personality = compact_answer_value(answers, "Personality")
+    brand_comparison = compact_answer_value(answers, "Brand Comparison")
+    existing_assets = compact_answer_value(answers, "Existing Brand Assets")
+    website_brief = compact_answer_value(answers, "Website Brief")
+    non_negotiables = compact_answer_value(answers, "Content / Visual Non-Negotiables")
+
+    if primary_use_case:
+        project_type = infer_project_type_from_primary_use_case(primary_use_case)
+        derive("Project Type", project_type)
+        derive("Design Priority", infer_design_priority(project_type))
+
+    if primary_use_case or audience or core_features:
+        use_case_label = primary_use_case or "useful digital product"
+        audience_label = audience or "its target audience"
+        feature_label = core_features or "the core workflow"
+        derive("Mission", f"Build a {use_case_label} experience for {audience_label} centered on {feature_label}.")
+        derive("Vision", f"Become a trusted, high-quality solution for {audience_label}.")
+
+    if personality:
+        derive("Voice & Tone", f"{personality}; clear, concise, and audience-aware.")
+
+    if primary_use_case or monetization:
+        values = "Clarity, reliability, and usefulness"
+        if monetization:
+            values = f"Clarity, reliability, and sustainable value creation through {monetization}"
+        derive("Core Values", values)
+
+    if brand_comparison:
+        derive("Differentiation", brand_comparison)
+    elif core_features:
+        derive("Differentiation", f"Focused execution around {core_features}.")
+
+    if existing_assets:
+        inferred_logo_status = infer_logo_status_from_assets(existing_assets)
+        derive("Logo Status", inferred_logo_status or "Existing assets noted for review")
+    else:
+        derive("Logo Status", "Not yet created")
+
+    derive("Color Palette", "Accessible neutral base with one distinctive brand accent to define during design.")
+    derive("Typography", "Readable modern sans-serif body with a distinctive heading treatment.")
+
+    technical_parts = [part for part in (non_negotiables, compact_answer_value(answers, "Technical Constraints")) if part]
+    if technical_parts:
+        derive("Technical Constraints", "; ".join(technical_parts))
+
+    stack_context = {
+        "Preferred Tech Stack": compact_answer_value(answers, "Preferred Tech Stack"),
+        "Primary Use Case": primary_use_case,
+        "Project Type": derived_updates.get("Project Type", extract_brand_field(content, "Project Type")),
+        "Experience Type": compact_answer_value(answers, "Experience Type"),
+        "Technical Constraints": compact_answer_value(answers, "Technical Constraints"),
+        "Backend / Data Layer": compact_answer_value(answers, "Backend / Data Layer"),
+    }
+    stack_profile = resolve_stack_recommendation(stack_context)
+    derive("Deployment Target", stack_profile["deployment_target"])
+    derive("Backend / Data Layer", stack_profile["data_layer"])
+    derive("Authentication Requirement", stack_profile["auth_requirement"])
+    derive("Icon System", stack_profile["default_icon_system"])
+
+    if answer_indicates_not_applicable(website_brief):
+        for website_field in (
+            "Experience Type",
+            "Industry / Business Niche",
+            "Service Area / Local SEO Target",
+            "Required Website Sections",
+            "Primary Calls to Action",
+            "Image Requirements",
+            "SEO Focus",
+        ):
+            derive(website_field, "N/A")
+        return derived_updates
+
+    if website_brief:
+        derive("Experience Type", "Marketing site" if "marketing" in website_brief.lower() else "Website / landing page")
+        derive("Industry / Business Niche", website_brief)
+        derive("Service Area / Local SEO Target", "N/A")
+        derive("Required Website Sections", website_brief)
+        derive("Primary Calls to Action", website_brief)
+        derive("Image Requirements", website_brief)
+        derive("SEO Focus", website_brief)
+    else:
+        derive("Experience Type", "N/A")
+        derive("Industry / Business Niche", "N/A")
+        derive("Service Area / Local SEO Target", "N/A")
+        derive("Required Website Sections", "N/A")
+        derive("Primary Calls to Action", "N/A")
+        derive("Image Requirements", "N/A")
+        derive("SEO Focus", "N/A")
+
+    return derived_updates
+
+
 def infer_logo_status_from_assets(value: str) -> str:
     """Infer a ``Logo Status`` string from a free-text ``Existing Brand Assets`` answer."""
     normalized = value.strip().lower()
@@ -856,19 +1012,7 @@ def apply_answers_to_brand_content(content: str, answers: dict) -> tuple:
     if primary_use_case and brand_field_is_unanswered(extract_brand_field(content, "Project Type")):
         derived_updates["Project Type"] = infer_project_type_from_primary_use_case(primary_use_case)
 
-    brand_comparison = answers.get("Brand Comparison", "")
-    if brand_comparison and brand_field_is_unanswered(extract_brand_field(content, "Differentiation")):
-        derived_updates["Differentiation"] = brand_comparison
-
-    existing_assets = answers.get("Existing Brand Assets", "")
-    if existing_assets and brand_field_is_unanswered(extract_brand_field(content, "Logo Status")):
-        inferred_logo_status = infer_logo_status_from_assets(existing_assets)
-        if inferred_logo_status:
-            derived_updates["Logo Status"] = inferred_logo_status
-
-    non_negotiables = answers.get("Content / Visual Non-Negotiables", "")
-    if non_negotiables and brand_field_is_unanswered(extract_brand_field(content, "Technical Constraints")):
-        derived_updates["Technical Constraints"] = non_negotiables
+    derived_updates.update(derive_compact_answer_updates(content, answers))
 
     for field_name, value in explicit_direct_updates.items():
         content, changed = update_brand_field(content, field_name, value, overwrite=True)
@@ -1387,35 +1531,92 @@ def render_new_project_brand_questionnaire(project_root: str) -> str:
 
 def render_new_project_brand_prompt(missing_fields: list = None) -> str:
     """Build the brand-intake prompt shown to users who need to fill in BRAND.md."""
-    brand_questions = "\n".join(NEW_PROJECT_BRAND_QUESTIONS)
-    tech_stack_questions = "\n".join(NEW_PROJECT_TECH_STACK_QUESTIONS)
-    website_brief_questions = "\n".join(NEW_PROJECT_WEBSITE_BRIEF_QUESTIONS)
     preset_block = (
         "Fast paths:\n"
         f"- Apply a preset: `arms init --preset <name>` (available: {format_available_presets()})\n"
         "- Apply structured answers: `arms init --answers-file path/to/answers.md`\n"
-        "- Or pass a short block inline: `arms init --answers-text \"Mission: ...\"`\n"
-        "- Supported answer formats: `Field: value`, `- **Field:** value`, or numbered questionnaire responses.\n\n"
+        "- Or reply in chat with the compact answer block below.\n\n"
     )
     missing_block = ""
     if missing_fields:
+        preview = missing_fields[:12]
+        remaining_count = len(missing_fields) - len(preview)
         missing_block = (
             "Still incomplete in `.arms/BRAND.md`:\n"
-            + "\n".join(f"- {field}" for field in missing_fields)
+            + "\n".join(f"- {field}" for field in preview)
+            + (f"\n- ...and {remaining_count} more fields in `.arms/BRAND.md`" if remaining_count > 0 else "")
             + "\n\n"
         )
     return (
         "📝 Brand Context is required for a new / empty project.\n"
-        "Fill the unanswered fields in `.arms/BRAND.md` or answer these in one block, then re-run `arms init` to resume:\n\n"
+        "Answer these now, or edit the full questionnaire in `.arms/BRAND.md`, then re-run `arms init`:\n\n"
         f"{preset_block}"
         f"{missing_block}"
-        f"{brand_questions}\n\n"
-        "After Brand Context, confirm the initial tech stack:\n\n"
-        f"{tech_stack_questions}\n\n"
-        "If this project includes a website or landing page, also answer this brief. Use `N/A` where it does not apply:\n\n"
-        f"{website_brief_questions}\n\n"
-        "The Brand Context and technical-direction questionnaire is stored in `.arms/BRAND.md`."
+        "Reply with this block:\n"
+        "```text\n"
+        f"{render_compact_intake_answer_block()}\n"
+        "```\n"
+        "Full 24-question intake is stored in `.arms/BRAND.md`.\n"
+        "This compact block is also saved to `.arms/BRAND_INTAKE.md` for AI tools that hide long command output."
     )
+
+
+def run_interactive_brand_intake(project_root: str, input_func=input, output_func=print) -> dict:
+    """Ask the compact Brand Context questions interactively in a terminal.
+
+    Each question from :data:`COMPACT_INTAKE_FIELDS` is asked in turn via
+    *input_func*. Users may press Enter to skip a single field or type ``skip``
+    (or ``stop``/``quit``) to end the form early. Collected answers are returned
+    as a ``Field: value`` block in ``answers_text`` ready for
+    :func:`apply_brand_inputs`.
+
+    Returns a dict with ``answered`` (bool) and ``answers_text`` (str).
+    Callers are responsible for gating this on an interactive TTY.
+    """
+    total = len(COMPACT_INTAKE_FIELDS)
+    output_func("")
+    output_func("📝 New / empty project detected — let's capture Brand Context.")
+    output_func("   Answer each question, press Enter to skip one, or type `skip` to stop the form.")
+    output_func("   You can refine anything later in `.arms/BRAND.md`, then re-run `arms init`.")
+    output_func("")
+
+    collected = []
+    for index, (label, hint) in enumerate(COMPACT_INTAKE_FIELDS, start=1):
+        suffix = f" ({hint})" if hint else ""
+        try:
+            raw_answer = input_func(f"  {index}/{total} {label}{suffix}: ")
+        except EOFError:
+            break
+        answer = (raw_answer or "").strip()
+        if answer.lower() in {"skip", "skip all", "stop", "quit", "q"}:
+            break
+        if not answer:
+            continue
+        collected.append(f"{label}: {answer}")
+
+    if not collected:
+        output_func("")
+        output_func("⏭️  No answers captured. The compact intake block stays in `.arms/BRAND_INTAKE.md`.")
+        return {"answered": False, "answers_text": ""}
+
+    output_func("")
+    output_func(f"🧾 Captured {len(collected)} Brand Context answer(s). Applying to `.arms/BRAND.md`...")
+    return {"answered": True, "answers_text": "\n".join(collected)}
+
+
+def sync_brand_intake_prompt(project_root: str, prompt: str = ""):
+    """Write or remove the durable brand-intake prompt artifact."""
+    intake_path = WorkspacePaths(project_root).brand_intake
+    if prompt:
+        with open(intake_path, "w", encoding="utf-8") as f:
+            f.write("# ARMS Brand Intake\n\n")
+            f.write("> Managed by ARMS Engine. Regenerated while `.arms/BRAND.md` is incomplete.\n\n")
+            f.write(prompt.rstrip())
+            f.write("\n")
+        return
+
+    if os.path.exists(intake_path):
+        os.remove(intake_path)
 
 
 def initialize_brand_context(project_root: str) -> dict:
@@ -1431,17 +1632,22 @@ def initialize_brand_context(project_root: str) -> dict:
         if is_new_project_brand_questionnaire(existing_content):
             missing_fields = get_missing_new_project_brand_fields(existing_content)
             if missing_fields:
+                prompt = render_new_project_brand_prompt(missing_fields)
+                sync_brand_intake_prompt(project_root, prompt)
                 print("📝 New-project BRAND.md is still incomplete. Reusing saved questionnaire.")
                 return {
                     "status": "questions_required",
-                    "prompt": render_new_project_brand_prompt(missing_fields),
+                    "prompt": prompt,
                 }
+            sync_brand_intake_prompt(project_root)
             print("✅ New-project BRAND.md is complete. Continuing initialization from saved answers.")
             return {"status": "existing"}
         if not brand_file_requires_bootstrap(existing_content):
+            sync_brand_intake_prompt(project_root)
             return {"status": "existing"}
 
     if detect_existing_project(project_root):
+        sync_brand_intake_prompt(project_root)
         print("🎨 Generating BRAND.md from existing project context...")
         with open(brand_path, "w", encoding="utf-8") as f:
             f.write(render_inferred_brand_context(project_root))
@@ -1451,10 +1657,12 @@ def initialize_brand_context(project_root: str) -> dict:
     print("🎨 Initializing new-project BRAND.md questionnaire...")
     with open(brand_path, "w", encoding="utf-8") as f:
         f.write(render_new_project_brand_questionnaire(project_root))
+    prompt = render_new_project_brand_prompt()
+    sync_brand_intake_prompt(project_root, prompt)
     print("📢 BRAND.md created for a new project. User answers are required before high-fidelity brand work begins.")
     return {
         "status": "questions_required",
-        "prompt": render_new_project_brand_prompt(),
+        "prompt": prompt,
     }
 
 

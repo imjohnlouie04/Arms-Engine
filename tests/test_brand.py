@@ -28,9 +28,13 @@ from arms_engine.brand import (
     normalize_structured_answer,
     parse_pyproject_metadata,
     parse_structured_answers,
+    render_compact_intake_answer_block,
+    render_new_project_brand_prompt,
     render_new_project_brand_questionnaire,
+    run_interactive_brand_intake,
     update_brand_field,
     upsert_note_entry,
+    COMPACT_INTAKE_FIELDS,
     NEW_PROJECT_BRAND_MARKER,
 )
 
@@ -269,6 +273,59 @@ class TestApplyAnswersToBrandContent(unittest.TestCase):
         self.assertEqual(summary["fields"], [])
         self.assertEqual(summary["notes"], [])
 
+    def test_compact_cli_answers_complete_new_project_questionnaire(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content = render_new_project_brand_questionnaire(tmpdir)
+            answers = parse_structured_answers(
+                """Project Name: OrbitOps
+Primary Use Case: SaaS
+Target Audience: operations teams
+Core Features: approvals, task routing, analytics
+Goal / Monetization Model: subscription
+Brand Personality: technical, trustworthy, sharp
+Visual Direction: Dark
+Preferred Tech Stack: A
+Deployment Target: 1
+Authentication Requirement: OAuth
+Website Brief: N/A
+Technical Constraints: TypeScript only
+"""
+            )
+
+            updated, summary = apply_answers_to_brand_content(content, answers)
+
+            self.assertFalse(get_missing_new_project_brand_fields(updated))
+            self.assertIn("Mission", summary["fields"])
+            self.assertIn("- **Project Type:** Web Application", updated)
+            self.assertIn("- **Experience Type:** N/A", updated)
+            self.assertIn("- Website Brief: N/A", updated)
+
+    def test_compact_cli_website_brief_fills_website_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content = render_new_project_brand_questionnaire(tmpdir)
+            answers = parse_structured_answers(
+                """Project Name: Harbor Dental
+Primary Use Case: Content-Marketing
+Target Audience: local dental patients
+Core Features: service pages, appointment CTA, testimonials
+Goal / Monetization Model: book consultations
+Brand Personality: warm, trustworthy
+Visual Direction: Light
+Preferred Tech Stack: C
+Deployment Target: 1
+Authentication Requirement: None
+Website Brief: local dental clinic site with hero, services, testimonials, contact form, appointment CTA, local SEO, real office images
+Technical Constraints: mobile-first
+"""
+            )
+
+            updated, _ = apply_answers_to_brand_content(content, answers)
+
+            self.assertFalse(get_missing_new_project_brand_fields(updated))
+            self.assertIn("- **Experience Type:** Website / landing page", updated)
+            self.assertIn("- **Required Website Sections:** local dental clinic", updated)
+            self.assertIn("- **SEO Focus:** local dental clinic", updated)
+
 
 class TestClassifyProjectType(unittest.TestCase):
     def test_developer_tooling_from_scripts(self):
@@ -440,6 +497,13 @@ class TestDetectExistingProject(unittest.TestCase):
             open(os.path.join(tmpdir, "README.md"), "w").close()
             self.assertFalse(detect_existing_project(tmpdir))
 
+    def test_bootstrap_only_files_are_not_existing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            open(os.path.join(tmpdir, "AGENTS.md"), "w").close()
+            open(os.path.join(tmpdir, "CLAUDE.md"), "w").close()
+            open(os.path.join(tmpdir, "GEMINI.md"), "w").close()
+            self.assertFalse(detect_existing_project(tmpdir))
+
 
 class TestDetectWorkspaceMode(unittest.TestCase):
     def test_new_project_marker_in_brand_content(self):
@@ -479,6 +543,92 @@ class TestRenderNewProjectBrandQuestionnaire(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             content = render_new_project_brand_questionnaire(d)
             self.assertIn(os.path.basename(d), content)
+
+
+class TestInteractiveBrandIntake(unittest.TestCase):
+    def _scripted_input(self, answers):
+        iterator = iter(answers)
+
+        def fake_input(_prompt=""):
+            try:
+                return next(iterator)
+            except StopIteration:
+                raise EOFError
+
+        return fake_input
+
+    def test_compact_block_stays_in_sync_with_fields(self):
+        # The printed compact answer block must be derivable from the same
+        # COMPACT_INTAKE_FIELDS the interactive form iterates over.
+        block = render_compact_intake_answer_block()
+        for label, _hint in COMPACT_INTAKE_FIELDS:
+            self.assertIn(f"{label}:", block)
+        self.assertIn(render_compact_intake_answer_block(), render_new_project_brand_prompt())
+
+    def test_interactive_intake_collects_answers(self):
+        answers = [
+            "Acme Tasks",
+            "SaaS",
+            "Indie developers",
+            "Kanban, reminders",
+            "Subscription",
+            "sharp, calm, modern",
+            "Dark",
+            "A",
+            "1",
+            "OAuth",
+            "N/A",
+            "None",
+        ]
+        result = run_interactive_brand_intake(
+            "/tmp/does-not-matter",
+            input_func=self._scripted_input(answers),
+            output_func=lambda *a, **k: None,
+        )
+        self.assertTrue(result["answered"])
+        self.assertIn("Project Name: Acme Tasks", result["answers_text"])
+        self.assertIn("Preferred Tech Stack: A", result["answers_text"])
+        self.assertIn("Technical Constraints: None", result["answers_text"])
+
+    def test_interactive_intake_applies_to_brand_md(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".arms"))
+            brand_path = os.path.join(tmp, ".arms", "BRAND.md")
+            with open(brand_path, "w", encoding="utf-8") as f:
+                f.write(render_new_project_brand_questionnaire(tmp))
+
+            answers = [
+                "Acme Tasks", "SaaS", "Indie developers", "Kanban", "Subscription",
+                "sharp, calm", "Dark", "A", "1", "OAuth", "N/A", "None",
+            ]
+            result = run_interactive_brand_intake(
+                tmp,
+                input_func=self._scripted_input(answers),
+                output_func=lambda *a, **k: None,
+            )
+            answers_dict = parse_structured_answers(result["answers_text"])
+            # Compact-block label "Target Audience" must resolve to Primary Audience.
+            self.assertEqual(answers_dict.get("Primary Audience"), "Indie developers")
+            self.assertEqual(answers_dict.get("Project Name"), "Acme Tasks")
+
+    def test_interactive_intake_skip_stops_form(self):
+        result = run_interactive_brand_intake(
+            "/tmp/does-not-matter",
+            input_func=self._scripted_input(["Acme", "skip", "ignored"]),
+            output_func=lambda *a, **k: None,
+        )
+        self.assertTrue(result["answered"])
+        self.assertIn("Project Name: Acme", result["answers_text"])
+        self.assertNotIn("ignored", result["answers_text"])
+
+    def test_interactive_intake_all_skipped_returns_unanswered(self):
+        result = run_interactive_brand_intake(
+            "/tmp/does-not-matter",
+            input_func=self._scripted_input(["", "", "", "", "", "", "", "", "", "", "", ""]),
+            output_func=lambda *a, **k: None,
+        )
+        self.assertFalse(result["answered"])
+        self.assertEqual(result["answers_text"], "")
 
 
 if __name__ == "__main__":

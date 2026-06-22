@@ -18,6 +18,12 @@ This file helps Copilot CLI discover available agents and their capabilities in 
 
 > **Non-negotiable:** Executing a work request without logging it first is a protocol violation.
 
+### Brand Intake Display Rule
+
+If `arms init` or `arms start` halts with `Awaiting Brand Context answers`, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless the user explicitly asked for a path-only summary.
+
+For a new / empty project, present the intake as an interactive numbered question form — one prompt per field in `.arms/BRAND_INTAKE.md` — and WAIT for the user's answers before doing anything else. Never silently scaffold `.arms/BRAND.md` / `.arms/BRAND_INTAKE.md` and continue without asking. Apply the user's reply with `arms init --answers-text "<block>"` (or `arms intake`), then resume the boot sequence.
+
 ---
 
 ## Available Agents
@@ -78,6 +84,10 @@ Skills are mirrored from `arms_engine/skills/` into `.agents/skills/` and `.gith
 - Route that row to the correct specialist agent and auto-fill the bound skill from the ARMS registry.
 - Logging a row only updates `.arms/SESSION.md`; it does **not** activate that specialist automatically. After the row points at the correct owner, invoke `/agent <assigned-agent>` to hand execution to that specialist.
 - If the message is only a clarification, approval, status nudge, or continuation of an already-open task, keep it attached to the current row and use `arms task update` semantics only when the ledger entry itself materially changes.
+
+## Model Tier Routing
+
+Each agent above runs on a right-sized model per platform, controlled by the `model_tier` (`economy` | `standard` | `power`) declared in `arms_engine/agents.yaml` and resolved in `arms_engine/model_routing.yaml`. This drives `model:` frontmatter in `.claude/agents/*.md` and `.gemini/agents/*.md`, and `model` / `model_reasoning_effort` in `.codex/agents/*.toml`.
 
 ## Project Instructions
 

@@ -11,7 +11,12 @@ from .brand import (
     PROJECT_PRESETS,
     apply_brand_inputs,
     format_available_presets,
+    get_missing_new_project_brand_fields,
     initialize_brand_context,
+    read_text_file,
+    render_new_project_brand_prompt,
+    run_interactive_brand_intake,
+    sync_brand_intake_prompt,
 )
 from .compression import compress_workspace, format_compression_summary, workspace_compression_reasons
 from .doctor import handle_doctor_command, identify_doctor_command
@@ -42,6 +47,7 @@ from .skills import (
     create_skills_registry,
     sync_agents,
     sync_agents_claude,
+    sync_agents_codex,
     sync_agents_copilot,
     sync_engine_instructions,
     sync_root_agents_guide,
@@ -89,9 +95,39 @@ def normalize_arms_root(path):
 
 
 def has_project_root_markers(path):
+    try:
+        if os.path.abspath(path) == os.path.expanduser("~"):
+            return False
+    except Exception:
+        pass
+
     if any(os.path.exists(os.path.join(path, marker)) for marker in CURRENT_PROJECT_ROOT_MARKERS):
         return True
 
+    if any(os.path.exists(os.path.join(path, marker)) for marker in LEGACY_PROJECT_ROOT_STRONG_MARKERS):
+        return True
+
+    hint_count = sum(
+        1
+        for marker in LEGACY_PROJECT_ROOT_HINT_MARKERS
+        if os.path.exists(os.path.join(path, marker))
+    )
+    return hint_count >= 2
+
+
+def has_empty_cwd_parent_root_markers(path):
+    """Return True for parent markers that should capture an empty child cwd.
+
+    A brand-new project directory is often empty and may live inside a broader
+    workspace or git repo. In that case generic markers like `.git` or
+    `package.json` belong to the parent workspace, not the new project. Only
+    climb out of an empty cwd for existing ARMS/legacy state that clearly
+    indicates a continuation of an already-managed project.
+    """
+    if os.path.exists(os.path.join(path, ".arms")):
+        return True
+    if os.path.exists(os.path.join(path, ".gemini", "SESSION.md")):
+        return True
     if any(os.path.exists(os.path.join(path, marker)) for marker in LEGACY_PROJECT_ROOT_STRONG_MARKERS):
         return True
 
@@ -114,7 +150,7 @@ def get_project_root():
     if not meaningful_entries and not has_project_root_markers(original_cwd):
         probe = os.path.dirname(original_cwd)
         while probe != os.path.dirname(probe):
-            if has_project_root_markers(probe):
+            if has_empty_cwd_parent_root_markers(probe):
                 return probe
             probe = os.path.dirname(probe)
         return original_cwd
@@ -175,6 +211,83 @@ def prompt_context_overwrite(error):
     return confirm.strip().lower() == "y"
 
 
+def is_intake_command(command_parts):
+    return bool(command_parts) and command_parts[0].strip().lower() == "intake"
+
+
+def interactive_intake_available(
+    is_yolo,
+    preset_name,
+    answers_text,
+    no_interactive,
+    monitor=None,
+    watch=False,
+):
+    """Return True when ARMS should prompt the Brand Context questions inline.
+
+    Interactive prompting only makes sense for a human at a real terminal, so it
+    is suppressed for automated/non-TTY runs (AI agents capturing output), YOLO
+    mode, watch/monitor sessions, and whenever answers were already supplied via
+    ``--preset`` / ``--answers-*`` or disabled with ``--no-interactive``.
+    """
+    if no_interactive or watch or is_yolo or monitor is not None:
+        return False
+    if preset_name or (answers_text or "").strip():
+        return False
+    try:
+        return bool(
+            sys.stdin is not None
+            and sys.stdin.isatty()
+            and sys.stdout is not None
+            and sys.stdout.isatty()
+        )
+    except (ValueError, AttributeError):
+        return False
+
+
+def handle_intake_command(project_root, preset_name="", answers_text="", allow_interactive=False):
+    """Print or apply the compact brand intake without running the full init flow."""
+    paths = WorkspacePaths(project_root)
+    os.makedirs(paths.arms_dir, exist_ok=True)
+
+    if not os.path.exists(paths.brand):
+        with open(paths.brand, "w", encoding="utf-8") as f:
+            from .brand import render_new_project_brand_questionnaire
+
+            f.write(render_new_project_brand_questionnaire(project_root))
+
+    changed = False
+    if preset_name or answers_text.strip():
+        changed = apply_brand_inputs(
+            project_root,
+            preset_name=preset_name,
+            answers_text=answers_text,
+        )
+
+    brand_content = read_text_file(paths.brand)
+    missing_fields = get_missing_new_project_brand_fields(brand_content)
+
+    if missing_fields and allow_interactive:
+        intake_result = run_interactive_brand_intake(project_root)
+        if intake_result.get("answered"):
+            if apply_brand_inputs(project_root, answers_text=intake_result["answers_text"]):
+                changed = True
+            brand_content = read_text_file(paths.brand)
+            missing_fields = get_missing_new_project_brand_fields(brand_content)
+
+    if not missing_fields:
+        sync_brand_intake_prompt(project_root)
+        print("✅ Brand intake is complete.")
+        if changed:
+            print("🧾 Applied intake answers to .arms/BRAND.md")
+        print("Next step: run `arms init` to generate synthesis, prompts, and startup tasks.")
+        return
+
+    prompt = render_new_project_brand_prompt(missing_fields)
+    sync_brand_intake_prompt(project_root, prompt)
+    print(prompt)
+
+
 def run_monitored_step(monitor, label, func, *args, **kwargs):
     if monitor is None:
         return func(*args, **kwargs)
@@ -192,6 +305,7 @@ def run_init_once(
     show_banner=True,
     context_overwrite=None,
     monitor=None,
+    allow_interactive=False,
 ):
     arms_root = normalize_arms_root(arms_root)
     if monitor is not None:
@@ -224,6 +338,7 @@ def run_init_once(
         sync_agents(arms_root, project_root)
         sync_agents_copilot(arms_root, project_root)
         sync_agents_claude(arms_root, project_root)
+        sync_agents_codex(arms_root, project_root)
         sync_skills_copilot(arms_root, project_root)
         sync_skills_claude(arms_root, project_root)
         create_skills_registry(arms_root, project_root)
@@ -253,6 +368,18 @@ def run_init_once(
                 initialize_brand_context,
                 project_root,
             )
+
+    if (
+        allow_interactive
+        and monitor is None
+        and brand_context_state
+        and brand_context_state.get("status") == "questions_required"
+    ):
+        intake_result = run_interactive_brand_intake(project_root)
+        if intake_result.get("answered"):
+            apply_brand_inputs(project_root, answers_text=intake_result["answers_text"])
+            brand_context_state = initialize_brand_context(project_root)
+
     context_synthesis_ready = False
     generated_prompts_ready = False
 
@@ -354,6 +481,9 @@ def run_init_once(
         print()
         print(brand_context_state["prompt"])
         print()
+        print("🧾 Compact Brand Context block saved at .arms/BRAND_INTAKE.md")
+        print("   AI agents: read .arms/BRAND_INTAKE.md and show the compact answer block inline.")
+        print()
         print_next_recommended_step()
         print("\n✅ ARMS Engine sequence complete. Awaiting Brand Context answers. → HALT")
         return {
@@ -414,6 +544,11 @@ def main():
         "--watch",
         action="store_true",
         help="Watch .arms/BRAND.md and auto-rerun init while the project is waiting on brand context.",
+    )
+    parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Never prompt for Brand Context answers in the terminal; print the intake block and halt instead.",
     )
     parser.add_argument(
         "--monitor",
@@ -491,6 +626,29 @@ def main():
         raise SystemExit(1)
 
     arms_root = normalize_arms_root(args.root) if args.root else get_arms_root()
+    if args.preset and args.preset not in PROJECT_PRESETS:
+        print(f"❌ ERROR: Unknown preset '{args.preset}'.")
+        print(f"   Available presets: {format_available_presets()}")
+        raise SystemExit(1)
+    if is_intake_command(args.command):
+        try:
+            answers_text = read_answers_input(args)
+        except OSError as exc:
+            print(f"❌ ERROR: Unable to read answers input: {exc}")
+            raise SystemExit(1)
+        intake_preset = (args.preset or "").strip()
+        handle_intake_command(
+            project_root,
+            preset_name=intake_preset,
+            answers_text=answers_text,
+            allow_interactive=interactive_intake_available(
+                is_yolo,
+                intake_preset,
+                answers_text,
+                args.no_interactive,
+            ),
+        )
+        return
     doctor_command = identify_doctor_command(args.command)
     if args.fix and not doctor_command:
         print("❌ ERROR: `--fix` is only supported with `arms doctor`.")
@@ -532,10 +690,6 @@ def main():
     if protocol_command:
         handle_protocol_command(protocol_command, project_root, arms_root)
         return
-    if args.preset and args.preset not in PROJECT_PRESETS:
-        print(f"❌ ERROR: Unknown preset '{args.preset}'.")
-        print(f"   Available presets: {format_available_presets()}")
-        raise SystemExit(1)
     try:
         answers_text = read_answers_input(args)
     except OSError as exc:
@@ -552,6 +706,15 @@ def main():
         monitor.launch()
         print(f"🖥️  Activity monitor: {monitor.launch_description()}")
 
+    allow_interactive = interactive_intake_available(
+        is_yolo,
+        pending_preset,
+        pending_answers_text,
+        args.no_interactive,
+        monitor=monitor,
+        watch=args.watch,
+    )
+
     while True:
         try:
             result = run_init_once(
@@ -565,6 +728,7 @@ def main():
                 show_banner=show_banner,
                 context_overwrite=pending_context_overwrite,
                 monitor=monitor,
+                allow_interactive=allow_interactive,
             )
         except SessionContextMismatchError as exc:
             if not prompt_context_overwrite(exc):
