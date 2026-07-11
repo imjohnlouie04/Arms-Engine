@@ -218,3 +218,17 @@ Record of all completed and cancelled tasks.
 | # | Task | Agent | Status | Completed |
 |---|------|-------|--------|-----------|
 | 1 | Implement dedicated arms intake command to print and apply brand questionnaire | arms-main-agent | Done | 2026-06-15T09:41:51Z |
+
+## Archive — 2026-07-11T19:00:45Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Auto-detect CLI environment and tailor handoff delegation hint and model details | arms-main-agent | Done | 2026-07-11T19:00:45Z |
+
+## Archive — 2026-07-11T19:08:42Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity | arms-main-agent | Done | 2026-07-11T19:08:42Z |

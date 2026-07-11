@@ -30,7 +30,7 @@ PROJECT_INSTRUCTION_SHARED_SECTION = """### ARMS Orchestration & Intake
 
 LEGACY_GEMINI_BRIDGE_TEMPLATE = """# Gemini Instructions
 
-> Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol.
+> Managed bridge created by ARMS so Google Antigravity normal chat follows the shared task-intake protocol.
 > If `./GEMINI.md` exists, read it as additional project context and preserve it as project-owned instructions.
 
 {shared_section}
@@ -148,7 +148,10 @@ def remove_obsolete_instruction_bridges(project_root):
 
     with open(legacy_gemini_path, "r", encoding="utf-8") as handle:
         existing_content = handle.read().strip()
-    if "Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol." not in existing_content:
+    if not any(marker in existing_content for marker in (
+        "Managed bridge created by ARMS so Gemini CLI normal chat follows the shared task-intake protocol.",
+        "Managed bridge created by ARMS so Google Antigravity normal chat follows the shared task-intake protocol."
+    )):
         return []
 
     os.remove(legacy_gemini_path)

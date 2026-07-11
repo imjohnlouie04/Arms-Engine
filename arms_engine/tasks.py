@@ -592,7 +592,9 @@ def log_task_row(
         row["Task"] = normalized_task
         finalized_rows = finalize_rows(rows, arms_root)
         finalized_row = finalized_rows[existing_index]
-        delegation_hint = render_delegation_hint(finalized_row["Assigned Agent"], finalized_row.get("Model", ""))
+        delegation_hint = render_delegation_hint(
+            finalized_row["Assigned Agent"], finalized_row.get("Model", ""), arms_root=arms_root
+        )
         action_lines = [
             "Updated existing task row `#{}` instead of duplicating it.".format(finalized_row["#"]),
             "- Task: `{}`".format(finalized_row["Task"]),
@@ -639,7 +641,9 @@ def log_task_row(
     )
     finalized_rows = finalize_rows(rows, arms_root)
     finalized_row = finalized_rows[-1]
-    delegation_hint = render_delegation_hint(finalized_row["Assigned Agent"], finalized_row.get("Model", ""))
+    delegation_hint = render_delegation_hint(
+        finalized_row["Assigned Agent"], finalized_row.get("Model", ""), arms_root=arms_root
+    )
     action_lines = [
         "Logged a new task row in `.arms/SESSION.md`.",
         "- Task ID: `{}`".format(finalized_row["#"]),
@@ -719,7 +723,7 @@ def update_task_row(
     finalized_row = finalized_rows[task_index]
     archived = finalized_row["Status"].strip().lower() in {"done", "cancelled", "canceled"}
     delegation_hint = "" if archived else render_delegation_hint(
-        finalized_row["Assigned Agent"], finalized_row.get("Model", "")
+        finalized_row["Assigned Agent"], finalized_row.get("Model", ""), arms_root=arms_root
     )
     next_step = (
         "Task archived. Continue with the next active row or log a new task when more work appears. → HALT"
@@ -801,7 +805,7 @@ def finalize_rows(rows, arms_root):
     return parse_task_rows(render_task_table(rows, arms_root))
 
 
-def render_delegation_hint(agent_name, model_tier=""):
+def render_delegation_hint(agent_name, model_tier="", arms_root=None):
     """Render the explicit multi-agent handoff instruction for a task row.
 
     Updating `.arms/SESSION.md` does not itself switch the host AI tool into
@@ -812,11 +816,62 @@ def render_delegation_hint(agent_name, model_tier=""):
     if not normalized_agent or normalized_agent == "arms-main-agent":
         return ""
     tier = (model_tier or "").strip()
-    tier_note = " (model tier: `{}`)".format(tier) if tier and tier not in {"—", "-"} else ""
-    return (
-        "Delegate to `{agent}`{tier} — Claude Code: run the `{agent}` subagent via the Task tool; "
-        "Copilot CLI: `/agent {agent}`; other CLIs: switch the session to the `{agent}` agent mirror."
-    ).format(agent=normalized_agent, tier=tier_note)
+
+    # Detect the current CLI environment
+    active_cli = None
+    if os.getenv("ANTIGRAVITY_AGENT") or os.getenv("ANTIGRAVITY_CONVERSATION_ID"):
+        active_cli = "antigravity"
+    elif os.getenv("CLAUDE_CODE") or os.getenv("CLAUDECODE"):
+        active_cli = "claude"
+    elif os.getenv("COPILOT_CLI") or os.getenv("GITHUB_COPILOT_CLI"):
+        active_cli = "copilot"
+    elif os.getenv("OPENAI_CODEX_CLI"):
+        active_cli = "codex"
+
+    model_name = None
+    if arms_root and active_cli:
+        platform_key = "gemini" if active_cli == "antigravity" else active_cli
+        if platform_key in {"gemini", "claude", "codex"}:
+            try:
+                from .model_routing import load_model_routing, resolve_agent_model
+                routing = load_model_routing(arms_root)
+                resolved = resolve_agent_model({"model_tier": tier}, platform_key, routing)
+                if isinstance(resolved, dict):
+                    model_name = resolved.get("model")
+                elif isinstance(resolved, str):
+                    model_name = resolved
+            except Exception:
+                pass
+
+    model_note = ""
+    if model_name:
+        model_note = ", model: `{}`".format(model_name)
+
+    tier_note = " (model tier: `{}`{})".format(tier, model_note) if tier and tier not in {"—", "-"} else ""
+
+    if active_cli == "antigravity":
+        return (
+            "Delegate to `{agent}`{tier} — Antigravity: run the `{agent}` subagent or "
+            "switch the session to the `{agent}` agent mirror."
+        ).format(agent=normalized_agent, tier=tier_note)
+    elif active_cli == "claude":
+        return (
+            "Delegate to `{agent}`{tier} — Claude Code: run the `{agent}` subagent via the Task tool."
+        ).format(agent=normalized_agent, tier=tier_note)
+    elif active_cli == "copilot":
+        return (
+            "Delegate to `{agent}`{tier} — Copilot CLI: `/agent {agent}`."
+        ).format(agent=normalized_agent, tier=tier_note)
+    elif active_cli == "codex":
+        return (
+            "Delegate to `{agent}`{tier} — Codex CLI: switch the session to the `{agent}` agent mirror."
+        ).format(agent=normalized_agent, tier=tier_note)
+    else:
+        # Fallback to the original combined message
+        return (
+            "Delegate to `{agent}`{tier} — Claude Code: run the `{agent}` subagent via the Task tool; "
+            "Copilot CLI: `/agent {agent}`; other CLIs: switch the session to the `{agent}` agent mirror."
+        ).format(agent=normalized_agent, tier=tier_note)
 
 
 def infer_agent_from_task(task_text):

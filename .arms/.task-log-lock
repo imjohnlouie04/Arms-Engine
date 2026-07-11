@@ -1,1 +1,1 @@
-{"signature": {"task": "implement dedicated arms intake command to print and apply brand questionnaire", "assigned_agent": "arms-main-agent", "active_skill": "arms-orchestrator", "dependencies": "", "status": ""}, "timestamp": 1781516308.141748}
+{"signature": {"task": "remove deprecated gemini cli support and update instructions to focus on google antigravity", "assigned_agent": "arms-main-agent", "active_skill": "", "dependencies": "", "status": ""}, "timestamp": 1783796761.757041}

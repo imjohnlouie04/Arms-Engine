@@ -27,7 +27,7 @@
 - **Deployment Target:** Vercel
 - **Authentication:** Email/password or OAuth via Supabase Auth
 - **Recommendation Source:** ARMS recommendation
-- **Recommendation Note:** Requested stack was Not specified, so ARMS recommends Next.js + Supabase + shadcn/ui for this project type.
+- **Recommendation Note:** Requested stack was Not specified, so ARMS recommends Next.js + Supabase + shadcn/ui for this project type. A live tooling-research pass can replace this default with a better project-specific fit.
 
 ## Experience & Delivery Signals
 - **Project Type:** Developer Tooling
@@ -49,7 +49,7 @@
 - Brand personality is defined as Technical, precise, efficient.
 
 ### Needs Attention
-- Requested stack was Not specified, so ARMS recommends Next.js + Supabase + shadcn/ui for this project type.
+- Requested stack was Not specified, so ARMS recommends Next.js + Supabase + shadcn/ui for this project type. A live tooling-research pass can replace this default with a better project-specific fit.
 - Core features are still open-ended; product scope should tighten them first.
 - Deployment target was not specified, so ARMS defaulted to Vercel.
 - Existing brand assets were not provided; media work should treat logo and imagery as net-new.

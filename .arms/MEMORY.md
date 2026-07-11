@@ -13,17 +13,10 @@
 
 ## Developer Preferences
 
-- [PENDING APPROVAL][memory-20260615-01]: Capture the reusable implementation decision behind 'Fix arms init so empty projects still initiate project assessment' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-05]: Capture the preferred orchestration pattern that emerged while implementing 'Persist brand intake prompt so AI tools that summarize CLI output still show questionnaire' so future deep-dive work follows the same path.
+- [APPROVED][memory-20260711-01]: Capture the reusable implementation decision behind 'Auto-detect CLI environment and tailor handoff delegation hint and model details' if this session establishes a pattern worth repeating.
+- [APPROVED][memory-20260711-02]: Capture the reusable implementation decision behind 'Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity' if this session establishes a pattern worth repeating.
 
 ## Project Context & MVP
-
-- [PENDING APPROVAL][memory-20260615-02]: Capture the reusable implementation decision behind 'Fix arms init question output so empty projects visibly show the brand/context questionnaire' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-03]: Capture the reusable implementation decision behind 'Fix empty-project init so status shows brand intake questions and next action' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-04]: Capture the reusable implementation decision behind 'Investigate brand assessment CLI failures and cross-tool AI integration support' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-06]: Capture the reusable implementation decision behind 'Force AI tool summaries to display brand intake questions after arms init halt' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-07]: Capture the reusable implementation decision behind 'Design robust brand intake display flow that works despite AI command-output summarization' if this session establishes a pattern worth repeating.
-- [PENDING APPROVAL][memory-20260615-08]: Capture the reusable implementation decision behind 'Implement dedicated arms intake command to print and apply brand questionnaire' if this session establishes a pattern worth repeating.
 
 ## Primary Use Case & Implications
 

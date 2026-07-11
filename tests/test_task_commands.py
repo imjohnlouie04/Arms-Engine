@@ -235,15 +235,16 @@ class TaskCommandTests(unittest.TestCase):
             (project_root / "README.md").write_text("# Demo\nDelegation handoff.\n", encoding="utf-8")
             self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
 
-            _, output = self.invoke_cli(
-                project_root,
-                "task",
-                "log",
-                "--root",
-                str(ARMS_ROOT),
-                "--task",
-                "Fix responsive layout breaking on tablets",
-            )
+            with mock.patch.dict(os.environ, {"ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+                _, output = self.invoke_cli(
+                    project_root,
+                    "task",
+                    "log",
+                    "--root",
+                    str(ARMS_ROOT),
+                    "--task",
+                    "Fix responsive layout breaking on tablets",
+                )
 
             self.assertIn("Delegate to `arms-frontend-agent`", output)
             self.assertIn("model tier: `standard`", output)
@@ -256,6 +257,20 @@ class TaskCommandTests(unittest.TestCase):
         hint = init_arms.render_delegation_hint("arms-data-agent", "power")
         self.assertIn("arms-data-agent", hint)
         self.assertIn("model tier: `power`", hint)
+
+    def test_render_delegation_hint_detects_cli_env(self):
+        # Test Claude Code detection
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE": "1", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+            hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard")
+            self.assertIn("Claude Code: run the `arms-frontend-agent` subagent via the Task tool", hint)
+            self.assertNotIn("Copilot CLI", hint)
+
+        # Test Antigravity detection
+        with mock.patch.dict(os.environ, {"ANTIGRAVITY_AGENT": "1"}):
+            hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
+            self.assertIn("Antigravity: run the `arms-frontend-agent` subagent or switch the session", hint)
+            self.assertIn("model: `gemini-flash-latest`", hint)
+            self.assertNotIn("Claude Code", hint)
 
     def test_task_routing_ambiguous_tasks_stay_with_main_agent(self):
         # A single weak token overlap must not route away from the orchestrator.

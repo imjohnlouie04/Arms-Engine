@@ -1,60 +1,33 @@
 {
   "entries": [
     {
-      "confidence": 0.25,
-      "id": "memory-20260615-01",
-      "last_validated": "2026-06-15T09:30:59Z",
+      "confidence": 0.99,
+      "id": "memory-20260711-01",
+      "last_validated": "2026-07-11T19:08:49Z",
+      "section": "Developer Preferences",
+      "seen_count": 3,
+      "status": "approved",
+      "text": "Capture the reusable implementation decision behind 'Auto-detect CLI environment and tailor handoff delegation hint and model details' if this session establishes a pattern worth repeating."
+    },
+    {
+      "confidence": 0.95,
+      "id": "memory-20260711-02",
+      "last_validated": "2026-07-11T19:08:49Z",
       "section": "Developer Preferences",
       "seen_count": 1,
-      "status": "pending",
-      "text": "Capture the reusable implementation decision behind 'Fix arms init so empty projects still initiate project assessment' if this session establishes a pattern worth repeating."
-    },
-    {
-      "confidence": 0.25,
-      "id": "memory-20260615-05",
-      "last_validated": "2026-06-15T09:30:59Z",
-      "section": "Developer Preferences",
-      "seen_count": 1,
-      "status": "pending",
-      "text": "Capture the preferred orchestration pattern that emerged while implementing 'Persist brand intake prompt so AI tools that summarize CLI output still show questionnaire' so future deep-dive work follows the same path."
-    },
-    {
-      "confidence": 0.25,
-      "id": "memory-20260615-02",
-      "last_validated": "2026-06-15T09:30:59Z",
-      "section": "Project Context & MVP",
-      "seen_count": 1,
-      "status": "pending",
-      "text": "Capture the reusable implementation decision behind 'Fix arms init question output so empty projects visibly show the brand/context questionnaire' if this session establishes a pattern worth repeating."
-    },
-    {
-      "confidence": 0.25,
-      "id": "memory-20260615-03",
-      "last_validated": "2026-06-15T09:30:59Z",
-      "section": "Project Context & MVP",
-      "seen_count": 1,
-      "status": "pending",
-      "text": "Capture the reusable implementation decision behind 'Fix empty-project init so status shows brand intake questions and next action' if this session establishes a pattern worth repeating."
-    },
-    {
-      "confidence": 0.25,
-      "id": "memory-20260615-04",
-      "last_validated": "2026-06-15T09:30:59Z",
-      "section": "Project Context & MVP",
-      "seen_count": 1,
-      "status": "pending",
-      "text": "Capture the reusable implementation decision behind 'Investigate brand assessment CLI failures and cross-tool AI integration support' if this session establishes a pattern worth repeating."
+      "status": "approved",
+      "text": "Capture the reusable implementation decision behind 'Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity' if this session establishes a pattern worth repeating."
     },
     {
       "confidence": 0.99,
       "id": "memory-20260610-02",
-      "last_validated": "2026-06-15T09:30:59Z",
+      "last_validated": "2026-07-11T19:08:49Z",
       "section": "Known Bugs & Fixes",
-      "seen_count": 3,
+      "seen_count": 6,
       "status": "approved",
       "text": "When a sync target gains per-platform content variants (e.g. `model:` frontmatter on `.claude/agents/*.md` and `.gemini/agents/*.md` driven by `model_routing.yaml`), `arms doctor`'s `validate_agent_mirrors` check must build expected content with matching `platform=`/`routing=` args per mirror dir -- otherwise every agent mirror is reported as perpetually stale right after a clean sync."
     }
   ],
-  "generated_at": "2026-06-15T09:30:59Z",
+  "generated_at": "2026-07-11T19:08:49Z",
   "version": 1
 }

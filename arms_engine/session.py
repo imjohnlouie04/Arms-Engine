@@ -1533,7 +1533,6 @@ def detect_execution_mode():
     parallel_env_markers = (
         "COPILOT_CLI",
         "GITHUB_COPILOT_CLI",
-        "GEMINI_CLI",
         "CLAUDECODE",
         "CLAUDE_CODE",
         "OPENAI_CODEX_CLI",

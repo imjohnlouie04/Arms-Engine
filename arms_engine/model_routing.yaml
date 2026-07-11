@@ -13,7 +13,7 @@
 # Synced into:
 #   - .claude/agents/*.md   -> `model:` frontmatter (Claude Code subagents)
 #   - .codex/agents/*.toml  -> `model` / `model_reasoning_effort` (Codex CLI custom agents)
-#   - .gemini/agents/*.md   -> `model:` frontmatter (Gemini CLI / Google Antigravity)
+#   - .gemini/agents/*.md   -> `model:` frontmatter (Google Antigravity)
 
 platforms:
   claude:
