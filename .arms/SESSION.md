@@ -1,9 +1,9 @@
 # ARMS Session Log
-Generated: 2026-07-11T19:08:49Z
+Generated: 2026-07-11T19:10:31Z
 
 ## Environment
 - ARMS Root: /Users/johnlouiebinas/Documents/Project/Arms-Engine/arms_engine
-- Engine Version: 1.11.0+dirty
+- Engine Version: 1.11.1
 - Project Root: /Users/johnlouiebinas/Documents/Project/Arms-Engine
 - Project Name: arms-engine
 - Execution Mode: Simulated
@@ -45,7 +45,7 @@ Generated: 2026-07-11T19:08:49Z
 ## Memory Packet
 - [Developer Preferences] Capture the reusable implementation decision behind 'Auto-detect CLI environment and tailor handoff delegation hint and model details' if this session establishes a pattern worth repeating. (confidence: 0.99)
 - [Known Bugs & Fixes] When a sync target gains per-platform content variants (e.g. `model:` frontmatter on `.claude/agents/*.md` and `.gemini/agents/*.md` driven by `model_routing.yaml`), `arms doctor`'s `validate_agent_mirrors` check must build expected content with matching `platform=`/`routing=` args per mirror dir -- otherwise every agent mirror is reported as perpetually stale right after a clean sync. (confidence: 0.99)
-- [Developer Preferences] Capture the reusable implementation decision behind 'Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity' if this session establishes a pattern worth repeating. (confidence: 0.95)
+- [Developer Preferences] Capture the reusable implementation decision behind 'Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity' if this session establishes a pattern worth repeating. (confidence: 0.97)
 
 ## Memory Suggestions
 - Review session-derived memory candidates before appending to `.arms/MEMORY.md`.
