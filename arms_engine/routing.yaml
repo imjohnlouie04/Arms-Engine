@@ -2,6 +2,8 @@
 # Maps agent names to keyword patterns used for auto-routing plain-text task descriptions.
 # Patterns are matched as whole words (case-insensitive) against the task text.
 # First matching rule wins; agents listed earlier have higher priority.
+# When no rule matches, a scored token-overlap fallback picks the closest agent
+# before defaulting to arms-main-agent (see infer_agent_from_task in tasks.py).
 
 routing:
   arms-main-agent:
@@ -30,6 +32,17 @@ routing:
       - success metric
       - product charter
       - feature brief
+      - feature request
+      - acceptance criteria
+      - backlog
+      - milestone
+      - mvp
+      - personas
+      - competitive analysis
+      - readme
+      - documentation
+      - docs
+      - changelog
 
   arms-media-agent:
     keywords:
@@ -43,6 +56,13 @@ routing:
       - hero image
       - asset
       - assets
+      - favicon
+      - og image
+      - banner
+      - artwork
+      - photo
+      - photos
+      - imagery
 
   arms-security-agent:
     keywords:
@@ -60,6 +80,20 @@ routing:
       - security audit
       - permission audit
       - rls policy
+      - rls
+      - cve
+      - cves
+      - dependency audit
+      - penetration
+      - encryption
+      - encrypt
+      - sanitize
+      - sanitization
+      - captcha
+      - 2fa
+      - mfa
+      - password policy
+      - abuse
 
   arms-qa-agent:
     keywords:
@@ -73,6 +107,16 @@ routing:
       - a11y
       - accessibility
       - pre-flight
+      - unit test
+      - unit tests
+      - test coverage
+      - coverage
+      - flaky
+      - lint
+      - linting
+      - type-check
+      - typecheck
+      - smoke test
 
   arms-devops-agent:
     keywords:
@@ -89,6 +133,18 @@ routing:
       - kubernetes
       - vercel
       - release build
+      - github actions
+      - gitlab ci
+      - build script
+      - environment variable
+      - env var
+      - hosting
+      - domain
+      - dns
+      - ssl
+      - monitoring
+      - scaffold
+      - boilerplate
 
   arms-seo-agent:
     keywords:
@@ -102,6 +158,13 @@ routing:
       - lighthouse
       - performance
       - web vitals
+      - sitemap
+      - robots.txt
+      - canonical
+      - search ranking
+      - page speed
+      - page load
+      - alt text
 
   arms-data-agent:
     keywords:
@@ -115,6 +178,16 @@ routing:
       - supabase
       - table
       - index
+      - data model
+      - db
+      - orm
+      - prisma
+      - drizzle
+      - seed data
+      - backup
+      - column
+      - row-level
+      - indexes
 
   arms-frontend-agent:
     keywords:
@@ -134,6 +207,35 @@ routing:
       - styling
       - css
       - visual polish
+      - dark mode
+      - light mode
+      - screen
+      - dashboard
+      - form
+      - forms
+      - button
+      - modal
+      - dropdown
+      - menu
+      - navigation
+      - toggle
+      - animation
+      - landing page
+      - style
+      - tailwind
+      - shadcn
+      - react
+      - vue
+      - svelte
+      - next.js
+      - nuxt
+      - astro
+      - font
+      - typography
+      - breakpoint
+      - breakpoints
+      - look better
+      - design
 
   arms-backend-agent:
     keywords:
@@ -149,3 +251,28 @@ routing:
       - model
       - business logic
       - server
+      - signup
+      - sign up
+      - sign in
+      - signin
+      - registration
+      - magic link
+      - magic links
+      - oauth
+      - webhook
+      - webhooks
+      - notification
+      - notifications
+      - email
+      - sms
+      - queue
+      - cron
+      - rate limiting
+      - rate limit
+      - integration
+      - stripe
+      - payment
+      - payments
+      - rest
+      - graphql
+      - websocket

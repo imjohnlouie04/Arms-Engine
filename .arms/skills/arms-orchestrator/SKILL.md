@@ -115,11 +115,15 @@ If the user wants live bootstrap diagnostics, prefer `arms init --monitor` (Pyth
 
 ### Initialization Continuation Rule
 
-If initialization HALTS to collect Brand Context and initial tech stack answers for a new / empty project, the **next user reply containing those answers is not a fresh request**. It is the continuation signal for the same `init` flow.
+**The architecture assessment is non-blocking.** `arms init` on a new / empty project scaffolds `.arms/BRAND.md` with defaults and proceeds straight to synthesis, prompts, and the seeded startup task table — it does not halt on the questionnaire. Do not block initialization waiting for answers.
 
-When this halt happens, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless the user explicitly asks for a path-only summary. This is mandatory because several AI tools collapse long command transcripts.
+**Assessment purpose:** align the developer with the architecture and determine the best-fit tooling through live research, not presets. After bootstrap, when `.arms/RESEARCH_BRIEF.md` exists:
+1. Offer the assessment conversationally — present the questions from `.arms/BRAND_INTAKE.md` as a numbered form (weigh Developer Experience heavily) and wait for answers.
+2. Apply the answers with `arms intake --answers-text "<block>"`.
+3. Follow `.arms/RESEARCH_BRIEF.md`: **web-search the current best-fit framework, UI system, data layer, auth, and deployment for those answers.** Any well-supported stack is valid — SvelteKit, Remix, Laravel, Django, Rails, Flutter, etc. — not only the ARMS presets. Verify latest stable names/versions via search.
+4. Apply the Stack Proposal block with `arms intake --answers-text`, then rerun `arms init` — synthesis, prompts, and the pending scaffold task retarget to the researched stack automatically.
 
-**Present the intake as an interactive form, not a file dump.** Ask the Brand Context questions as a numbered conversational form — one prompt per field in `.arms/BRAND_INTAKE.md` (Project Name, Primary Use Case, Target Audience, Core Features, Goal / Monetization Model, Brand Personality, Visual Direction, Preferred Tech Stack, Deployment Target, Authentication Requirement, Website Brief, Technical Constraints) — and WAIT for the user to answer. It is not acceptable to silently scaffold `.arms/BRAND.md` and `.arms/BRAND_INTAKE.md` and continue without asking; the user must be given the questionnaire to fill in. When the user replies, apply their answers with `arms init --answers-text "<block>"` (or `arms intake`) so BRAND.md is updated, then continue the resume sequence below.
+If initialization DOES halt to collect Brand Context answers (only possible when the engine's intake gate is re-enabled), the **next user reply containing those answers is not a fresh request** — it is the continuation signal for the same `init` flow. In that case, immediately read `.arms/BRAND_INTAKE.md`, display the compact answer block inline as a numbered form, and WAIT for the user's answers.
 
 Resume from that point in this order:
 1. Update `.arms/BRAND.md` from the user's answers
@@ -313,6 +317,7 @@ Every task delegation uses a standardized table. This schema is mandatory across
 | **Task** | Concise description of the work unit |
 | **Assigned Agent** | The agent responsible for execution |
 | **Active Skill** | SKILL.md folder to read before executing (or "—" if none) |
+| **Model** | The assigned agent's model tier (`economy` / `standard` / `power`), resolved per platform by `model_routing.yaml` |
 | **Dependencies** | Task numbers that must complete first (or "—") |
 | **Status** | Current lifecycle state (see below) |
 
@@ -335,6 +340,7 @@ Pending → In Progress → Pre-Flight → Done
 
 ### Rules
 
+- **Delegation Mandate:** Assigning a row does not switch the host tool into the specialist. After assignment, hand the implementation turn to the assigned agent — Claude Code: run the assigned agent as a subagent via the Task tool; Copilot CLI: `/agent <assigned-agent>`; other CLIs: switch to the matching agent mirror — using the model tier in the row's `Model` column. The orchestrator plans, routes, and verifies; it must not implement specialist-assigned tasks inline.
 - **Task Continuity Mandate:** NEVER delete `Pending`, `In Progress`, or `Blocked` tasks from `.arms/SESSION.md`. However, when a task status transitions to `Done` or `Cancelled`, it MUST be removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`. This keeps the active board clean while preserving a continuous historical record.
 - **Prompt Intake Record:** Every new user prompt after bootstrap that starts or materially changes durable work must appear in the task table so ARMS preserves a durable work ledger. This applies to plain chat messages in Copilot CLI and IDE chat, not only explicit `task log` commands. First check whether the message is being sent inside an existing custom prompt / generated specialist prompt or an already-open task. Clarifying questions, approvals, status nudges, and issue-specific follow-ups inside that active prompt should stay attached to the current row instead of creating a new one. If the prompt introduces a net-new ask, append a new row before substantive execution starts.
 - **Chat Intake Command:** When a net-new issue, bug report, feature request, or fix request arrives through normal chat, immediately run `arms task log --task "<normalized ask>"` (or refresh the matching open row) before planning, delegation, or implementation. If the message continues an existing row, keep using that row and only run `arms task update` when the ledger entry itself materially changes. Do not wait for the user to manually type `task log` after they have already described the work in chat.

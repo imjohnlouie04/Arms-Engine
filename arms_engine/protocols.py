@@ -5,7 +5,7 @@ import subprocess
 from collections import OrderedDict
 
 from .brand import (
-    brand_file_requires_bootstrap,
+    brand_generation_blocked,
     get_missing_new_project_brand_fields,
     render_new_project_brand_prompt,
 )
@@ -285,7 +285,7 @@ def render_pending_brand_intake_prompt(project_root):
     if not os.path.exists(brand_path):
         return ""
     brand_content = read_text_file(brand_path)
-    if not brand_content.strip() or not brand_file_requires_bootstrap(brand_content):
+    if not brand_content.strip() or not brand_generation_blocked(brand_content):
         return ""
     return render_new_project_brand_prompt(get_missing_new_project_brand_fields(brand_content))
 

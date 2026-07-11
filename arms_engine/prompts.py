@@ -3,7 +3,7 @@ import textwrap
 
 from .brand import (
     brand_field_is_unanswered,
-    brand_file_requires_bootstrap,
+    brand_generation_blocked,
     collect_brand_context,
     detect_workspace_mode,
     infer_build_surface,
@@ -161,7 +161,7 @@ def render_startup_tasks_content(data):
 def build_context_synthesis_data(project_root):
     brand_path = WorkspacePaths(project_root).brand
     brand_content = read_text_file(brand_path)
-    if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
+    if brand_generation_blocked(brand_content):
         return None
 
     workspace_mode = detect_workspace_mode(project_root, brand_content)

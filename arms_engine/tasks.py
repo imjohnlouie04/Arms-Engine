@@ -234,6 +234,46 @@ ROUTING_RULE_PATTERNS = tuple(
     for agent_name, patterns in ROUTING_RULES
 )
 
+_ROUTING_TOKEN_RE = re.compile(r"[a-z0-9.]+")
+_ROUTING_TOKEN_STOPWORDS = {
+    "a", "an", "and", "add", "all", "for", "fix", "from", "improve", "in",
+    "make", "new", "of", "on", "our", "set", "setup", "the", "to", "up",
+    "update", "with", "when", "where", "that", "this",
+}
+
+
+def _stem_routing_token(token):
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s"):
+        return token[:-1]
+    return token
+
+
+def _routing_tokens(text):
+    tokens = set()
+    for raw_token in _ROUTING_TOKEN_RE.findall(text.lower()):
+        token = _stem_routing_token(raw_token)
+        if token and token not in _ROUTING_TOKEN_STOPWORDS:
+            tokens.add(token)
+    return tokens
+
+
+def _build_routing_vocab():
+    """Build per-agent stemmed token sets from the routing keyword lists."""
+    vocab = []
+    for agent_name, patterns in ROUTING_RULES:
+        tokens = set()
+        for pattern in patterns:
+            tokens.update(_routing_tokens(pattern))
+        vocab.append((agent_name, tokens))
+    return tuple(vocab)
+
+
+ROUTING_TOKEN_VOCAB = _build_routing_vocab()
+
 
 def identify_task_command(command_parts: tuple) -> str:
     """Return the normalised task sub-command name or empty string if unrecognised."""
@@ -552,18 +592,23 @@ def log_task_row(
         row["Task"] = normalized_task
         finalized_rows = finalize_rows(rows, arms_root)
         finalized_row = finalized_rows[existing_index]
+        delegation_hint = render_delegation_hint(finalized_row["Assigned Agent"], finalized_row.get("Model", ""))
+        action_lines = [
+            "Updated existing task row `#{}` instead of duplicating it.".format(finalized_row["#"]),
+            "- Task: `{}`".format(finalized_row["Task"]),
+            "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
+            "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
+            "- Status: `{}`".format(finalized_row["Status"]),
+        ]
+        if delegation_hint:
+            action_lines.append("- Handoff: {}".format(delegation_hint))
         return {
             "rows": finalized_rows,
             "archive_context": "Task command: update existing row",
-            "action_lines": [
-                "Updated existing task row `#{}` instead of duplicating it.".format(finalized_row["#"]),
-                "- Task: `{}`".format(finalized_row["Task"]),
-                "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
-                "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
-                "- Status: `{}`".format(finalized_row["Status"]),
-            ],
-            "next_step": "Task ledger updated. Continue work with `arms task update --task-id {}` as progress changes. → HALT".format(
-                finalized_row["#"]
+            "action_lines": action_lines,
+            "next_step": "Task ledger updated. {}Continue work with `arms task update --task-id {}` as progress changes. → HALT".format(
+                delegation_hint + " " if delegation_hint else "",
+                finalized_row["#"],
             ),
         }
 
@@ -594,18 +639,23 @@ def log_task_row(
     )
     finalized_rows = finalize_rows(rows, arms_root)
     finalized_row = finalized_rows[-1]
+    delegation_hint = render_delegation_hint(finalized_row["Assigned Agent"], finalized_row.get("Model", ""))
+    action_lines = [
+        "Logged a new task row in `.arms/SESSION.md`.",
+        "- Task ID: `{}`".format(finalized_row["#"]),
+        "- Task: `{}`".format(finalized_row["Task"]),
+        "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
+        "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
+        "- Status: `{}`".format(finalized_row["Status"]),
+    ]
+    if delegation_hint:
+        action_lines.append("- Handoff: {}".format(delegation_hint))
     return {
         "rows": finalized_rows,
         "archive_context": "Task command: log row",
-        "action_lines": [
-            "Logged a new task row in `.arms/SESSION.md`.",
-            "- Task ID: `{}`".format(finalized_row["#"]),
-            "- Task: `{}`".format(finalized_row["Task"]),
-            "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
-            "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
-            "- Status: `{}`".format(finalized_row["Status"]),
-        ],
-        "next_step": "Task logged. Advance it with `arms task update --task-id {}` or archive it with `arms task done --task-id {}` when complete. → HALT".format(
+        "action_lines": action_lines,
+        "next_step": "Task logged. {}Advance it with `arms task update --task-id {}` or archive it with `arms task done --task-id {}` when complete. → HALT".format(
+            delegation_hint + " " if delegation_hint else "",
             finalized_row["#"],
             finalized_row["#"],
         ),
@@ -668,25 +718,32 @@ def update_task_row(
     finalized_rows = finalize_rows(rows, arms_root)
     finalized_row = finalized_rows[task_index]
     archived = finalized_row["Status"].strip().lower() in {"done", "cancelled", "canceled"}
+    delegation_hint = "" if archived else render_delegation_hint(
+        finalized_row["Assigned Agent"], finalized_row.get("Model", "")
+    )
     next_step = (
         "Task archived. Continue with the next active row or log a new task when more work appears. → HALT"
         if archived
-        else "Task row updated. Continue advancing it with `arms task update --task-id {}` or archive it with `arms task done --task-id {}`. → HALT".format(
+        else "Task row updated. {}Continue advancing it with `arms task update --task-id {}` or archive it with `arms task done --task-id {}`. → HALT".format(
+            delegation_hint + " " if delegation_hint else "",
             finalized_row["#"],
             finalized_row["#"],
         )
     )
+    action_lines = [
+        "Updated task row `#{}`.".format(finalized_row["#"]),
+        "- Task: `{}`".format(finalized_row["Task"]),
+        "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
+        "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
+        "- Dependencies: `{}`".format(finalized_row["Dependencies"]),
+        "- Status: `{}`".format(finalized_row["Status"]),
+    ]
+    if delegation_hint:
+        action_lines.append("- Handoff: {}".format(delegation_hint))
     return {
         "rows": finalized_rows,
         "archive_context": "Task command: update row",
-        "action_lines": [
-            "Updated task row `#{}`.".format(finalized_row["#"]),
-            "- Task: `{}`".format(finalized_row["Task"]),
-            "- Assigned Agent: `{}`".format(finalized_row["Assigned Agent"]),
-            "- Active Skill: `{}`".format(finalized_row["Active Skill"]),
-            "- Dependencies: `{}`".format(finalized_row["Dependencies"]),
-            "- Status: `{}`".format(finalized_row["Status"]),
-        ],
+        "action_lines": action_lines,
         "next_step": next_step,
         "memory_candidate": memory_candidate_from_row(finalized_row),
     }
@@ -744,11 +801,51 @@ def finalize_rows(rows, arms_root):
     return parse_task_rows(render_task_table(rows, arms_root))
 
 
+def render_delegation_hint(agent_name, model_tier=""):
+    """Render the explicit multi-agent handoff instruction for a task row.
+
+    Updating `.arms/SESSION.md` does not itself switch the host AI tool into
+    the specialist, so every log/update response spells out how each platform
+    should hand the implementation turn to the assigned agent.
+    """
+    normalized_agent = (agent_name or "").strip()
+    if not normalized_agent or normalized_agent == "arms-main-agent":
+        return ""
+    tier = (model_tier or "").strip()
+    tier_note = " (model tier: `{}`)".format(tier) if tier and tier not in {"—", "-"} else ""
+    return (
+        "Delegate to `{agent}`{tier} — Claude Code: run the `{agent}` subagent via the Task tool; "
+        "Copilot CLI: `/agent {agent}`; other CLIs: switch the session to the `{agent}` agent mirror."
+    ).format(agent=normalized_agent, tier=tier_note)
+
+
 def infer_agent_from_task(task_text):
     normalized = task_text.lower()
+
+    # Pass 1: exact whole-phrase keyword rules (high precision, priority order).
     for agent_name, patterns in ROUTING_RULE_PATTERNS:
         if any(pattern.search(normalized) for pattern in patterns):
             return agent_name
+
+    # Pass 2: scored token-overlap fallback so realistic phrasings land on the
+    # right specialist instead of dumping everything on arms-main-agent.
+    # A single shared token (e.g. "data", "user") is too weak a signal, so at
+    # least two overlapping tokens are required; genuinely ambiguous tasks stay
+    # with arms-main-agent for the orchestrator to triage.
+    task_tokens = _routing_tokens(normalized)
+    if task_tokens:
+        best_agent = ""
+        best_score = 0
+        for agent_name, vocab_tokens in ROUTING_TOKEN_VOCAB:
+            if agent_name == "arms-main-agent":
+                continue  # main-agent is the fallback, not a scoring candidate
+            score = len(task_tokens & vocab_tokens)
+            if score > best_score:
+                best_agent = agent_name
+                best_score = score
+        if best_agent and best_score >= 2:
+            return best_agent
+
     return "arms-main-agent"
 
 

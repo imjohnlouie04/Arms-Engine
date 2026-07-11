@@ -9,14 +9,15 @@ Use these commands to interact with the **Global ARMS Orchestrator**.
 | `init yolo` | **Full Automation Mode.** Generates a Task Table and immediately begins execution without halting. |
 | `init compress` | Initializes and then uses the **Caveman Skill** to shrink session and memory files for token efficiency. |
 | `init --watch` | Waits on `.arms/BRAND.md` and automatically reruns init when the brand brief changes. |
-| `intake` | Prints only the compact Brand Context questionnaire. Use this when AI tools collapse the longer `init` transcript. |
+| `intake` | Runs the architecture assessment on its own: asks the compact questions interactively in a real terminal, or prints the answer block for chat. Also how the AI applies a researched Stack Proposal (`intake --answers-text "<block>"`). |
+| `init --no-interactive` | Skips the terminal questionnaire prompt and prints the intake block instead. |
 
 Brand bootstrap behavior during `init`:
 - Existing project with no brand file: ARMS inspects the repo and drafts `.arms/BRAND.md`.
-- New / empty project: ARMS writes a question-driven `.arms/BRAND.md`, including the initial tech stack fields plus a website / landing-page brief for content, marketing, and local-business projects, prints the questionnaire in the CLI, and halts for the user's answers.
-- Interactive questionnaire: when `init` (or `intake`) runs in a real terminal, ARMS asks the compact Brand Context questions one-by-one on stdin and writes the answers into `.arms/BRAND.md` automatically. Pass `--no-interactive` (or run in YOLO / `--watch` / `--monitor`, or supply `--preset` / `--answers-*`) to skip the prompt and just print the block. Non-interactive / AI-driven runs (no TTY) always fall back to printing the block and halting.
-- After the user fills in `.arms/BRAND.md`, re-run `init` to resume from that checkpoint. Incomplete questionnaires stay active instead of being treated as finished state.
-- `init --watch` keeps the process alive at that checkpoint and resumes automatically after `.arms/BRAND.md` changes.
+- New / empty project: ARMS writes a question-driven `.arms/BRAND.md` template, then **proceeds with fallback brand values** — synthesis, prompts, and the seeded startup task table generate immediately without halting. The assessment is non-blocking by default (`BRAND_INTAKE_GATE_ENABLED = False` in `arms_engine/brand.py`).
+- While the stack is unresearched, ARMS also writes `.arms/RESEARCH_BRIEF.md`: the host AI should offer the assessment questions conversationally, then **web-search the best-fit stack for the answers** (any stack — not just the ARMS presets) and apply the returned Stack Proposal with `arms intake --answers-text`. Re-running `arms init` retargets synthesis, prompts, and the pending scaffold task to the researched stack; concrete non-preset stacks (e.g. `SvelteKit + Supabase + Skeleton UI`) are honored as-is.
+- To capture Brand Context later, run `arms intake` — in a real terminal it asks the compact questions one-by-one on stdin; otherwise it prints the answer block for a chat reply. `--no-interactive` skips the stdin prompt.
+- When the intake gate is re-enabled, `init` halts on the questionnaire for new projects; re-running `init` after filling `.arms/BRAND.md` resumes from that checkpoint, and `init --watch` resumes automatically after `.arms/BRAND.md` changes.
 - When the brand brief is complete, `init` generates `.arms/CONTEXT_SYNTHESIS.md`, refreshes `.arms/GENERATED_PROMPTS.md`, and seeds the startup task table if it is still empty.
 - Stack shortcuts use the current latest-stable recommendation set: `A` = Next.js + Supabase + shadcn/ui, `B` = Nuxt + Firebase + Nuxt UI, `C` = Astro + Tailwind CSS + DaisyUI, `D` = Custom.
 - Landing-page media guidance now routes through `nano-banana-pro` and expects at least five production-ready images, including showcase / best-work imagery where it makes sense.
@@ -28,6 +29,7 @@ Brand bootstrap behavior during `init`:
 | Command | Action |
 |---|---|
 | Chat issue / work request in CLI or IDE | ARMS should immediately create or refresh the matching `.arms/SESSION.md` row using `arms task log --task "<normalized ask>"` semantics before substantive planning or implementation. |
+| `task log` / `task update` / `task done` | Executable task ledger. Auto-routes the task to the right specialist (keyword pass + scored fallback), auto-fills `Active Skill` and `Model` tier, and emits an explicit **Handoff** line telling each AI tool how to delegate (Claude Code Task-tool subagent / Copilot `/agent`). |
 | `yolo` | Activates **Fast-Track Execution** for the currently approved Task Table. |
 | `run status` | Dumps the current pipeline phase, active tasks, and blockers from `SESSION.md`. |
 | `run review` | Triggers a full audit (QA, Security, Frontend) and generates a report. |

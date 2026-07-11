@@ -39,6 +39,10 @@ class WorkspacePaths:
         return os.path.join(self.arms_dir, "BRAND_INTAKE.md")
 
     @property
+    def research_brief(self) -> str:
+        return os.path.join(self.arms_dir, "RESEARCH_BRIEF.md")
+
+    @property
     def rules(self) -> str:
         return os.path.join(self.arms_dir, "RULES.md")
 

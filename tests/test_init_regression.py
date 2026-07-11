@@ -12,11 +12,17 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from arms_engine import init_arms
+from arms_engine import brand as brand_module
 from arms_engine import cli as cli_module
 from arms_engine import prompts as prompts_module
 from arms_engine import session as session_module
 from arms_engine import skills as skills_module
 from arms_engine import versioning as versioning_module
+
+
+def intake_gate_enabled():
+    """Re-enable the brand intake gate for tests that cover the gated flow."""
+    return mock.patch.object(brand_module, "BRAND_INTAKE_GATE_ENABLED", True)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -69,11 +75,48 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("Strict Init Rule", engine_instructions)
             self.assertEqual(migrated_rules, "# old rules\n")
 
-    def test_init_in_empty_project_starts_new_project_assessment(self):
+    def test_init_in_empty_project_defers_assessment_and_seeds_tasks(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
 
             output = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
+            session_content = (project_root / ".arms" / "SESSION.md").read_text(encoding="utf-8")
+
+            # Intake gate is disabled: init completes without halting for answers.
+            self.assertIn("Brand intake deferred", output)
+            self.assertNotIn("Awaiting Brand Context answers", output)
+            self.assertIn("> New project detected.", brand_content)
+            # The assessment stays available (non-blocking) for AI tools to offer.
+            self.assertTrue((project_root / ".arms" / "BRAND_INTAKE.md").exists())
+            self.assertTrue((project_root / ".arms" / "RESEARCH_BRIEF.md").exists())
+            research_brief = (project_root / ".arms" / "RESEARCH_BRIEF.md").read_text(encoding="utf-8")
+            self.assertIn("Do not limit the search to ARMS presets", research_brief)
+            self.assertIn("Stack Proposal", research_brief)
+            self.assertIn("Architecture research pending", output)
+            self.assertTrue((project_root / ".arms" / "CONTEXT_SYNTHESIS.md").exists())
+            self.assertTrue((project_root / ".arms" / "GENERATED_PROMPTS.md").exists())
+            self.assertIn("- Project Root: {}".format(os.path.realpath(project_root)), session_content)
+            self.assertIn("## Blockers\nNone", session_content)
+            # Startup multi-agent tasks are seeded immediately.
+            self.assertIn("arms-product-agent", session_content)
+            self.assertIn("arms-qa-agent", session_content)
+            self.assertNotIn("TBD", session_content.split("## Active Tasks")[1].split("## Completed Tasks")[0])
+            # Next Recommended Step promotes the assessment without blocking.
+            self.assertIn("Run the architecture assessment", session_content)
+
+            status_output = self.invoke_cli(project_root, "run", "status", "--root", str(ARMS_ROOT))
+
+            self.assertNotIn("## Brand Intake Required", status_output)
+            self.assertNotIn("**Current Phase:** Intake", status_output)
+
+    def test_init_in_empty_project_starts_new_project_assessment_when_gate_enabled(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+
+            with intake_gate_enabled():
+                output = self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
 
             brand_content = (project_root / ".arms" / "BRAND.md").read_text(encoding="utf-8")
             intake_content = (project_root / ".arms" / "BRAND_INTAKE.md").read_text(encoding="utf-8")
@@ -90,7 +133,8 @@ class InitRegressionTests(unittest.TestCase):
             self.assertIn("## Blockers\nAwaiting Brand Context answers", session_content)
             self.assertIn("- Action: Read `.arms/BRAND_INTAKE.md`, answer the compact Brand Context block, then rerun `arms init`.", session_content)
 
-            status_output = self.invoke_cli(project_root, "run", "status", "--root", str(ARMS_ROOT))
+            with intake_gate_enabled():
+                status_output = self.invoke_cli(project_root, "run", "status", "--root", str(ARMS_ROOT))
 
             self.assertIn("**Current Phase:** Intake", status_output)
             self.assertIn("## Brand Intake Required", status_output)
@@ -181,7 +225,7 @@ class InitRegressionTests(unittest.TestCase):
             fake_intake = mock.Mock(return_value={"answered": True, "answers_text": answers_text})
 
             stdout = io.StringIO()
-            with working_directory(project_root), mock.patch.object(
+            with working_directory(project_root), intake_gate_enabled(), mock.patch.object(
                 cli_module, "run_interactive_brand_intake", fake_intake
             ), redirect_stdout(stdout):
                 result = cli_module.run_init_once(
@@ -241,7 +285,7 @@ class InitRegressionTests(unittest.TestCase):
             self.assertTrue((empty_project / ".arms" / "BRAND.md").exists())
             self.assertTrue((empty_project / ".arms" / "SESSION.md").exists())
             self.assertFalse((workspace_root / ".arms").exists())
-            self.assertIn("Brand Context is required for a new / empty project", output)
+            self.assertIn("Brand intake deferred", output)
             session_content = (empty_project / ".arms" / "SESSION.md").read_text(encoding="utf-8")
             self.assertIn("- Project Root: {}".format(os.path.realpath(empty_project)), session_content)
 
@@ -2147,14 +2191,15 @@ None
             project_root = Path(tmp)
             monitor = init_arms.InitActivityMonitor(str(project_root))
 
-            result = init_arms.run_init_once(
-                str(project_root),
-                str(ARMS_ROOT),
-                "init",
-                False,
-                show_banner=False,
-                monitor=monitor,
-            )
+            with intake_gate_enabled():
+                result = init_arms.run_init_once(
+                    str(project_root),
+                    str(ARMS_ROOT),
+                    "init",
+                    False,
+                    show_banner=False,
+                    monitor=monitor,
+                )
 
             hud = (project_root / ".arms" / "reports" / "init-monitor-latest.html").read_text(encoding="utf-8")
 

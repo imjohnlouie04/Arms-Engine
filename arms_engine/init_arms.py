@@ -45,7 +45,7 @@ from .skills import (
     sync_skills_copilot,
     sync_workflow,
 )
-from .tasks import infer_agent_from_task
+from .tasks import infer_agent_from_task, render_delegation_hint
 from .versioning import format_git_describe_version, is_unresolved_version
 
 
@@ -69,6 +69,7 @@ __all__ = [
     "get_project_root",
     "infer_brand_context_from_project",
     "infer_agent_from_task",
+    "render_delegation_hint",
     "is_development_engine",
     "is_unresolved_version",
     "load_agents_registry",

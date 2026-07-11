@@ -6,6 +6,13 @@ from .paths import WorkspacePaths
 
 
 NEW_PROJECT_BRAND_MARKER = "> New project detected."
+# Feature flag: when True, a new / empty project halts `arms init` on the
+# Brand Context questionnaire ("assessment") until the user answers it.
+# Currently DISABLED by request — init proceeds with inferred/fallback brand
+# values and users can fill Brand Context later with `arms intake`.
+# Flip to True to restore the mandatory intake gate.
+BRAND_INTAKE_GATE_ENABLED = False
+
 NEW_PROJECT_BRAND_FIELDS = (
     "Mission",
     "Vision",
@@ -208,6 +215,7 @@ QUESTION_FIELD_SPECS = (
     (22, "What image coverage is needed", "Image Requirements"),
     (23, "What SEO priorities should the build emphasize", "SEO Focus"),
     (24, "Any content or visual non-negotiables", "Content / Visual Non-Negotiables"),
+    (25, "What languages, frameworks, or tools is the developer/team already comfortable with", "Developer Experience"),
 )
 
 NOTE_DRIVEN_INTAKE_FIELDS = (
@@ -219,6 +227,7 @@ NOTE_DRIVEN_INTAKE_FIELDS = (
     "Existing Brand Assets",
     "Website Brief",
     "Content / Visual Non-Negotiables",
+    "Stack Rationale",
 )
 
 PROJECT_PRESETS = {
@@ -330,11 +339,12 @@ COMPACT_INTAKE_FIELDS = (
     ("Goal / Monetization Model", ""),
     ("Brand Personality", "up to 3 words"),
     ("Visual Direction", "Light / Dark / System / Undecided"),
-    ("Preferred Tech Stack", "A Next.js+Supabase / B Nuxt+Firebase / C Astro+Tailwind / D Custom"),
-    ("Deployment Target", "1 Vercel / 2 Docker-VPS / 3 AWS-GCP"),
+    ("Preferred Tech Stack", "A Next.js+Supabase / B Nuxt+Firebase / C Astro+Tailwind / D Custom — or name any stack; ARMS honors it"),
+    ("Deployment Target", "1 Vercel / 2 Docker-VPS / 3 AWS-GCP — or any other target"),
     ("Authentication Requirement", "Email / OAuth / Magic link / None / Unsure"),
     ("Website Brief", "sections, CTA, industry, SEO, images, or N/A"),
     ("Technical Constraints", ""),
+    ("Developer Experience", "languages / frameworks you already know"),
 )
 
 
@@ -465,6 +475,13 @@ def build_answer_field_aliases() -> dict:
             "website brief": "Website Brief",
             "non negotiables": "Content / Visual Non-Negotiables",
             "content visual non negotiables": "Content / Visual Non-Negotiables",
+            "developer experience": "Developer Experience",
+            "dev experience": "Developer Experience",
+            "team skills": "Developer Experience",
+            "team experience": "Developer Experience",
+            "stack rationale": "Stack Rationale",
+            "why this stack": "Stack Rationale",
+            "stack reasoning": "Stack Rationale",
         }
     )
     return aliases
@@ -561,7 +578,7 @@ def get_missing_new_project_brand_fields(content: str) -> list:
 
 def collect_brand_context(content: str, project_root: str) -> dict:
     """Collect all brand fields and note-driven intake entries from *content* into a dict."""
-    field_names = ("Project Name",) + NEW_PROJECT_BRAND_FIELDS
+    field_names = ("Project Name", "Developer Experience") + NEW_PROJECT_BRAND_FIELDS
     fields = {field_name: extract_brand_field(content, field_name) for field_name in field_names}
     for field_name in NOTE_DRIVEN_INTAKE_FIELDS:
         fields[field_name] = extract_note_entry(content, field_name)
@@ -577,7 +594,11 @@ def infer_build_surface(context: dict) -> str:
     project_type = context.get("Project Type", "").lower()
     required_sections = context.get("Required Website Sections", "").lower()
 
-    if experience_type and not brand_field_is_not_applicable(experience_type):
+    if (
+        experience_type
+        and not brand_field_is_not_applicable(experience_type)
+        and not brand_field_is_unanswered(experience_type)
+    ):
         mapped_experiences = {
             "local service business": "local-service landing page",
             "marketing site": "marketing website",
@@ -611,6 +632,55 @@ def infer_explicit_stack_key(value: str) -> str:
     return ""
 
 
+def is_bare_custom_stack_answer(value: str) -> bool:
+    """Return True when the stack answer is 'Custom' or a bare preset shortcut with no concrete detail."""
+    normalized = " ".join(value.split()).strip().lower().rstrip(".")
+    return normalized in {"custom", "custom stack", "custom (tbd)", "other", "a", "b", "c", "d"}
+
+
+def is_researched_stack_answer(value: str) -> bool:
+    """Return True when the stack answer names a concrete stack outside the presets.
+
+    These answers come from user preference or the AI's live research step and
+    must be honored as-is instead of being funneled into a preset.
+    """
+    stripped = value.strip()
+    if not stripped or brand_field_is_unanswered(stripped):
+        return False
+    if is_bare_custom_stack_answer(stripped):
+        return False
+    return infer_explicit_stack_key(stripped) == ""
+
+
+def build_custom_stack_profile(requested_stack: str, context: dict) -> dict:
+    """Build a stack profile for a researched / custom stack answer.
+
+    Splits answers like ``"SvelteKit + Supabase + Skeleton UI"`` into
+    framework / data-layer / UI segments on a best-effort basis; anything the
+    answer or BRAND.md does not specify falls back to a neutral placeholder
+    rather than a preset value.
+    """
+    cleaned = re.sub(r"^custom\s*[:\-–]\s*", "", requested_stack.strip(), flags=re.IGNORECASE)
+    segments = [segment.strip() for segment in re.split(r"[+,/]", cleaned) if segment.strip()]
+    framework = segments[0] if segments else cleaned
+    ui_system = segments[2] if len(segments) >= 3 else "Per researched stack"
+    default_data_layer = segments[1] if len(segments) >= 2 else "Per researched stack"
+    return {
+        "label": cleaned or requested_stack.strip(),
+        "framework": framework,
+        "ui_system": ui_system,
+        "default_data_layer": default_data_layer,
+        "default_deployment": "Per researched stack",
+        "default_auth": "Per project requirements",
+        "default_icon_system": "Per researched stack",
+        "best_for": "the specific requirements captured in this project's assessment",
+        "reason": (
+            "Selected through the project assessment / AI research step instead of an ARMS preset, "
+            "so the tooling matches this project's actual constraints."
+        ),
+    }
+
+
 def infer_stack_recommendation_key(context: dict) -> tuple:
     """Determine the best ``STACK_RECOMMENDATIONS`` key for *context*.
 
@@ -631,6 +701,7 @@ def infer_stack_recommendation_key(context: dict) -> tuple:
             context.get("Required Website Sections", ""),
             context.get("SEO Focus", ""),
             context.get("Backend / Data Layer", ""),
+            context.get("Developer Experience", ""),
         ]
     ).lower()
 
@@ -655,10 +726,45 @@ def infer_stack_recommendation_key(context: dict) -> tuple:
 
 
 def resolve_stack_recommendation(context: dict) -> dict:
-    """Return a fully populated stack recommendation dict for the given brand *context*."""
-    stack_key, inferred = infer_stack_recommendation_key(context)
-    profile = dict(STACK_RECOMMENDATIONS[stack_key])
+    """Return a fully populated stack recommendation dict for the given brand *context*.
+
+    Honors any concrete stack the user or the AI research step recorded, even
+    when it is outside the ARMS presets. Presets only apply when the answer is
+    empty, a preset shortcut (A/B/C), or a bare "Custom" with no detail — and
+    those cases are flagged with ``research_recommended`` so the host AI knows
+    a live tooling-research pass would improve the recommendation.
+    """
     requested_stack = context.get("Preferred Tech Stack", "").strip()
+
+    if is_researched_stack_answer(requested_stack):
+        stack_key = "custom"
+        inferred = False
+        profile = build_custom_stack_profile(requested_stack, context)
+        source = "Researched / custom stack"
+        selection_note = (
+            f"Honoring the project-specific stack recorded in BRAND.md: {profile['label']}. "
+            "ARMS presets were not applied."
+        )
+        research_recommended = False
+    else:
+        stack_key, inferred = infer_stack_recommendation_key(context)
+        profile = dict(STACK_RECOMMENDATIONS[stack_key])
+        if requested_stack and not brand_field_is_unanswered(requested_stack) and not inferred:
+            source = "User-selected stack"
+            selection_note = (
+                f"Requested stack aligns with the current ARMS recommendation: {profile['label']} using "
+                f"{profile['framework']} and {profile['ui_system']}."
+            )
+            research_recommended = False
+        else:
+            requested_label = requested_stack if requested_stack else "Not specified"
+            source = "ARMS recommendation"
+            selection_note = (
+                f"Requested stack was {requested_label}, so ARMS recommends {profile['label']} for this project type. "
+                "A live tooling-research pass can replace this default with a better project-specific fit."
+            )
+            research_recommended = True
+
     deployment_target = normalize_brand_value(
         context.get("Deployment Target", ""),
         profile["default_deployment"],
@@ -672,19 +778,6 @@ def resolve_stack_recommendation(context: dict) -> dict:
         profile["default_auth"],
     )
 
-    if requested_stack and not brand_field_is_unanswered(requested_stack) and not inferred:
-        source = "User-selected stack"
-        selection_note = (
-            f"Requested stack aligns with the current ARMS recommendation: {profile['label']} using "
-            f"{profile['framework']} and {profile['ui_system']}."
-        )
-    else:
-        requested_label = requested_stack if requested_stack else "Not specified"
-        source = "ARMS recommendation"
-        selection_note = (
-            f"Requested stack was {requested_label}, so ARMS recommends {profile['label']} for this project type."
-        )
-
     profile.update(
         {
             "key": stack_key,
@@ -696,6 +789,7 @@ def resolve_stack_recommendation(context: dict) -> dict:
             "source": source,
             "selection_note": selection_note,
             "inferred": inferred,
+            "research_recommended": research_recommended,
         }
     )
     return profile
@@ -993,7 +1087,7 @@ def apply_answers_to_brand_content(content: str, answers: dict) -> tuple:
     if not answers:
         return content, {"fields": [], "notes": []}
 
-    direct_field_names = {"Project Name", *NEW_PROJECT_BRAND_FIELDS}
+    direct_field_names = {"Project Name", "Developer Experience", *NEW_PROJECT_BRAND_FIELDS}
     note_fields = set(NOTE_DRIVEN_INTAKE_FIELDS)
     changed_fields = []
     changed_notes = []
@@ -1040,6 +1134,22 @@ def brand_file_requires_bootstrap(content: str) -> bool:
         return True
     if is_new_project_brand_questionnaire(content):
         return bool(get_missing_new_project_brand_fields(content))
+    return False
+
+
+def brand_generation_blocked(content: str) -> bool:
+    """Return True when incomplete brand context should BLOCK generation.
+
+    An incomplete questionnaire only blocks synthesis/prompts/startup tasks
+    while the intake gate is enabled. With the gate disabled, generation
+    proceeds using the fallback values every consumer already applies via
+    ``normalize_brand_value``. An entirely empty/missing BRAND.md still blocks
+    because there is no template to read fields from.
+    """
+    if not content.strip():
+        return True
+    if BRAND_INTAKE_GATE_ENABLED:
+        return brand_file_requires_bootstrap(content)
     return False
 
 
@@ -1499,6 +1609,7 @@ def render_new_project_brand_questionnaire(project_root: str) -> str:
 - **Backend / Data Layer:** TBD
 - **Authentication Requirement:** TBD
 - **Technical Constraints:** TBD
+- **Developer Experience:** TBD
 
 ## Initial Website / Landing Page Brief
 - **Experience Type:** TBD
@@ -1604,6 +1715,90 @@ def run_interactive_brand_intake(project_root: str, input_func=input, output_fun
     return {"answered": True, "answers_text": "\n".join(collected)}
 
 
+def render_research_brief(context: dict, stack_profile: dict) -> str:
+    """Render the AI-facing research brief for a project with an unresolved stack.
+
+    The engine cannot browse the web; the host AI can. This artifact hands the
+    assessment answers to the AI and asks it to research current best-fit
+    tooling — not limited to ARMS presets — and return a Stack Proposal block
+    that the engine can validate and persist via ``arms intake``.
+    """
+    def known(field, fallback="Not captured yet"):
+        return normalize_brand_value(context.get(field, ""), fallback)
+
+    return f"""# ARMS Architecture Research Brief
+
+> Managed by ARMS Engine. Regenerated while this project's stack is unresearched.
+> Audience: the host AI orchestrator. Perform the research below, then apply the Stack Proposal.
+
+## What the assessment captured
+
+- **Project Name:** {known("Project Name", "Unnamed project")}
+- **Primary Use Case:** {known("Primary Use Case")}
+- **Primary Audience:** {known("Primary Audience")}
+- **Core Features:** {known("Core Features")}
+- **Goal / Monetization Model:** {known("Goal / Monetization Model")}
+- **Developer Experience:** {known("Developer Experience")}
+- **Technical Constraints:** {known("Technical Constraints")}
+- **Deployment Target:** {known("Deployment Target")}
+- **Authentication Requirement:** {known("Authentication Requirement")}
+
+## Current placeholder (replace through research)
+
+ARMS is temporarily using its **{stack_profile.get("label", "default")}** preset ({stack_profile.get("summary", "")}) as a fallback. This is a default, not a decision.
+
+## Research instructions (host AI)
+
+1. **Web-search the current best-fit tooling for THIS project** — framework, UI system, data layer, auth approach, deployment target, icon system. Weigh the developer's existing experience heavily: a stack the developer knows beats a marginally "better" unfamiliar one.
+2. **Do not limit the search to ARMS presets** (Next.js / Nuxt / Astro). Any well-supported stack is valid — SvelteKit, Remix, Laravel, Django, Rails, Flutter, Expo, etc.
+3. **Verify latest stable names and versions via search** — do not trust training data for version numbers or product names.
+4. If key assessment fields are still `Not captured yet`, ask the user those questions first — the research is only as good as the answers.
+
+## Stack Proposal (return exactly this block, then apply it)
+
+```text
+Preferred Tech Stack: <framework + data layer + UI system>
+Backend / Data Layer: <data layer>
+Deployment Target: <hosting target>
+Authentication Requirement: <auth approach>
+Icon System: <icon system>
+Stack Rationale: <2-4 sentences: why this fits the answers, with source links>
+```
+
+Apply it with:
+
+```bash
+arms intake --answers-text "<the block above>"
+```
+
+Then rerun `arms init` so synthesis, prompts, and startup tasks regenerate from the researched stack.
+"""
+
+
+def sync_research_brief(project_root: str):
+    """Write or remove `.arms/RESEARCH_BRIEF.md` based on the current stack state.
+
+    The brief exists only for new-project questionnaires whose resolved stack
+    still carries ``research_recommended`` — once a concrete stack is recorded
+    (researched or preset-confirmed), the artifact is removed.
+    """
+    paths = WorkspacePaths(project_root)
+    brand_content = read_text_file(paths.brand)
+
+    should_exist = False
+    if brand_content.strip() and is_new_project_brand_questionnaire(brand_content):
+        context = collect_brand_context(brand_content, project_root)
+        stack_profile = resolve_stack_recommendation(context)
+        if stack_profile.get("research_recommended"):
+            should_exist = True
+            with open(paths.research_brief, "w", encoding="utf-8") as f:
+                f.write(render_research_brief(context, stack_profile))
+
+    if not should_exist and os.path.exists(paths.research_brief):
+        os.remove(paths.research_brief)
+    return should_exist
+
+
 def sync_brand_intake_prompt(project_root: str, prompt: str = ""):
     """Write or remove the durable brand-intake prompt artifact."""
     intake_path = WorkspacePaths(project_root).brand_intake
@@ -1623,7 +1818,9 @@ def initialize_brand_context(project_root: str) -> dict:
     """Bootstrap or reuse BRAND.md for *project_root*.
 
     Returns a status dict with a ``"status"`` key (``"existing"``, ``"inferred"``,
-    or ``"questions_required"``) and an optional ``"prompt"`` key.
+    ``"deferred"``, or ``"questions_required"``) and an optional ``"prompt"`` key.
+    ``"deferred"`` means the questionnaire exists but the intake gate is
+    disabled, so initialization proceeds with fallback brand values.
     """
     brand_path = WorkspacePaths(project_root).brand
 
@@ -1632,6 +1829,12 @@ def initialize_brand_context(project_root: str) -> dict:
         if is_new_project_brand_questionnaire(existing_content):
             missing_fields = get_missing_new_project_brand_fields(existing_content)
             if missing_fields:
+                if not BRAND_INTAKE_GATE_ENABLED:
+                    # Keep the compact answer block available for AI tools and
+                    # the next-step recommendation, but do not halt on it.
+                    sync_brand_intake_prompt(project_root, render_new_project_brand_prompt(missing_fields))
+                    print("📝 Brand intake deferred — fill Brand Context anytime with `arms intake`.")
+                    return {"status": "deferred"}
                 prompt = render_new_project_brand_prompt(missing_fields)
                 sync_brand_intake_prompt(project_root, prompt)
                 print("📝 New-project BRAND.md is still incomplete. Reusing saved questionnaire.")
@@ -1657,6 +1860,10 @@ def initialize_brand_context(project_root: str) -> dict:
     print("🎨 Initializing new-project BRAND.md questionnaire...")
     with open(brand_path, "w", encoding="utf-8") as f:
         f.write(render_new_project_brand_questionnaire(project_root))
+    if not BRAND_INTAKE_GATE_ENABLED:
+        sync_brand_intake_prompt(project_root, render_new_project_brand_prompt())
+        print("📢 BRAND.md scaffolded with defaults. Brand intake deferred — fill it anytime with `arms intake`.")
+        return {"status": "deferred"}
     prompt = render_new_project_brand_prompt()
     sync_brand_intake_prompt(project_root, prompt)
     print("📢 BRAND.md created for a new project. User answers are required before high-fidelity brand work begins.")

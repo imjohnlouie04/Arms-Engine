@@ -23,15 +23,17 @@ flowchart TD
     B --> C[Migrate legacy session and brand files if found]
     C --> D[Sync agents, skills, workflow, ENGINE.md, AGENTS.md]
     D --> E{Brand context complete?}
-    E -- No --> F[Create or reuse .arms/BRAND.md questionnaire]
-    F --> G[User answers via file, inline text, or manual edits]
-    G --> H[Re-run arms init]
+    E -- No --> F[Scaffold .arms/BRAND.md questionnaire with fallback defaults]
+    F --> G[Write .arms/BRAND_INTAKE.md and .arms/RESEARCH_BRIEF.md - assessment stays non-blocking]
     E -- Yes --> I[Generate .arms/CONTEXT_SYNTHESIS.md]
+    G --> I
     I --> J[Generate .arms/GENERATED_PROMPTS.md]
     J --> K[Refresh .arms/SESSION.md with environment, agents, skills, and seeded startup tasks]
     K --> L{YOLO mode?}
     L -- No --> M[Ready and halt for approval]
     L -- Yes --> N[Ready in fleet mode]
+    N -.-> O[Later: assessment answered, AI researches stack, arms intake applies Stack Proposal, re-init retargets tasks]
+    M -.-> O
 ```
 
 ---
@@ -187,11 +189,11 @@ Adopting a new model release is a one-file edit to `model_routing.yaml` — no P
 5. Scaffolds missing runtime files like `.arms/MEMORY.md`, `.arms/RULES.md`, and `.arms/SESSION_ARCHIVE.md`, including the default memory approval gate in `.arms/RULES.md`.
 6. Removes obsolete Gemini-side skill mirrors and rebuilds the canonical skill mirrors under `.agents/skills/` and `.github/skills/`, along with each mirror's `skills.yaml` and `skills-index.md`.
 7. Syncs agents (including `.claude/agents/` and `.codex/agents/`, with model tiers resolved from `model_routing.yaml`), skills, workflow docs, `.arms/ENGINE.md`, and root `AGENTS.md`.
-8. Creates or refreshes `.arms/BRAND.md` depending on project state.
-9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`.
-10. Generates `.arms/CONTEXT_SYNTHESIS.md` when the intake is complete.
+8. Creates or refreshes `.arms/BRAND.md` depending on project state. New / empty projects scaffold the assessment questionnaire with fallback defaults and continue without halting; `.arms/BRAND_INTAKE.md` (compact answer block) and `.arms/RESEARCH_BRIEF.md` (AI stack-research instructions) are written for the non-blocking assessment.
+9. Applies any intake helpers such as `--preset`, `--answers-file`, or `--answers-text`, and prompts the compact assessment questions interactively when run by a human in a real terminal (suppressed by `--no-interactive`, YOLO, `--watch`, `--monitor`, or supplied answers).
+10. Generates `.arms/CONTEXT_SYNTHESIS.md` from the recorded (or fallback) brand and stack context.
 11. Generates `.arms/GENERATED_PROMPTS.md` as a thin prompt layer that points back to that synthesized brief.
-12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, session-derived memory suggestions from active tasks/blockers, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. After bootstrap, the task table acts as the durable ledger for new user asks: each CLI/IDE chat issue or work request should log or refresh a row, be assigned to the proper specialist agent, and can be managed directly with `arms task log`, `arms task update`, and `arms task done`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
+12. Refreshes `.arms/SESSION.md` with environment metadata, compact hot-context agent/skill references, memory signals distilled from approved `.arms/MEMORY.md` lessons, session-derived memory suggestions from active tasks/blockers, and task sections. On a fresh new-project init, ARMS seeds the startup task table if it is still empty. When a later re-init lands a different resolved stack (e.g. after the AI research step), the still-`Pending` scaffold task row is retitled to the new stack while in-progress rows stay untouched. After bootstrap, the task table acts as the durable ledger for new user asks: each CLI/IDE chat issue or work request should log or refresh a row, be assigned to the proper specialist agent, and can be managed directly with `arms task log`, `arms task update`, and `arms task done`. Agent-to-skill bindings come directly from `arms_engine/agents.yaml`, while every valid skill directory is mirrored into `.agents/skills/` and `.github/skills/`.
 13. Measures token budgets for `.arms/SESSION.md`, `.arms/CONTEXT_SYNTHESIS.md`, and `.arms/GENERATED_PROMPTS.md` so oversized hot-context output is surfaced immediately during init and later enforced by `arms doctor`.
 14. Refuses to continue if an older installed engine tries to re-sync a project that was last synced by a newer engine version, unless you explicitly override the downgrade guard. Development/local-version builds still warn, but the bypass is now tied to dev-style version strings instead of any checkout that merely contains a `.git` directory.
 15. If the command includes `compress`, or if workspace state crosses the compaction thresholds, runs the native caveman-style compression pass over `.arms/SESSION.md`, `.arms/MEMORY.md`, and oversized archive history.
@@ -203,7 +205,7 @@ Adopting a new model release is a one-file edit to `model_routing.yaml` — no P
 arms init
 ```
 
-Use this when you want the normal approval-driven workflow. If brand context is incomplete, ARMS prints the questionnaire path and halts until you fill it.
+Use this when you want the normal approval-driven workflow. Brand intake is currently deferred by default: if brand context is incomplete, ARMS proceeds with fallback values and you can fill `.arms/BRAND.md` later with `arms intake`.
 
 ### `start` alias
 
@@ -392,10 +394,10 @@ Use `arms task update` to change task text, routing, dependencies, or status on 
 Use `arms task done` to mark a row complete and archive it out of hot context immediately.
 
 Notes:
-- new task rows infer the proper specialist agent from task text unless `--assigned-agent` overrides it
+- new task rows infer the proper specialist agent from task text: an exact keyword pass over `arms_engine/routing.yaml` runs first, then a scored token-overlap fallback; genuinely ambiguous tasks stay with `arms-main-agent` for triage. `--assigned-agent` overrides.
 - `--agent` and `--skill` are accepted aliases for `--assigned-agent` and `--active-skill`
-- `Active Skill` is auto-filled from the assigned agent's bound skills in `arms_engine/agents.yaml`
-- logging the row does not switch Copilot into that specialist by itself; hand off with `/agent <assigned-agent>` when the work should move to the sub-agent
+- `Active Skill` is auto-filled from the assigned agent's bound skills, and `Model` is auto-filled from the agent's `model_tier`, both defined in `arms_engine/agents.yaml`
+- every `task log` / `task update` response includes an explicit **Handoff** line, e.g. *"Delegate to `arms-frontend-agent` (model tier: `standard`) — Claude Code: run the subagent via the Task tool; Copilot CLI: `/agent arms-frontend-agent`"* — logging the row does not switch the host tool into the specialist by itself
 - `Done` / `Cancelled` rows are removed from `.arms/SESSION.md` and appended to `.arms/SESSION_ARCHIVE.md`
 - task commands require an initialized workspace, just like the memory workflow
 
@@ -510,15 +512,15 @@ Structured answers can also help fill related brand fields when they are still e
 - existing asset notes can infer `Logo Status`
 - non-negotiables can populate `Technical Constraints`
 
-### 6. Latest stack recommendation behavior
+### 6. Stack recommendation behavior (research-driven)
 
-ARMS now treats the stack answer as both a preference and an input to a recommendation pass.
+ARMS treats the stack answer as a decision to honor first, and a recommendation input second.
 
-- If the user explicitly selects a supported stack, ARMS records that selection and keeps the recommendation aligned to it.
-- If the user leaves the stack vague, marks it custom, or provides incomplete technical direction, ARMS recommends the best-fit stack for the project shape.
+- **Any concrete stack is honored as-is** — `Preferred Tech Stack: SvelteKit + Supabase + Skeleton UI`, `Laravel + MySQL + Livewire`, `Custom: Django + PostgreSQL + HTMX`, etc. flow directly into synthesis, prompts, and startup tasks. ARMS never rewrites a researched or user-chosen stack into a preset.
+- If the answer is empty, a preset shortcut (A/B/C), or a bare "Custom" with no detail, ARMS falls back to a preset **and flags the profile `research_recommended`**, which triggers the Architecture Research Brief (see below).
 - Recommendations stay phrased as **latest stable** instead of hardcoding framework versions into the generated brief.
 
-Current default mappings:
+Preset fallbacks (defaults, not a ceiling):
 
 | Stack profile | Recommended UI system | Best default use cases |
 |---|---|---|
@@ -526,7 +528,18 @@ Current default mappings:
 | Nuxt + Firebase | `Nuxt UI` | mobile-first products, Nuxt/Vue teams, content-plus-app hybrids |
 | Astro + Tailwind CSS | `DaisyUI` | marketing sites, local-service websites, editorial projects, portfolios |
 
-The selected or inferred stack profile is written into `.arms/CONTEXT_SYNTHESIS.md` so downstream agents can build from the same recommendation.
+The selected, researched, or inferred stack profile is written into `.arms/CONTEXT_SYNTHESIS.md` so downstream agents can build from the same recommendation.
+
+### 7. Architecture Research Brief (`.arms/RESEARCH_BRIEF.md`)
+
+While a new project's stack is still unresearched, ARMS writes `.arms/RESEARCH_BRIEF.md` — an AI-facing brief that hands over the assessment answers (including the `Developer Experience` field) and instructs the host AI to:
+
+1. **Web-search the current best-fit tooling for this specific project** — framework, UI system, data layer, auth, deployment, icon system — weighing the developer's existing experience heavily.
+2. Consider **any well-supported stack**, not just the ARMS presets.
+3. **Verify latest stable names/versions via search** rather than trusting training data.
+4. Return a **Stack Proposal** block and apply it with `arms intake --answers-text "<block>"`, storing the reasoning as a `Stack Rationale` note in BRAND.md.
+
+Re-running `arms init` then regenerates synthesis and prompts from the researched stack and **retitles the still-Pending scaffold task** to match (in-progress tasks are never touched). Once a concrete stack is recorded, the brief is removed automatically.
 
 ---
 
@@ -545,7 +558,7 @@ If the folder is effectively empty, ARMS writes a guided questionnaire to `.arms
 - initial technical direction
 - website or landing-page intake fields where relevant
 
-If the questionnaire is incomplete, ARMS reuses it on later `init` runs instead of throwing it away.
+Brand intake is **deferred by default**: init does not halt on the questionnaire — synthesis, prompts, and startup tasks generate immediately with fallback values, and you can fill `.arms/BRAND.md` anytime with `arms intake`. If the questionnaire is incomplete, ARMS reuses it on later `init` runs instead of throwing it away. (The mandatory halt can be restored by flipping `BRAND_INTAKE_GATE_ENABLED` in `arms_engine/brand.py`.)
 
 ---
 

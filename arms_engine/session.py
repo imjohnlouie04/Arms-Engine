@@ -10,7 +10,12 @@ from collections import OrderedDict
 
 from . import __version__
 from .bm25 import score_tokens as _bm25_score_tokens
-from .brand import brand_file_requires_bootstrap, infer_brand_context_from_project
+from .brand import (
+    brand_generation_blocked,
+    get_missing_new_project_brand_fields,
+    infer_brand_context_from_project,
+    is_new_project_brand_questionnaire,
+)
 from .budgets import DEFAULT_TOKEN_BUDGET_WARN_RATIO, SESSION_TOKEN_BUDGET
 from .metadata import (
     REPORT_HISTORY_FILENAME,
@@ -563,6 +568,20 @@ def build_next_recommended_step(project_root, active_rows, blockers_text="None")
             "source": "`.arms/BRAND_INTAKE.md`",
         }
 
+    if brand_assessment_is_pending(project_root):
+        return {
+            "label": "Action",
+            "value": (
+                "Run the architecture assessment: offer the questions from `.arms/BRAND_INTAKE.md` conversationally "
+                "(or run `arms intake`), then research the best-fit stack per `.arms/RESEARCH_BRIEF.md`."
+            ),
+            "reason": (
+                "The project bootstrapped with fallback brand and stack defaults. The assessment aligns the developer "
+                "with the architecture and lets the AI research the best tools — startup work can continue in parallel."
+            ),
+            "source": "`.arms/BRAND_INTAKE.md`",
+        }
+
     report_snapshots = latest_report_snapshots(project_root)
     latest_report = report_snapshots[0] if report_snapshots else None
     normalized_blockers = (blockers_text or "None").strip() or "None"
@@ -647,7 +666,27 @@ def brand_intake_is_pending(project_root):
     if not os.path.exists(brand_path):
         return False
     brand_content = read_text_file(brand_path)
-    return bool(brand_content.strip() and brand_file_requires_bootstrap(brand_content))
+    if not brand_content.strip():
+        return False
+    return brand_generation_blocked(brand_content)
+
+
+def brand_assessment_is_pending(project_root):
+    """Return True when the (non-blocking) architecture assessment is still unanswered.
+
+    Distinct from ``brand_intake_is_pending``: this does not gate generation —
+    it only drives the Next Recommended Step so AI tools offer the assessment
+    conversationally while startup work proceeds with fallback values.
+    """
+    brand_path = WorkspacePaths(project_root).brand
+    if not os.path.exists(brand_path):
+        return False
+    brand_content = read_text_file(brand_path)
+    if not brand_content.strip():
+        return False
+    if not is_new_project_brand_questionnaire(brand_content):
+        return False
+    return bool(get_missing_new_project_brand_fields(brand_content))
 
 
 def brand_intake_blocker_text():
@@ -1614,6 +1653,39 @@ def extract_current_project_name(project_root, existing_name=""):
     return directory_name or "Project"
 
 
+STACK_SCAFFOLD_TASK_RE = re.compile(r"^Scaffold the .+ foundation with .+$")
+
+
+def refresh_stack_scaffold_rows(content, framework, ui_system):
+    """Update still-Pending scaffold task rows to the currently resolved stack.
+
+    When the architecture assessment / research step lands a different stack
+    after startup tasks were seeded, the pending scaffold row would otherwise
+    keep pointing at the old default (e.g. Next.js). Rows that already started
+    are left untouched — only `Pending` scaffold rows are retitled.
+    """
+    if not framework or not ui_system:
+        return content
+    replacement_task = "Scaffold the {} foundation with {}".format(framework, ui_system)
+    updated_lines = []
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line.startswith("|") and line.endswith("|"):
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if (
+                len(cells) == 7
+                and cells[0] != "#"
+                and STACK_SCAFFOLD_TASK_RE.match(cells[1] or "")
+                and cells[6].lower() == "pending"
+                and cells[1] != replacement_task
+            ):
+                cells[1] = replacement_task
+                updated_lines.append("| " + " | ".join(cells) + " |")
+                continue
+        updated_lines.append(raw_line)
+    return "\n".join(updated_lines)
+
+
 def update_session(
     project_root,
     arms_root,
@@ -1623,6 +1695,7 @@ def update_session(
     startup_tasks_content="",
     startup_seed_key="",
     context_overwrite=None,
+    stack_profile=None,
 ):
     print("📄 Updating session log...")
     wp = WorkspacePaths(project_root)
@@ -1691,6 +1764,12 @@ def update_session(
                             skill_catalog_by_name=skill_catalog_by_name,
                             agent_model_tiers=agent_model_tiers,
                         )
+                        if stack_profile:
+                            content = refresh_stack_scaffold_rows(
+                                content,
+                                stack_profile.get("framework", ""),
+                                stack_profile.get("ui_system", ""),
+                            )
                         if seed_startup_tasks and not active_tasks_table_has_rows(content):
                             content = normalized_startup_tasks_content
                         active_tasks_content = content

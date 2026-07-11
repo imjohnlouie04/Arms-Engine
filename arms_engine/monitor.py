@@ -13,7 +13,7 @@ import webbrowser
 from pathlib import Path
 
 from . import __version__
-from .brand import brand_file_requires_bootstrap
+from .brand import brand_generation_blocked
 from .paths import WorkspacePaths
 from .session import parse_active_task_rows, parse_markdown_sections, read_text_file
 
@@ -145,7 +145,7 @@ def summarize_workspace_state(project_root):
 
     brand_content = read_text_file(brand_path) if os.path.exists(brand_path) else ""
     brand_status = "Ready"
-    if not brand_content.strip() or brand_file_requires_bootstrap(brand_content):
+    if brand_generation_blocked(brand_content):
         brand_status = "Waiting"
 
     return {

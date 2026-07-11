@@ -545,6 +545,93 @@ class TestRenderNewProjectBrandQuestionnaire(unittest.TestCase):
             self.assertIn(os.path.basename(d), content)
 
 
+class TestResearchedStackHonoring(unittest.TestCase):
+    def test_concrete_non_preset_stack_is_honored(self):
+        from arms_engine.brand import resolve_stack_recommendation
+
+        profile = resolve_stack_recommendation(
+            {
+                "Preferred Tech Stack": "SvelteKit + Supabase + Skeleton UI",
+                "Deployment Target": "Cloudflare Pages",
+            }
+        )
+        self.assertEqual(profile["key"], "custom")
+        self.assertEqual(profile["framework"], "SvelteKit")
+        self.assertEqual(profile["ui_system"], "Skeleton UI")
+        self.assertEqual(profile["deployment_target"], "Cloudflare Pages")
+        self.assertFalse(profile["research_recommended"])
+        self.assertEqual(profile["source"], "Researched / custom stack")
+
+    def test_custom_prefix_is_stripped(self):
+        from arms_engine.brand import resolve_stack_recommendation
+
+        profile = resolve_stack_recommendation({"Preferred Tech Stack": "Custom: Django + PostgreSQL + HTMX"})
+        self.assertEqual(profile["framework"], "Django")
+        self.assertEqual(profile["key"], "custom")
+
+    def test_bare_custom_falls_back_to_preset_with_research_flag(self):
+        from arms_engine.brand import resolve_stack_recommendation
+
+        profile = resolve_stack_recommendation({"Preferred Tech Stack": "Custom"})
+        self.assertIn(profile["key"], {"nextjs", "nuxt", "astro"})
+        self.assertTrue(profile["research_recommended"])
+
+    def test_unanswered_stack_recommends_research(self):
+        from arms_engine.brand import resolve_stack_recommendation
+
+        profile = resolve_stack_recommendation({"Preferred Tech Stack": "TBD"})
+        self.assertTrue(profile["research_recommended"])
+
+    def test_preset_stack_answer_keeps_preset_without_research_flag(self):
+        from arms_engine.brand import resolve_stack_recommendation
+
+        profile = resolve_stack_recommendation(
+            {"Preferred Tech Stack": "Next.js + Supabase + shadcn/ui (latest stable)"}
+        )
+        self.assertEqual(profile["key"], "nextjs")
+        self.assertFalse(profile["research_recommended"])
+
+
+class TestResearchBriefLifecycle(unittest.TestCase):
+    def test_brief_created_while_stack_unresolved_and_removed_after(self):
+        from arms_engine.brand import (
+            apply_brand_inputs,
+            sync_research_brief,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".arms"))
+            brand_path = os.path.join(tmp, ".arms", "BRAND.md")
+            brief_path = os.path.join(tmp, ".arms", "RESEARCH_BRIEF.md")
+            with open(brand_path, "w", encoding="utf-8") as f:
+                f.write(render_new_project_brand_questionnaire(tmp))
+
+            self.assertTrue(sync_research_brief(tmp))
+            self.assertTrue(os.path.exists(brief_path))
+            with open(brief_path, encoding="utf-8") as f:
+                brief = f.read()
+            self.assertIn("Do not limit the search to ARMS presets", brief)
+            self.assertIn("Stack Proposal", brief)
+            self.assertIn("arms intake --answers-text", brief)
+
+            apply_brand_inputs(
+                tmp,
+                answers_text="Preferred Tech Stack: SvelteKit + Supabase + Skeleton UI",
+            )
+            self.assertFalse(sync_research_brief(tmp))
+            self.assertFalse(os.path.exists(brief_path))
+
+    def test_no_brief_for_existing_project_brand(self):
+        from arms_engine.brand import sync_research_brief
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".arms"))
+            with open(os.path.join(tmp, ".arms", "BRAND.md"), "w", encoding="utf-8") as f:
+                f.write("# Brand Context\n- **Project Name:** Demo\n- **Mission:** Ship\n")
+            self.assertFalse(sync_research_brief(tmp))
+            self.assertFalse(os.path.exists(os.path.join(tmp, ".arms", "RESEARCH_BRIEF.md")))
+
+
 class TestInteractiveBrandIntake(unittest.TestCase):
     def _scripted_input(self, answers):
         iterator = iter(answers)

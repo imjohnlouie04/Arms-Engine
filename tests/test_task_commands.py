@@ -207,6 +207,71 @@ class TaskCommandTests(unittest.TestCase):
         self.assertEqual(init_arms.infer_agent_from_task("Review capital allocation memo"), "arms-main-agent")
         self.assertEqual(init_arms.infer_agent_from_task("Document attestation flow"), "arms-main-agent")
 
+    def test_task_routing_realistic_phrasings_reach_specialists(self):
+        expectations = {
+            "Fix the broken login redirect after OAuth callback": "arms-backend-agent",
+            "Add dark mode toggle to the settings screen": "arms-frontend-agent",
+            "Set up GitHub Actions": "arms-devops-agent",
+            "Make the dashboard look better": "arms-frontend-agent",
+            "Add email notifications when an order ships": "arms-backend-agent",
+            "Update the README with install steps": "arms-product-agent",
+            "Create signup flow with magic links": "arms-backend-agent",
+            "Audit our dependency versions for CVEs": "arms-security-agent",
+            "Add rate limiting to prevent abuse": "arms-security-agent",
+            "Migrate user table to add a phone column": "arms-data-agent",
+            "Generate social preview images for sharing": "arms-media-agent",
+            "Write unit tests for the parser": "arms-qa-agent",
+        }
+        for task_text, expected_agent in expectations.items():
+            self.assertEqual(
+                init_arms.infer_agent_from_task(task_text),
+                expected_agent,
+                msg="misrouted: {!r}".format(task_text),
+            )
+
+    def test_task_log_emits_delegation_handoff_for_specialist(self):
+        with TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "README.md").write_text("# Demo\nDelegation handoff.\n", encoding="utf-8")
+            self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
+
+            _, output = self.invoke_cli(
+                project_root,
+                "task",
+                "log",
+                "--root",
+                str(ARMS_ROOT),
+                "--task",
+                "Fix responsive layout breaking on tablets",
+            )
+
+            self.assertIn("Delegate to `arms-frontend-agent`", output)
+            self.assertIn("model tier: `standard`", output)
+            self.assertIn("Task tool", output)
+            self.assertIn("/agent arms-frontend-agent", output)
+
+    def test_render_delegation_hint_skips_main_agent(self):
+        self.assertEqual(init_arms.render_delegation_hint("arms-main-agent", "power"), "")
+        self.assertEqual(init_arms.render_delegation_hint("", ""), "")
+        hint = init_arms.render_delegation_hint("arms-data-agent", "power")
+        self.assertIn("arms-data-agent", hint)
+        self.assertIn("model tier: `power`", hint)
+
+    def test_task_routing_ambiguous_tasks_stay_with_main_agent(self):
+        # A single weak token overlap must not route away from the orchestrator.
+        for task_text in (
+            "Fix bug where saving a draft loses data",
+            "Users report the app crashes on submit",
+            "Optimize the slow search feature",
+            "Refactor duplicate code in utils",
+            "Improve error messages shown to users",
+        ):
+            self.assertEqual(
+                init_arms.infer_agent_from_task(task_text),
+                "arms-main-agent",
+                msg="over-routed: {!r}".format(task_text),
+            )
+
     def test_task_update_blocked_auto_stages_memory_once(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)

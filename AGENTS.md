@@ -22,7 +22,11 @@ This file helps Copilot CLI discover available agents and their capabilities in 
 
 If `arms init` or `arms start` halts with `Awaiting Brand Context answers`, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless the user explicitly asked for a path-only summary.
 
-For a new / empty project, present the intake as an interactive numbered question form — one prompt per field in `.arms/BRAND_INTAKE.md` — and WAIT for the user's answers before doing anything else. Never silently scaffold `.arms/BRAND.md` / `.arms/BRAND_INTAKE.md` and continue without asking. Apply the user's reply with `arms init --answers-text "<block>"` (or `arms intake`), then resume the boot sequence.
+The architecture assessment is **non-blocking**: `arms init` on a new / empty project proceeds with fallback values and does not halt. After bootstrap, when `.arms/RESEARCH_BRIEF.md` exists, offer the assessment conversationally — present the questions from `.arms/BRAND_INTAKE.md` as a numbered form, wait for answers, apply them with `arms intake --answers-text "<block>"`, then follow the brief: web-search the current best-fit stack for those answers (any stack, not only ARMS presets; verify latest stable versions via search), apply the Stack Proposal the same way, and rerun `arms init` so the pending scaffold task retargets to the researched stack.
+
+### Multi-Agent Handoff Rule
+
+Assigning a task row in `.arms/SESSION.md` does not switch the host tool into the specialist. After a row is assigned, hand the implementation turn to that agent: Claude Code runs the assigned agent as a subagent via its Task tool; Copilot CLI invokes `/agent <assigned-agent>`; other CLIs switch to the matching agent mirror. Run the specialist on the model tier shown in the row's `Model` column. The orchestrator must not implement specialist-assigned tasks inline.
 
 ---
 

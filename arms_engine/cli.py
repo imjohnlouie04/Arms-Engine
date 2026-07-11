@@ -17,6 +17,7 @@ from .brand import (
     render_new_project_brand_prompt,
     run_interactive_brand_intake,
     sync_brand_intake_prompt,
+    sync_research_brief,
 )
 from .compression import compress_workspace, format_compression_summary, workspace_compression_reasons
 from .doctor import handle_doctor_command, identify_doctor_command
@@ -275,17 +276,24 @@ def handle_intake_command(project_root, preset_name="", answers_text="", allow_i
             brand_content = read_text_file(paths.brand)
             missing_fields = get_missing_new_project_brand_fields(brand_content)
 
+    research_pending = sync_research_brief(project_root)
+
     if not missing_fields:
         sync_brand_intake_prompt(project_root)
         print("✅ Brand intake is complete.")
         if changed:
             print("🧾 Applied intake answers to .arms/BRAND.md")
+        if research_pending:
+            print("🔬 Stack research pending: read .arms/RESEARCH_BRIEF.md, research the best-fit stack, and apply the Stack Proposal via `arms intake --answers-text`.")
         print("Next step: run `arms init` to generate synthesis, prompts, and startup tasks.")
         return
 
     prompt = render_new_project_brand_prompt(missing_fields)
     sync_brand_intake_prompt(project_root, prompt)
     print(prompt)
+    if research_pending:
+        print()
+        print("🔬 Architecture research brief saved at .arms/RESEARCH_BRIEF.md — after answers, the AI should research the best-fit stack and apply the Stack Proposal.")
 
 
 def run_monitored_step(monitor, label, func, *args, **kwargs):
@@ -380,6 +388,13 @@ def run_init_once(
             apply_brand_inputs(project_root, answers_text=intake_result["answers_text"])
             brand_context_state = initialize_brand_context(project_root)
 
+    research_brief_pending = run_monitored_step(
+        monitor,
+        "Sync architecture research brief",
+        sync_research_brief,
+        project_root,
+    )
+
     context_synthesis_ready = False
     generated_prompts_ready = False
 
@@ -415,6 +430,7 @@ def run_init_once(
         startup_tasks_content=startup_tasks_content,
         startup_seed_key=startup_seed_key,
         context_overwrite=context_overwrite,
+        stack_profile=(synthesis_data or {}).get("stack_profile"),
     )
     if not session_updated:
         if monitor is not None:
@@ -490,6 +506,10 @@ def run_init_once(
             "status": "questions_required",
             "brand_signature": brand_signature,
         }
+    def print_research_brief_note():
+        if research_brief_pending:
+            print("🔬 Architecture research pending: read .arms/RESEARCH_BRIEF.md, research the best-fit stack, and apply the Stack Proposal via `arms intake --answers-text`.")
+
     if is_yolo:
         if monitor is not None:
             monitor.finish("complete", "ARMS Engine ready. Fleet mode activated.")
@@ -497,6 +517,7 @@ def run_init_once(
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
+        print_research_brief_note()
         print_next_recommended_step()
         print("\n✅ ARMS Engine ready. Fleet mode activated.")
     else:
@@ -506,6 +527,7 @@ def run_init_once(
             print("📋 Context synthesis refreshed at .arms/CONTEXT_SYNTHESIS.md")
         if generated_prompts_ready:
             print("🧠 Agent-ready prompts refreshed at .arms/GENERATED_PROMPTS.md")
+        print_research_brief_note()
         print_next_recommended_step()
         print("\n✅ ARMS Engine sequence complete. → HALT")
     return {

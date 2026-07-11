@@ -11,7 +11,13 @@
 
 **Brand Intake Display Rule:** If `arms init` or `arms start` completes with `Awaiting Brand Context answers`, immediately read `.arms/BRAND_INTAKE.md` and display the compact answer block inline to the user. Do not merely summarize that `.arms/BRAND.md` is incomplete or tell the user to open the file unless they explicitly requested a path-only summary.
 
-**Brand Intake Questionnaire Rule:** For a new / empty project, the boot sequence MUST surface the Brand Context questionnaire as an interactive, numbered question form and WAIT for the user's answers before generating synthesis, prompts, or tasks. Ask one prompt per field listed in `.arms/BRAND_INTAKE.md`; never silently scaffold `.arms/BRAND.md` / `.arms/BRAND_INTAKE.md` and proceed as if intake were done. When the user answers, apply via `arms init --answers-text "<block>"` (or `arms intake`) and continue. In a real terminal, `arms init` also prompts these questions directly on stdin unless `--no-interactive`, YOLO, `--watch`, `--monitor`, or `--preset`/`--answers-*` are used.
+**Architecture Assessment Rule (non-blocking):** `arms init` on a new / empty project scaffolds `.arms/BRAND.md` with defaults and proceeds straight to synthesis, prompts, and startup tasks — it never halts on the assessment. The assessment's purpose is to align the developer with the architecture and let the AI research the best tools for the project, so after bootstrap:
+1. When `.arms/RESEARCH_BRIEF.md` exists, offer the assessment conversationally — present the questions from `.arms/BRAND_INTAKE.md` as a numbered form and wait for answers.
+2. Apply answers with `arms intake --answers-text "<block>"`.
+3. Follow `.arms/RESEARCH_BRIEF.md`: **web-search the current best-fit stack** for those answers — any well-supported stack is valid, not just ARMS presets (Next.js / Nuxt / Astro) — and verify latest stable names/versions via search rather than training data.
+4. Return the Stack Proposal block from the brief, apply it with `arms intake --answers-text`, and rerun `arms init` so synthesis, prompts, and the pending scaffold task retarget to the researched stack.
+
+Do not reintroduce a blocking intake halt into the boot sequence unless the intake gate is re-enabled in the engine.
 
 **Init Monitor Rule:** If the user wants live bootstrap diagnostics, prefer `arms init --monitor`. This opens a local activity HUD at `.arms/reports/init-monitor-latest.html` and records each init step without changing the default init workflow.
 
