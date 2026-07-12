@@ -1,5 +1,3 @@
-name = "arms-devops-agent"
-description = "Expert in CI/CD, deployment, and project boilerplate initialization."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 developer_instructions = '''

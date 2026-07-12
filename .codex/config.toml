@@ -1,0 +1,42 @@
+# BEGIN ARMS MANAGED AGENTS
+[agents."arms_backend_agent"]
+description = "Expert in APIs, database models, Supabase Auth, and server-side business logic."
+config_file = "agents/arms-backend-agent.toml"
+
+[agents."arms_data_agent"]
+description = "Expert in schema design, migrations, and query optimization."
+config_file = "agents/arms-data-agent.toml"
+
+[agents."arms_devops_agent"]
+description = "Expert in CI/CD, deployment, and project boilerplate initialization."
+config_file = "agents/arms-devops-agent.toml"
+
+[agents."arms_frontend_agent"]
+description = "Expert in UI components, routing, state management, and API integration."
+config_file = "agents/arms-frontend-agent.toml"
+
+[agents."arms_main_agent"]
+description = "Orchestrator of the ARMS System. Manages session state, planning, and delegation."
+config_file = "agents/arms-main-agent.toml"
+
+[agents."arms_media_agent"]
+description = "Expert in asset creation and image generation."
+config_file = "agents/arms-media-agent.toml"
+
+[agents."arms_product_agent"]
+description = "Expert in product strategy, requirements gathering, and feature prioritization."
+config_file = "agents/arms-product-agent.toml"
+
+[agents."arms_qa_agent"]
+description = "Expert in quality assurance, automated testing, and validation protocols."
+config_file = "agents/arms-qa-agent.toml"
+
+[agents."arms_security_agent"]
+description = "Expert in cybersecurity, authentication protocols, and database security (RLS)."
+config_file = "agents/arms-security-agent.toml"
+
+[agents."arms_seo_agent"]
+description = "Expert in SEO, meta tags, semantic HTML, and Core Web Vitals."
+config_file = "agents/arms-seo-agent.toml"
+
+# END ARMS MANAGED AGENTS

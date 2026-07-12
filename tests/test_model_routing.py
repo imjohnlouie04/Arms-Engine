@@ -14,6 +14,7 @@ from arms_engine.skills import (
     ensure_agent_model_frontmatter,
     parse_agent_frontmatter_and_body,
     render_codex_agent_toml,
+    render_codex_agent_registry,
     sync_agents_codex,
 )
 
@@ -156,8 +157,8 @@ class TestParseAgentFrontmatterAndBody(unittest.TestCase):
 class TestRenderCodexAgentToml(unittest.TestCase):
     def test_renders_name_and_description(self):
         toml_content = render_codex_agent_toml("arms-backend-agent", "Backend specialist.", "Body text.")
-        self.assertIn('name = "arms-backend-agent"', toml_content)
-        self.assertIn('description = "Backend specialist."', toml_content)
+        self.assertNotIn('name =', toml_content)
+        self.assertNotIn('description =', toml_content)
         self.assertNotIn("model =", toml_content)
         self.assertNotIn("model_reasoning_effort =", toml_content)
 
@@ -180,8 +181,8 @@ class TestRenderCodexAgentToml(unittest.TestCase):
         self.assertIn("with '' ' inside", toml_content)
 
     def test_escapes_quotes_in_description(self):
-        toml_content = render_codex_agent_toml('agent', 'Has "quotes" in it.', "Body.")
-        self.assertIn('description = "Has \\"quotes\\" in it."', toml_content)
+        registry = render_codex_agent_registry([("agent", 'Has "quotes" in it.')])
+        self.assertIn('description = "Has \\"quotes\\" in it."', registry)
 
 
 class TestSyncAgentsCodex(unittest.TestCase):
@@ -211,11 +212,39 @@ class TestSyncAgentsCodex(unittest.TestCase):
             self.assertTrue(os.path.exists(toml_path))
             with open(toml_path, "r", encoding="utf-8") as f:
                 content = f.read()
-        self.assertIn('name = "arms-backend-agent"', content)
-        self.assertIn('description = "Backend specialist."', content)
+            config_path = os.path.join(project_root, ".codex", "config.toml")
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = f.read()
+        self.assertNotIn('name =', content)
+        self.assertNotIn('description =', content)
         self.assertIn('model = "gpt-5.5"', content)
         self.assertIn('model_reasoning_effort = "high"', content)
         self.assertIn("# ARMS Backend Agent", content)
+
+        self.assertIn('[agents."arms_backend_agent"]', config)
+        self.assertIn('description = "Backend specialist."', config)
+        self.assertIn('config_file = "agents/arms-backend-agent.toml"', config)
+
+    def test_registry_preserves_user_config_and_replaces_managed_block(self):
+        with tempfile.TemporaryDirectory() as arms_root, tempfile.TemporaryDirectory() as project_root:
+            self._write(
+                os.path.join(arms_root, "agents", "arms-qa-agent.md"),
+                "---\ndescription: QA specialist.\n---\n\nBody.\n",
+            )
+            self._write(os.path.join(arms_root, "agents.yaml"), "agents:\n  arms-qa-agent:\n    role: QA\n")
+            self._write(
+                os.path.join(project_root, ".codex", "config.toml"),
+                'model = "user-model"\n\n# BEGIN ARMS MANAGED AGENTS\n[agents.old]\nconfig_file = "old.toml"\n# END ARMS MANAGED AGENTS\n',
+            )
+
+            sync_agents_codex(arms_root, project_root)
+
+            with open(os.path.join(project_root, ".codex", "config.toml"), "r", encoding="utf-8") as f:
+                config = f.read()
+        self.assertIn('model = "user-model"', config)
+        self.assertNotIn("[agents.old]", config)
+        self.assertEqual(config.count("# BEGIN ARMS MANAGED AGENTS"), 1)
+        self.assertIn('[agents."arms_qa_agent"]', config)
 
     def test_removes_stale_toml_files(self):
         with tempfile.TemporaryDirectory() as arms_root, tempfile.TemporaryDirectory() as project_root:

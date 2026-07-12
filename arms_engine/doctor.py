@@ -26,6 +26,7 @@ from .skills import (
     parse_agent_frontmatter_and_body,
     remove_obsolete_gemini_skill_artifacts,
     render_codex_agent_toml,
+    render_codex_agent_registry,
     resolve_agent_model,
     sync_agents,
     sync_agents_claude,
@@ -734,12 +735,14 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
         mismatches.append("; ".join(description))
     else:
         out_of_sync = []
+        codex_agent_definitions = []
         for filename in source_agent_files:
             agent_name = os.path.splitext(filename)[0]
             source_path = os.path.join(source_agents_dir, filename)
             frontmatter, body = parse_agent_frontmatter_and_body(read_text_file(source_path))
             agent_info = agent_registry.get(agent_name, {})
             description_text = str(frontmatter.get("description") or agent_info.get("scope") or agent_name).strip()
+            codex_agent_definitions.append((agent_name, description_text))
             model_config = resolve_agent_model(agent_info, "codex", routing)
             expected_content = render_codex_agent_toml(agent_name, description_text, body, model_config)
             mirrored_path = os.path.join(codex_dir, "{}.toml".format(agent_name))
@@ -749,6 +752,11 @@ def validate_agent_mirrors(project_root, arms_root, categories, counts):
             mismatches.append(
                 "`.codex/agents` has stale content in {}".format(", ".join(out_of_sync))
             )
+        codex_config_path = os.path.join(project_root, ".codex", "config.toml")
+        codex_config = read_text_file(codex_config_path) if os.path.isfile(codex_config_path) else ""
+        expected_registry = render_codex_agent_registry(codex_agent_definitions)
+        if expected_registry not in codex_config:
+            mismatches.append("`.codex/config.toml` is missing or has a stale ARMS agent registry")
 
     if mismatches:
         add_check(

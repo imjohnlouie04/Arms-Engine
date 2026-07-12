@@ -321,10 +321,10 @@ def _escape_toml_basic_string(value):
 
 
 def render_codex_agent_toml(name, description, instructions, model_config=None):
-    lines = [
-        'name = "{}"'.format(_escape_toml_basic_string(name)),
-        'description = "{}"'.format(_escape_toml_basic_string(description)),
-    ]
+    # This file is loaded as a ConfigToml override via
+    # `[agents.<role>].config_file`. Role metadata belongs in the project
+    # registry, not in this override (Codex rejects unknown ConfigToml keys).
+    lines = []
     if isinstance(model_config, dict):
         model = model_config.get("model")
         effort = model_config.get("model_reasoning_effort")
@@ -340,6 +340,55 @@ def render_codex_agent_toml(name, description, instructions, model_config=None):
     lines.append(safe_instructions)
     lines.append("'''")
     return "\n".join(lines) + "\n"
+
+
+CODEX_AGENT_REGISTRY_BEGIN = "# BEGIN ARMS MANAGED AGENTS"
+CODEX_AGENT_REGISTRY_END = "# END ARMS MANAGED AGENTS"
+
+
+def codex_agent_role_name(agent_name):
+    """Return a collaboration-router-safe role identifier for Codex."""
+    return re.sub(r"[^a-z0-9_]+", "_", agent_name.lower()).strip("_")
+
+
+def render_codex_agent_registry(agent_definitions):
+    """Render project-level Codex role discovery entries."""
+    lines = [CODEX_AGENT_REGISTRY_BEGIN]
+    for agent_name, description in sorted(agent_definitions):
+        role_name = codex_agent_role_name(agent_name)
+        lines.extend([
+            '[agents."{}"]'.format(_escape_toml_basic_string(role_name)),
+            'description = "{}"'.format(_escape_toml_basic_string(description)),
+            'config_file = "agents/{}.toml"'.format(_escape_toml_basic_string(agent_name)),
+            "",
+        ])
+    lines.append(CODEX_AGENT_REGISTRY_END)
+    return "\n".join(lines) + "\n"
+
+
+def sync_codex_agent_registry(project_root, agent_definitions):
+    """Upsert the ARMS-owned registry block without replacing user config."""
+    codex_dir = os.path.join(project_root, ".codex")
+    os.makedirs(codex_dir, exist_ok=True)
+    config_path = os.path.join(codex_dir, "config.toml")
+    existing = ""
+    if os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8", errors="ignore") as f:
+            existing = f.read()
+
+    begin = existing.find(CODEX_AGENT_REGISTRY_BEGIN)
+    end = existing.find(CODEX_AGENT_REGISTRY_END)
+    if begin >= 0 and end >= begin:
+        end += len(CODEX_AGENT_REGISTRY_END)
+        existing = existing[:begin].rstrip() + existing[end:].lstrip("\n")
+
+    managed = render_codex_agent_registry(agent_definitions)
+    content = existing.rstrip()
+    if content:
+        content += "\n\n"
+    content += managed
+    with open(config_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 def sync_agents_codex(arms_root, project_root):
@@ -366,6 +415,7 @@ def sync_agents_codex(arms_root, project_root):
         if entry.endswith(".toml") and entry[:-len(".toml")] not in source_agent_names:
             os.remove(os.path.join(target_dir, entry))
 
+    agent_definitions = []
     for agent_name in source_agent_names:
         src = os.path.join(agents_dir, f"{agent_name}.md")
         with open(src, "r", encoding="utf-8", errors="ignore") as f:
@@ -374,12 +424,15 @@ def sync_agents_codex(arms_root, project_root):
         frontmatter, body = parse_agent_frontmatter_and_body(content)
         agent_info = registry.get(agent_name, {})
         description = str(frontmatter.get("description") or agent_info.get("scope") or agent_name).strip()
+        agent_definitions.append((agent_name, description))
         model_config = resolve_agent_model(agent_info, "codex", routing)
 
         toml_content = render_codex_agent_toml(agent_name, description, body, model_config)
         dest = os.path.join(target_dir, f"{agent_name}.toml")
         with open(dest, "w", encoding="utf-8") as f:
             f.write(toml_content)
+
+    sync_codex_agent_registry(project_root, agent_definitions)
 
 
 def sync_skills_claude(arms_root, project_root):

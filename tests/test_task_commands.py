@@ -296,15 +296,16 @@ class TaskCommandTests(unittest.TestCase):
         # Test Codex detection via OPENAI_CODEX_CLI
         with self._cli_env(OPENAI_CODEX_CLI="1"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
-            self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
+            self.assertIn("Codex CLI: spawn the registered `arms_frontend_agent` subagent now", hint)
             self.assertIn(".codex/agents/arms-frontend-agent.toml", hint)
+            self.assertIn("registered `arms_frontend_agent` subagent", hint)
             self.assertIn("model: `gpt-5.6-terra`", hint)
             self.assertNotIn("Claude Code", hint)
 
         # Test Codex detection via CODEX_THREAD_ID
         with self._cli_env(CODEX_THREAD_ID="123"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
-            self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
+            self.assertIn("Codex CLI: spawn the registered `arms_frontend_agent` subagent now", hint)
             self.assertIn("model: `gpt-5.6-terra`", hint)
             self.assertNotIn("Claude Code", hint)
 

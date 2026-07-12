@@ -863,10 +863,12 @@ def render_delegation_hint(agent_name, model_tier="", arms_root=None):
             "Delegate to `{agent}`{tier} — Copilot CLI: `/agent {agent}`."
         ).format(agent=normalized_agent, tier=tier_note)
     elif active_cli == "codex":
+        from .skills import codex_agent_role_name
+        codex_role = codex_agent_role_name(normalized_agent)
         return (
-            "Delegate to `{agent}`{tier} — Codex CLI: spawn the `{agent}` subagent now "
+            "Delegate to `{agent}`{tier} — Codex CLI: spawn the registered `{role}` subagent now "
             "(custom agent from `.codex/agents/{agent}.toml`), give it this task, and wait for its result."
-        ).format(agent=normalized_agent, tier=tier_note)
+        ).format(agent=normalized_agent, role=codex_role, tier=tier_note)
     else:
         # Fallback to the original combined message
         return (

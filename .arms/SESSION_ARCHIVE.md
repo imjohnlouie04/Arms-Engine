@@ -232,3 +232,10 @@ Record of all completed and cancelled tasks.
 | # | Task | Agent | Status | Completed |
 |---|------|-------|--------|-----------|
 | 1 | Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity | arms-main-agent | Done | 2026-07-11T19:08:42Z |
+
+## Archive — 2026-07-12T07:21:48Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Fix Codex delegation wait loop repeatedly reporting no agents completed and ensure delegated agents return results | arms-devops-agent | Done | 2026-07-12T07:21:48Z |

@@ -1,5 +1,3 @@
-name = "arms-seo-agent"
-description = "Expert in SEO, meta tags, semantic HTML, and Core Web Vitals."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 developer_instructions = '''

@@ -15,6 +15,7 @@
 
 - [APPROVED][memory-20260711-01]: Capture the reusable implementation decision behind 'Auto-detect CLI environment and tailor handoff delegation hint and model details' if this session establishes a pattern worth repeating.
 - [APPROVED][memory-20260711-02]: Capture the reusable implementation decision behind 'Remove deprecated Gemini CLI support and update instructions to focus on Google Antigravity' if this session establishes a pattern worth repeating.
+- [APPROVED][memory-20260712-01]: Capture the preferred orchestration pattern that emerged while implementing 'Fix Codex delegation wait loop repeatedly reporting no agents completed and ensure delegated' so future deep-dive work follows the same path.
 
 ## Project Context & MVP
 
