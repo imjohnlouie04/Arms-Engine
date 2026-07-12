@@ -864,12 +864,14 @@ def render_delegation_hint(agent_name, model_tier="", arms_root=None):
         ).format(agent=normalized_agent, tier=tier_note)
     elif active_cli == "codex":
         return (
-            "Delegate to `{agent}`{tier} — Codex CLI: switch the session to the `{agent}` agent mirror."
+            "Delegate to `{agent}`{tier} — Codex CLI: spawn the `{agent}` subagent now "
+            "(custom agent from `.codex/agents/{agent}.toml`), give it this task, and wait for its result."
         ).format(agent=normalized_agent, tier=tier_note)
     else:
         # Fallback to the original combined message
         return (
             "Delegate to `{agent}`{tier} — Claude Code: run the `{agent}` subagent via the Task tool; "
+            "Codex CLI: spawn the `{agent}` subagent and wait for its result; "
             "Copilot CLI: `/agent {agent}`; other CLIs: switch the session to the `{agent}` agent mirror."
         ).format(agent=normalized_agent, tier=tier_note)
 

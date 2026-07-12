@@ -1,6 +1,6 @@
 name = "arms-media-agent"
 description = "Expert in asset creation and image generation."
-model = "gpt-5.4-mini"
+model = "gpt-5.6-terra"
 model_reasoning_effort = "low"
 developer_instructions = '''
 # ARMS Media Agent

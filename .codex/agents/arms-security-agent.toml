@@ -1,6 +1,6 @@
 name = "arms-security-agent"
 description = "Expert in cybersecurity, authentication protocols, and database security (RLS)."
-model = "gpt-5.5"
+model = "gpt-5.6"
 model_reasoning_effort = "high"
 developer_instructions = '''
 # ARMS Security Agent

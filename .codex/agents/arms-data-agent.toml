@@ -1,6 +1,6 @@
 name = "arms-data-agent"
 description = "Expert in schema design, migrations, and query optimization."
-model = "gpt-5.5"
+model = "gpt-5.6"
 model_reasoning_effort = "high"
 developer_instructions = '''
 # ARMS Data Agent

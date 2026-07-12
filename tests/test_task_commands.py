@@ -229,13 +229,32 @@ class TaskCommandTests(unittest.TestCase):
                 msg="misrouted: {!r}".format(task_text),
             )
 
+    # Blank every CLI-detection variable so tests behave identically no matter
+    # which AI CLI (if any) is hosting the test run.
+    CLI_ENV_CLEARED = {
+        "ANTIGRAVITY_AGENT": "",
+        "ANTIGRAVITY_CONVERSATION_ID": "",
+        "CLAUDE_CODE": "",
+        "CLAUDECODE": "",
+        "COPILOT_CLI": "",
+        "GITHUB_COPILOT_CLI": "",
+        "OPENAI_CODEX_CLI": "",
+        "CODEX_CI": "",
+        "CODEX_THREAD_ID": "",
+    }
+
+    def _cli_env(self, **overrides):
+        merged = dict(self.CLI_ENV_CLEARED)
+        merged.update(overrides)
+        return mock.patch.dict(os.environ, merged)
+
     def test_task_log_emits_delegation_handoff_for_specialist(self):
         with TemporaryDirectory() as tmp:
             project_root = Path(tmp)
             (project_root / "README.md").write_text("# Demo\nDelegation handoff.\n", encoding="utf-8")
             self.invoke_cli(project_root, "init", "yolo", "--root", str(ARMS_ROOT))
 
-            with mock.patch.dict(os.environ, {"ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+            with self._cli_env():
                 _, output = self.invoke_cli(
                     project_root,
                     "task",
@@ -249,40 +268,43 @@ class TaskCommandTests(unittest.TestCase):
             self.assertIn("Delegate to `arms-frontend-agent`", output)
             self.assertIn("model tier: `standard`", output)
             self.assertIn("Task tool", output)
+            self.assertIn("spawn the `arms-frontend-agent` subagent", output)
             self.assertIn("/agent arms-frontend-agent", output)
 
     def test_render_delegation_hint_skips_main_agent(self):
         self.assertEqual(init_arms.render_delegation_hint("arms-main-agent", "power"), "")
         self.assertEqual(init_arms.render_delegation_hint("", ""), "")
-        hint = init_arms.render_delegation_hint("arms-data-agent", "power")
+        with self._cli_env():
+            hint = init_arms.render_delegation_hint("arms-data-agent", "power")
         self.assertIn("arms-data-agent", hint)
         self.assertIn("model tier: `power`", hint)
 
     def test_render_delegation_hint_detects_cli_env(self):
         # Test Claude Code detection
-        with mock.patch.dict(os.environ, {"CLAUDE_CODE": "1", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+        with self._cli_env(CLAUDE_CODE="1"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard")
             self.assertIn("Claude Code: run the `arms-frontend-agent` subagent via the Task tool", hint)
             self.assertNotIn("Copilot CLI", hint)
 
         # Test Antigravity detection
-        with mock.patch.dict(os.environ, {"ANTIGRAVITY_AGENT": "1"}):
+        with self._cli_env(ANTIGRAVITY_AGENT="1"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
             self.assertIn("Antigravity: run the `arms-frontend-agent` subagent or switch the session", hint)
             self.assertIn("model: `gemini-flash-latest`", hint)
             self.assertNotIn("Claude Code", hint)
 
         # Test Codex detection via OPENAI_CODEX_CLI
-        with mock.patch.dict(os.environ, {"OPENAI_CODEX_CLI": "1", "CLAUDE_CODE": "", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+        with self._cli_env(OPENAI_CODEX_CLI="1"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
-            self.assertIn("Codex CLI: switch the session to the `arms-frontend-agent` agent mirror", hint)
+            self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
+            self.assertIn(".codex/agents/arms-frontend-agent.toml", hint)
             self.assertIn("model: `gpt-5.4`", hint)
             self.assertNotIn("Claude Code", hint)
 
         # Test Codex detection via CODEX_THREAD_ID
-        with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "123", "CLAUDE_CODE": "", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+        with self._cli_env(CODEX_THREAD_ID="123"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
-            self.assertIn("Codex CLI: switch the session to the `arms-frontend-agent` agent mirror", hint)
+            self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
             self.assertIn("model: `gpt-5.4`", hint)
             self.assertNotIn("Claude Code", hint)
 

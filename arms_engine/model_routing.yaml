@@ -23,15 +23,21 @@ platforms:
     power: opus
 
   codex:
-    # model_reasoning_effort: minimal | low | medium | high | xhigh
+    # model_reasoning_effort: low | medium | high
+    # Model names verified against the current Codex subagents docs
+    # (learn.chatgpt.com/docs/agent-configuration/subagents, July 2026):
+    # gpt-5.6 (demanding/planning), gpt-5.4 (strong coding),
+    # gpt-5.6-terra (speed/exploration), gpt-5.3-codex-spark (Pro preview).
+    # An invalid model here makes Codex agent spawns fail silently
+    # ("No agents completed yet"), so re-verify via web search when updating.
     economy:
-      model: gpt-5.4-mini
+      model: gpt-5.6-terra
       model_reasoning_effort: low
     standard:
       model: gpt-5.4
       model_reasoning_effort: medium
     power:
-      model: gpt-5.5
+      model: gpt-5.6
       model_reasoning_effort: high
 
   gemini:

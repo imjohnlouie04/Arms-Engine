@@ -26,7 +26,7 @@ The architecture assessment is **non-blocking**: `arms init` on a new / empty pr
 
 ### Multi-Agent Handoff Rule
 
-Assigning a task row in `.arms/SESSION.md` does not switch the host tool into the specialist. After a row is assigned, hand the implementation turn to that agent: Claude Code runs the assigned agent as a subagent via its Task tool; Copilot CLI invokes `/agent <assigned-agent>`; other CLIs switch to the matching agent mirror. Run the specialist on the model tier shown in the row's `Model` column. The orchestrator must not implement specialist-assigned tasks inline.
+Assigning a task row in `.arms/SESSION.md` does not switch the host tool into the specialist. After a row is assigned, hand the implementation turn to that agent: Claude Code runs the assigned agent as a subagent via its Task tool; Codex CLI spawns the assigned custom agent (defined in `.codex/agents/*.toml`) and waits for its result — say so explicitly, e.g. "spawn the `arms-frontend-agent` subagent for this task"; Copilot CLI invokes `/agent <assigned-agent>`; other CLIs switch to the matching agent mirror. Run the specialist on the model tier shown in the row's `Model` column. The orchestrator must not implement specialist-assigned tasks inline.
 
 ---
 
