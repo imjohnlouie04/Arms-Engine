@@ -83,7 +83,6 @@ Generated: 2026-07-12T07:23:45Z
 | 9 | Run QA pre-flight on the scaffold and kickoff flows | arms-qa-agent | qa-automation-testing | standard | #3, #5, #6, #8 | Pending |
 | 10 | Automate memory drafting so users only approve suggestions | arms-main-agent | arms-orchestrator | power | — | Pending |
 | 11 | Display memory signals and memory packet in init monitor HUD | arms-main-agent | arms-orchestrator | power | — | Pending |
-| 12 | Bump ARMS patch version for the Codex delegation fix, run release checks, commit, and push | arms-devops-agent | devops-orchestrator | standard | — | Pending |
 
 ## Completed Tasks
 

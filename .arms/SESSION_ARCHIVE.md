@@ -239,3 +239,10 @@ Record of all completed and cancelled tasks.
 | # | Task | Agent | Status | Completed |
 |---|------|-------|--------|-----------|
 | 1 | Fix Codex delegation wait loop repeatedly reporting no agents completed and ensure delegated agents return results | arms-devops-agent | Done | 2026-07-12T07:21:48Z |
+
+## Archive — 2026-07-12T07:26:28Z
+### Context: Task command: complete row
+
+| # | Task | Agent | Status | Completed |
+|---|------|-------|--------|-----------|
+| 1 | Bump ARMS patch version for the Codex delegation fix, run release checks, commit, and push | arms-devops-agent | Done | 2026-07-12T07:26:28Z |
