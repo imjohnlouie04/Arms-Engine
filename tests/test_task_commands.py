@@ -298,14 +298,14 @@ class TaskCommandTests(unittest.TestCase):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
             self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
             self.assertIn(".codex/agents/arms-frontend-agent.toml", hint)
-            self.assertIn("model: `gpt-5.4`", hint)
+            self.assertIn("model: `gpt-5.6-terra`", hint)
             self.assertNotIn("Claude Code", hint)
 
         # Test Codex detection via CODEX_THREAD_ID
         with self._cli_env(CODEX_THREAD_ID="123"):
             hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
             self.assertIn("Codex CLI: spawn the `arms-frontend-agent` subagent now", hint)
-            self.assertIn("model: `gpt-5.4`", hint)
+            self.assertIn("model: `gpt-5.6-terra`", hint)
             self.assertNotIn("Claude Code", hint)
 
     def test_task_routing_ambiguous_tasks_stay_with_main_agent(self):

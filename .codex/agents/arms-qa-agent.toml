@@ -1,6 +1,6 @@
 name = "arms-qa-agent"
 description = "Expert in quality assurance, automated testing, and validation protocols."
-model = "gpt-5.4"
+model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 developer_instructions = '''
 # ARMS QA Agent

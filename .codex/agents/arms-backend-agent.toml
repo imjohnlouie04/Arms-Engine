@@ -1,6 +1,6 @@
 name = "arms-backend-agent"
 description = "Expert in APIs, database models, Supabase Auth, and server-side business logic."
-model = "gpt-5.6"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 developer_instructions = '''
 # ARMS Backend Agent
