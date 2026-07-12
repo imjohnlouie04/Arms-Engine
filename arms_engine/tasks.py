@@ -867,7 +867,8 @@ def render_delegation_hint(agent_name, model_tier="", arms_root=None):
         codex_role = codex_agent_role_name(normalized_agent)
         return (
             "Delegate to `{agent}`{tier} — Codex CLI: spawn the registered `{role}` subagent now "
-            "(custom agent from `.codex/agents/{agent}.toml`), give it this task, and wait for its result."
+            "(custom agent from `.codex/agents/{agent}.toml`), give it this task, wait for its result, "
+            "then close the agent before spawning another (spawn one at a time)."
         ).format(agent=normalized_agent, role=codex_role, tier=tier_note)
     else:
         # Fallback to the original combined message

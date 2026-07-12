@@ -28,6 +28,8 @@ The architecture assessment is **non-blocking**: `arms init` on a new / empty pr
 
 Assigning a task row in `.arms/SESSION.md` does not switch the host tool into the specialist. After a row is assigned, hand the implementation turn to that agent: Claude Code runs the assigned agent as a subagent via its Task tool; Codex CLI spawns the assigned custom agent (defined in `.codex/agents/*.toml`) and waits for its result — say so explicitly, e.g. "spawn the `arms-frontend-agent` subagent for this task"; Copilot CLI invokes `/agent <assigned-agent>`; other CLIs switch to the matching agent mirror. Run the specialist on the model tier shown in the row's `Model` column. The orchestrator must not implement specialist-assigned tasks inline.
 
+**Codex spawn discipline and troubleshooting:** Spawn one agent at a time — wait for its result and close it before spawning the next. If Codex repeatedly reports `No agents completed yet` or `Agent spawn failed`: (1) check `/status` — a near-exhausted rate limit blocks spawns; (2) restart the Codex session — Codex has known spawn-slot leak bugs (openai/codex issues #9607, #14458, #16328, #18335) where failed spawns stay broken for the rest of the session; (3) verify the model names in `.codex/agents/*.toml` exist in the current `/model` picker. Do not keep retrying spawns in the same session — execute the task inline as a fallback and record that in the task row.
+
 ---
 
 ## Available Agents
