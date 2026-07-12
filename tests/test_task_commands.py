@@ -272,6 +272,20 @@ class TaskCommandTests(unittest.TestCase):
             self.assertIn("model: `gemini-flash-latest`", hint)
             self.assertNotIn("Claude Code", hint)
 
+        # Test Codex detection via OPENAI_CODEX_CLI
+        with mock.patch.dict(os.environ, {"OPENAI_CODEX_CLI": "1", "CLAUDE_CODE": "", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+            hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
+            self.assertIn("Codex CLI: switch the session to the `arms-frontend-agent` agent mirror", hint)
+            self.assertIn("model: `gpt-5.4`", hint)
+            self.assertNotIn("Claude Code", hint)
+
+        # Test Codex detection via CODEX_THREAD_ID
+        with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "123", "CLAUDE_CODE": "", "ANTIGRAVITY_AGENT": "", "ANTIGRAVITY_CONVERSATION_ID": ""}):
+            hint = init_arms.render_delegation_hint("arms-frontend-agent", "standard", arms_root=str(ARMS_ROOT))
+            self.assertIn("Codex CLI: switch the session to the `arms-frontend-agent` agent mirror", hint)
+            self.assertIn("model: `gpt-5.4`", hint)
+            self.assertNotIn("Claude Code", hint)
+
     def test_task_routing_ambiguous_tasks_stay_with_main_agent(self):
         # A single weak token overlap must not route away from the orchestrator.
         for task_text in (

@@ -825,7 +825,7 @@ def render_delegation_hint(agent_name, model_tier="", arms_root=None):
         active_cli = "claude"
     elif os.getenv("COPILOT_CLI") or os.getenv("GITHUB_COPILOT_CLI"):
         active_cli = "copilot"
-    elif os.getenv("OPENAI_CODEX_CLI"):
+    elif os.getenv("OPENAI_CODEX_CLI") or os.getenv("CODEX_CI") or os.getenv("CODEX_THREAD_ID"):
         active_cli = "codex"
 
     model_name = None

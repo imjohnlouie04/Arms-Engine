@@ -1536,6 +1536,8 @@ def detect_execution_mode():
         "CLAUDECODE",
         "CLAUDE_CODE",
         "OPENAI_CODEX_CLI",
+        "CODEX_CI",
+        "CODEX_THREAD_ID",
     )
     if any(os.getenv(marker) for marker in parallel_env_markers):
         return "Parallel"
